@@ -1,8 +1,7 @@
-import { Activity, UserX, AlertCircle, Wallet } from 'lucide-react';
+import { Activity, TrendingDown, AlertTriangle, PauseCircle } from 'lucide-react';
 
-function fmt(n, prefix = '') {
+function fmt(n) {
   if (n === undefined || n === null) return '–';
-  if (prefix === '$') return `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return n.toLocaleString();
 }
 
@@ -27,14 +26,12 @@ function Card({ icon: Icon, label, value, sub, color, loading }) {
   );
 }
 
-export default function StatsGrid({ attendance, clientAnalytics, payments, loading }) {
-  const visitTotal   = attendance?.stats?.total7;
-  const avgDaily     = attendance?.stats?.avgDaily;
-  const inactiveCount = clientAnalytics?.summary?.inactiveCount;
-  const failedCount  = payments?.summary?.failedCount;
-  const failedAmt    = payments?.summary?.totalFailedAmount;
-  const acctCount    = payments?.summary?.onAccountCount;
-  const acctAmt      = payments?.summary?.totalOnAccountAmount;
+export default function StatsGrid({ attendance, clientAnalytics, loading }) {
+  const visitTotal      = attendance?.stats?.total7;
+  const avgDaily        = attendance?.stats?.avgDaily;
+  const redsCount       = clientAnalytics?.summary?.redsCount;
+  const noShowCount     = clientAnalytics?.summary?.noShowCount;
+  const suspensionCount = clientAnalytics?.summary?.suspensionCount;
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -47,28 +44,28 @@ export default function StatsGrid({ attendance, clientAnalytics, payments, loadi
         loading={loading.attendance}
       />
       <Card
-        icon={UserX}
-        label="Inactive clients"
-        value={fmt(inactiveCount)}
-        sub="visited last week, not this week"
-        color={inactiveCount > 0 ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}
+        icon={TrendingDown}
+        label="Red's List"
+        value={fmt(redsCount)}
+        sub="active recently · missed this week"
+        color={redsCount > 0 ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}
         loading={loading.clientAnalytics}
       />
       <Card
-        icon={AlertCircle}
-        label="Failed payments"
-        value={fmt(failedCount)}
-        sub={failedAmt !== undefined ? `${fmt(failedAmt, '$')} total` : undefined}
-        color={failedCount > 0 ? 'bg-red-500/10 text-red-400' : 'bg-gray-700/40 text-gray-400'}
-        loading={loading.payments}
+        icon={AlertTriangle}
+        label="No-shows"
+        value={fmt(noShowCount)}
+        sub="booked but didn't sign in"
+        color={noShowCount > 0 ? 'bg-amber-500/10 text-amber-400' : 'bg-gray-700/40 text-gray-400'}
+        loading={loading.clientAnalytics}
       />
       <Card
-        icon={Wallet}
-        label="On account"
-        value={fmt(acctCount)}
-        sub={acctAmt !== undefined ? `${fmt(acctAmt, '$')} outstanding` : undefined}
-        color={acctAmt > 0 ? 'bg-orange-500/10 text-orange-400' : 'bg-gray-700/40 text-gray-400'}
-        loading={loading.payments}
+        icon={PauseCircle}
+        label="On suspension"
+        value={fmt(suspensionCount)}
+        sub="active hold or non-active status"
+        color={suspensionCount > 0 ? 'bg-orange-500/10 text-orange-400' : 'bg-gray-700/40 text-gray-400'}
+        loading={loading.clientAnalytics}
       />
     </div>
   );

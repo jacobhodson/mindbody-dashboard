@@ -1,20 +1,32 @@
+import { useState } from 'react';
 import { format } from 'date-fns';
-import { RefreshCw } from 'lucide-react';
-import StatsGrid from './StatsGrid.jsx';
-import AttendanceChart from './AttendanceChart.jsx';
-import InactiveClientsList from './InactiveClientsList.jsx';
+import { RefreshCw, Activity, DollarSign } from 'lucide-react';
+import StatsGrid          from './StatsGrid.jsx';
+import AttendanceChart    from './AttendanceChart.jsx';
+import NoShowsList        from './NoShowsList.jsx';
+import SuspensionsList    from './SuspensionsList.jsx';
+import RedsList           from './RedsList.jsx';
 import FringeClientsTable from './FringeClientsTable.jsx';
+import RevenueCards       from './RevenueCards.jsx';
 import PaymentIssuesTable from './PaymentIssuesTable.jsx';
 
+const TABS = [
+  { key: 'operations', label: 'Operations', Icon: Activity },
+  { key: 'finances',   label: 'Finances',   Icon: DollarSign },
+];
+
 export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh }) {
+  const [tab, setTab] = useState('operations');
+  const anyLoading = Object.values(loading).some(Boolean);
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       {/* ── Header ── */}
-      <header className="sticky top-0 z-30 border-b border-gray-800 bg-gray-900/80 backdrop-blur px-6 py-4">
+      <header className="sticky top-0 z-30 border-b border-gray-800 bg-gray-900/90 backdrop-blur px-6 py-4">
         <div className="mx-auto max-w-7xl flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-white">Operations Dashboard</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Live · auto-refreshes every 5 min</p>
+            <p className="text-xs text-gray-500 mt-0.5">Newstrength · auto-refreshes every 5 min</p>
           </div>
           <div className="flex items-center gap-4">
             {lastRefresh && (
@@ -24,44 +36,95 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             )}
             <button
               onClick={onRefresh}
-              disabled={Object.values(loading).some(Boolean)}
+              disabled={anyLoading}
               className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white disabled:opacity-50 transition-colors"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${Object.values(loading).some(Boolean) ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${anyLoading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8">
-        <StatsGrid
-          attendance={data.attendance}
-          clientAnalytics={data.clientAnalytics}
-          payments={data.payments}
-          loading={loading}
-        />
-
-        <AttendanceChart />
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <InactiveClientsList
-            data={data.clientAnalytics}
-            loading={loading.clientAnalytics}
-            error={errors.clientAnalytics}
-          />
-          <FringeClientsTable
-            data={data.clientAnalytics}
-            loading={loading.clientAnalytics}
-            error={errors.clientAnalytics}
-          />
+      {/* ── Tab nav ── */}
+      <div className="sticky top-[65px] z-20 border-b border-gray-800 bg-gray-950">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <nav className="flex gap-1 pt-1">
+            {TABS.map(({ key, label, Icon }) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  tab === key
+                    ? 'border-emerald-500 text-emerald-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            ))}
+          </nav>
         </div>
+      </div>
 
-        <PaymentIssuesTable
-          data={data.payments}
-          loading={loading.payments}
-          error={errors.payments}
-        />
+      {/* ── Tab content ── */}
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8">
+
+        {/* ─ Operations ─ */}
+        {tab === 'operations' && (
+          <>
+            <StatsGrid
+              attendance={data.attendance}
+              clientAnalytics={data.clientAnalytics}
+              loading={loading}
+            />
+
+            <AttendanceChart />
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <NoShowsList
+                data={data.clientAnalytics}
+                loading={loading.clientAnalytics}
+                error={errors.clientAnalytics}
+              />
+              <SuspensionsList
+                data={data.clientAnalytics}
+                loading={loading.clientAnalytics}
+                error={errors.clientAnalytics}
+              />
+            </div>
+
+            <RedsList
+              data={data.clientAnalytics}
+              loading={loading.clientAnalytics}
+              error={errors.clientAnalytics}
+            />
+
+            <FringeClientsTable
+              data={data.clientAnalytics}
+              loading={loading.clientAnalytics}
+              error={errors.clientAnalytics}
+            />
+          </>
+        )}
+
+        {/* ─ Finances ─ */}
+        {tab === 'finances' && (
+          <>
+            <RevenueCards
+              data={data.revenue}
+              loading={loading.revenue}
+              error={errors.revenue}
+            />
+
+            <PaymentIssuesTable
+              data={data.payments}
+              loading={loading.payments}
+              error={errors.payments}
+            />
+          </>
+        )}
       </main>
     </div>
   );
