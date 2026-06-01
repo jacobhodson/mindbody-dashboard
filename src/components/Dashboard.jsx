@@ -42,11 +42,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
           loading={loading}
         />
 
-        <AttendanceChart
-          data={data.attendance}
-          loading={loading.attendance}
-          error={errors.attendance}
-        />
+        <AttendanceChart />
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <InactiveClientsList
