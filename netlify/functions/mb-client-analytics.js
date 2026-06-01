@@ -1,19 +1,16 @@
 /**
- * Returns two datasets in one call (shares the same class-visit queries):
- *   inactiveClients  – attended 8-14 days ago but NOT in the last 7 days
- *   fringeSegments   – clients who DID attend in last 7 days, segmented by frequency
+ * Returns inactive clients (visited last week, not this week) and fringe segments
+ * (clients who DID visit this week, bucketed by frequency).
  *
- * Algorithm:
- *  1. Fetch classes for last 14 days that had at least 1 booking
- *  2. In parallel batches, fetch visits per class
- *  3. Build setA (visited days 8-14) and setB (visited days 0-7, with count)
- *  4. inactive = in setA but NOT in setB
- *  5. fringe segments = setB bucketed by visit count
+ * Key structure from Mindbody classvisits endpoint:
+ *   GET /class/classvisits → { Class: { Visits: [...] } }   (NOT data.Visits)
+ *   Each visit has: ClientId (string), SignedIn (bool), LateCancelled (bool)
+ *   Client names fetched separately via GET /site/clients?clientIds=...
  */
 import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
-import { subDays, format, parseISO, isAfter, isBefore } from 'date-fns';
+import { subDays, format, parseISO, isAfter } from 'date-fns';
 
-const BATCH = 10; // parallel visit requests per batch
+const BATCH = 8;
 
 async function getClasses(token, startStr, endStr) {
   let all = [];
@@ -36,25 +33,37 @@ async function getClasses(token, startStr, endStr) {
 async function getVisits(token, classId) {
   try {
     const data = await mbGet('/class/classvisits', token, { ClassID: classId });
-    return (data.Visits || []).filter((v) => !v.Cancelled);
+    // ⚠️ Correct path: data.Class.Visits (not data.Visits)
+    return (data.Class?.Visits || []).filter((v) => v.SignedIn === true && !v.LateCancelled);
   } catch {
     return [];
   }
 }
 
-function clientKey(visit) {
-  return visit.ClientId || visit.Client?.Id || null;
-}
-
-function clientInfo(visit, existing) {
-  if (existing) return existing;
-  const c = visit.Client || {};
-  return {
-    id: String(visit.ClientId || c.Id || ''),
-    name: `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
-    email: c.Email || '',
-    phone: c.MobilePhone || c.HomePhone || '',
-  };
+async function getClientsByIds(token, ids) {
+  if (!ids.length) return {};
+  try {
+    const chunks = [];
+    for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+    const clientMap = {};
+    for (const chunk of chunks) {
+      const data = await mbGet('/site/clients', token, {
+        clientIds: chunk.join(','),
+        Limit: 200,
+      });
+      for (const c of (data.Clients || [])) {
+        clientMap[String(c.Id)] = {
+          id: String(c.Id),
+          name: `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
+          email: c.Email || '',
+          phone: c.MobilePhone || c.HomePhone || '',
+        };
+      }
+    }
+    return clientMap;
+  } catch {
+    return {};
+  }
 }
 
 export const handler = async (event) => {
@@ -63,72 +72,64 @@ export const handler = async (event) => {
   try {
     const token = await getStaffToken();
     const now = new Date();
-
-    // Boundary timestamps
-    const boundary7  = subDays(now, 7);   // start of "this week" window
-    const boundary14 = subDays(now, 14);  // start of "last week" window
+    const boundary7  = subDays(now, 7);
+    const boundary14 = subDays(now, 14);
 
     const start14 = format(boundary14, "yyyy-MM-dd'T'00:00:00");
     const end     = format(now,        "yyyy-MM-dd'T'23:59:59");
 
     const allClasses = await getClasses(token, start14, end);
 
-    // setA: clients who visited 8-14 days ago  { id -> clientInfo }
-    // setB: clients who visited in last 7 days  { id -> { info, count } }
-    const setA = {};
+    // setA: client IDs who visited 8-14 days ago
+    // setB: client IDs who visited in last 7 days { id -> count }
+    const setA = new Set();
     const setB = {};
 
     for (let i = 0; i < allClasses.length; i += BATCH) {
       const batch = allClasses.slice(i, i + BATCH);
-      const visitArrays = await Promise.allSettled(
+      const results = await Promise.allSettled(
         batch.map((cls) => getVisits(token, cls.Id))
       );
 
       batch.forEach((cls, idx) => {
-        if (visitArrays[idx].status !== 'fulfilled') return;
+        if (results[idx].status !== 'fulfilled') return;
         const classDate = parseISO(cls.StartDateTime);
-        const inWeek1 = isAfter(classDate, boundary7);                              // last 7 days
-        const inWeek2 = !inWeek1 && isAfter(classDate, boundary14);                // 8-14 days ago
+        const inThisWeek = isAfter(classDate, boundary7);
+        const inLastWeek = !inThisWeek && isAfter(classDate, boundary14);
 
-        for (const visit of visitArrays[idx].value) {
-          const id = String(clientKey(visit) || '');
+        for (const visit of results[idx].value) {
+          const id = String(visit.ClientId || '');
           if (!id) continue;
-
-          if (inWeek1) {
-            if (!setB[id]) setB[id] = { info: clientInfo(visit, null), count: 0 };
-            setB[id].count++;
-            setB[id].info = clientInfo(visit, setB[id].info);
+          if (inThisWeek) {
+            setB[id] = (setB[id] || 0) + 1;
           }
-          if (inWeek2 && !setA[id]) {
-            setA[id] = clientInfo(visit, null);
+          if (inLastWeek) {
+            setA.add(id);
           }
         }
       });
     }
 
-    // Inactive: in setA but not setB
-    const inactiveClients = Object.entries(setA)
-      .filter(([id]) => !setB[id])
-      .map(([, info]) => info)
+    // Fetch client details for all IDs we've seen
+    const allIds = [...new Set([...setA, ...Object.keys(setB)])];
+    const clientMap = await getClientsByIds(token, allIds);
+
+    function clientRow(id, extra = {}) {
+      const c = clientMap[id] || { id, name: `Client ${id}`, email: '', phone: '' };
+      return { ...c, ...extra };
+    }
+
+    // Inactive: visited last week but not this week
+    const inactiveClients = [...setA]
+      .filter((id) => !setB[id])
+      .map((id) => clientRow(id))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    // Fringe segments from setB
-    const churning  = [];  // was here last week (setA) and also this week but only 0 (edge case — covered by inactive)
-    const atRisk    = [];  // 1 session this week
-    const moderate  = [];  // 2–3 sessions
-    const engaged   = [];  // 4+ sessions
-
-    for (const [id, { info, count }] of Object.entries(setB)) {
-      const row = { ...info, sessionsThisWeek: count };
-      if (count === 1)       atRisk.push(row);
-      else if (count <= 3)   moderate.push(row);
-      else                   engaged.push(row);
-    }
-
-    // Also surface setA clients with 0 visits this week as "churning" in fringe
-    for (const [id, info] of Object.entries(setA)) {
-      if (!setB[id]) churning.push({ ...info, sessionsThisWeek: 0 });
-    }
+    // Fringe segments from this week's visitors
+    const churning = [...setA].filter((id) => !setB[id]).map((id) => clientRow(id, { sessionsThisWeek: 0 }));
+    const atRisk   = Object.entries(setB).filter(([, c]) => c === 1).map(([id, c]) => clientRow(id, { sessionsThisWeek: c }));
+    const moderate = Object.entries(setB).filter(([, c]) => c >= 2 && c <= 3).map(([id, c]) => clientRow(id, { sessionsThisWeek: c }));
+    const engaged  = Object.entries(setB).filter(([, c]) => c >= 4).map(([id, c]) => clientRow(id, { sessionsThisWeek: c }));
 
     return ok({
       inactiveClients: inactiveClients.slice(0, 150),
@@ -139,9 +140,9 @@ export const handler = async (event) => {
         engaged:   { count: engaged.length,   clients: engaged.slice(0, 50) },
       },
       summary: {
-        inactiveCount:    inactiveClients.length,
-        visitedThisWeek:  Object.keys(setB).length,
-        totalTracked:     Object.keys(setA).length + Object.keys(setB).length,
+        inactiveCount:   inactiveClients.length,
+        visitedThisWeek: Object.keys(setB).length,
+        totalTracked:    allIds.length,
       },
     });
   } catch (e) {
