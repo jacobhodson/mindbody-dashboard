@@ -101,11 +101,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               error={errors.clientAnalytics}
             />
 
-            <FringeClientsTable
-              data={data.clientAnalytics}
-              loading={loading.clientAnalytics}
-              error={errors.clientAnalytics}
-            />
+            <FringeClientsTable />
           </>
         )}
 

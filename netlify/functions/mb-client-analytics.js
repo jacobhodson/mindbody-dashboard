@@ -1,16 +1,24 @@
 /**
  * 28-day rolling window, split into 4 weekly buckets.
+ * Supports ?period=7days (default) or ?period=calendarWeek (last Mon–Sun)
+ *
  * Returns:
  *   reds        – visited W2–W4 but NOT W1 (Red's List = inactive + churning)
- *   fringe      – visited W1, segmented by count (atRisk/moderate/engaged)
+ *   fringe      – visited W1, segmented by count (atRisk/engaged)
  *                 each client carries: sessionsThisWeek, trend, service, isFullyUtilising
- *   noShows     – clients with unsigned bookings in the last 7 days
- *   suspensions – clients with active SuspensionInfo or non-Active Status
+ *   noShows     – clients with unsigned bookings in W1 window
+ *   suspensions – clients with active SuspensionInfo or hold-type status
+ *                 (excludes Terminated, Expired, Non Member)
  */
 import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
-import { subDays, format, parseISO, isAfter } from 'date-fns';
+import { subDays, format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 
 const BATCH = 15;
+
+// Statuses that are NOT a suspension — exclude from suspensions list
+const EXCLUDED_SUSPENSION_STATUSES = new Set([
+  'active', 'terminated', 'expired', 'non member', 'non-member',
+]);
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -53,13 +61,13 @@ async function getAllClients(token) {
     const clients = data.Clients || [];
     for (const c of clients) {
       map[String(c.Id)] = {
-        id:            String(c.Id),
-        name:          `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
-        email:         c.Email || '',
-        phone:         c.MobilePhone || c.HomePhone || '',
-        status:        c.Status || 'Active',
+        id:             String(c.Id),
+        name:           `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
+        email:          c.Email || '',
+        phone:          c.MobilePhone || c.HomePhone || '',
+        status:         c.Status || 'Active',
         suspensionInfo: c.SuspensionInfo || null,
-        active:        c.Active !== false,
+        active:         c.Active !== false,
       };
     }
     if (clients.length < 200 || offset >= 1800) break;
@@ -72,7 +80,7 @@ function trend(w1, w2, w3, w4) {
   const prevWeeks = [w2, w3, w4];
   const nonZero   = prevWeeks.filter((w) => w > 0);
   if (!nonZero.length) return { avg: 0, direction: 'new' };
-  const avg = prevWeeks.reduce((s, w) => s + w, 0) / 3;
+  const avg     = prevWeeks.reduce((s, w) => s + w, 0) / 3;
   const rounded = Math.round(avg * 10) / 10;
   if (w1 > avg + 0.4) return { avg: rounded, direction: 'up' };
   if (w1 < avg - 0.4) return { avg: rounded, direction: 'down' };
@@ -85,23 +93,35 @@ export const handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
 
   try {
-    const token = await getStaffToken();
-    const now   = new Date();
+    const token  = await getStaffToken();
+    const now    = new Date();
+    const period = event.queryStringParameters?.period || '7days';
 
-    const b7  = subDays(now, 7);
-    const b14 = subDays(now, 14);
-    const b21 = subDays(now, 21);
-    const b28 = subDays(now, 28);
+    // ── W1 window ──────────────────────────────────────────────────────────
+    let w1Start, w1End;
+    if (period === 'calendarWeek') {
+      w1Start = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+      w1End   = endOfWeek(subWeeks(now, 1),   { weekStartsOn: 1 });
+    } else {
+      // default: rolling last 7 days
+      w1Start = subDays(now, 7);
+      w1End   = now;
+    }
 
-    const start = format(b28, "yyyy-MM-dd'T'00:00:00");
-    const end   = format(now,  "yyyy-MM-dd'T'23:59:59");
+    // ── W2–W4 boundaries (7-day buckets going back from w1Start) ───────────
+    const b14 = subDays(w1Start, 7);
+    const b21 = subDays(w1Start, 14);
+    const b28 = subDays(w1Start, 21);
 
-    const allClasses = await getClasses(token, start, end);
+    const startStr = format(b28,   "yyyy-MM-dd'T'00:00:00");
+    const endStr   = format(w1End, "yyyy-MM-dd'T'23:59:59");
+
+    const allClasses = await getClasses(token, startStr, endStr);
 
     // Per-client data structures
-    const weeks      = {};  // id → { w1, w2, w3, w4 }
-    const services   = {};  // id → most-recent service name
-    const noShowMap  = {};  // id → noShow count (last 7 days)
+    const weeks     = {};  // id → { w1, w2, w3, w4 }
+    const services  = {};  // id → most-recent service name
+    const noShowMap = {};  // id → no-show count (W1 window)
 
     for (let i = 0; i < allClasses.length; i += BATCH) {
       const batch   = allClasses.slice(i, i + BATCH);
@@ -112,10 +132,10 @@ export const handler = async (event) => {
         const classDate = parseISO(cls.StartDateTime);
 
         // Determine week bucket
-        const inW1 = isAfter(classDate, b7);
-        const inW2 = !inW1 && isAfter(classDate, b14);
-        const inW3 = !inW1 && !inW2 && isAfter(classDate, b21);
-        const inW4 = !inW1 && !inW2 && !inW3 && isAfter(classDate, b28);
+        const inW1 = classDate >= w1Start && classDate <= w1End;
+        const inW2 = !inW1 && classDate > b14;
+        const inW3 = !inW1 && !inW2 && classDate > b21;
+        const inW4 = !inW1 && !inW2 && !inW3 && classDate > b28;
 
         for (const visit of results[idx].value) {
           const id = String(visit.ClientId || '');
@@ -134,7 +154,7 @@ export const handler = async (event) => {
             else if (!services[id] && visit.ServiceName) services[id] = visit.ServiceName;
           }
 
-          // No-show: booked but didn't sign in (last 7 days)
+          // No-show: booked but didn't sign in (W1 window)
           if (inW1 && visit.SignedIn === false && !visit.LateCancelled) {
             noShowMap[id] = (noShowMap[id] || 0) + 1;
           }
@@ -165,23 +185,19 @@ export const handler = async (event) => {
       .map((id) => enrichClient(id, { sessionsThisWeek: 0 }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    // Fringe (visited W1)
+    // Fringe (visited W1): atRisk = 1–2, engaged = 3+
     const byCount = (min, max) =>
       [...visitedW1]
         .filter((id) => { const c = weeks[id].w1; return c >= min && c <= max; })
         .map((id) => enrichClient(id, { sessionsThisWeek: weeks[id].w1 }));
 
+    const atRisk  = byCount(1, 2);
+    const engaged = byCount(3, 99);
+
     const fringeSegments = {
-      atRisk:   { count: 0, clients: [] },
-      moderate: { count: 0, clients: [] },
-      engaged:  { count: 0, clients: [] },
+      atRisk:  { count: atRisk.length,  clients: atRisk.slice(0, 50)  },
+      engaged: { count: engaged.length, clients: engaged.slice(0, 50) },
     };
-    const atRisk   = byCount(1, 1);
-    const moderate = byCount(2, 3);
-    const engaged  = byCount(4, 99);
-    fringeSegments.atRisk   = { count: atRisk.length,   clients: atRisk.slice(0, 50) };
-    fringeSegments.moderate = { count: moderate.length, clients: moderate.slice(0, 50) };
-    fringeSegments.engaged  = { count: engaged.length,  clients: engaged.slice(0, 50) };
 
     // No-shows
     const noShows = Object.entries(noShowMap)
@@ -189,24 +205,30 @@ export const handler = async (event) => {
       .sort((a, b) => b.noShowCount - a.noShowCount)
       .slice(0, 50);
 
-    // Suspensions from client status / SuspensionInfo
+    // Suspensions — only include actual holds/suspensions
+    // Exclude: Active, Terminated, Expired, Non Member
     const suspensions = Object.values(clientMap)
       .filter((c) => {
+        const statusLower = (c.status || '').toLowerCase();
+        if (EXCLUDED_SUSPENSION_STATUSES.has(statusLower)) return false;
+        // Include if they have populated suspension info
         if (c.suspensionInfo && Object.keys(c.suspensionInfo).length > 0) return true;
+        // Include any other non-excluded, non-Active status
         if (c.status && c.status !== 'Active') return true;
         return false;
       })
       .map((c) => ({
-        id:    c.id,
-        name:  c.name,
-        email: c.email,
-        phone: c.phone,
-        status: c.status,
+        id:             c.id,
+        name:           c.name,
+        email:          c.email,
+        phone:          c.phone,
+        status:         c.status,
         suspensionInfo: c.suspensionInfo,
       }))
       .slice(0, 50);
 
     return ok({
+      period,
       reds:           reds.slice(0, 150),
       fringeSegments,
       noShows,

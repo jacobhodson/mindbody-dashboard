@@ -1,27 +1,25 @@
-import { useState } from 'react';
-import { Users, ArrowUp, ArrowDown, ArrowRight, Sparkles } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Users, ArrowUp, ArrowDown, ArrowRight, Sparkles, RefreshCw, CheckCircle } from 'lucide-react';
+import ContactModal from './ContactModal.jsx';
+
+const PERIODS = [
+  { key: '7days',        label: 'Last 7 Days' },
+  { key: 'calendarWeek', label: 'Last Cal. Week' },
+];
 
 const SEGMENTS = [
   {
     key: 'atRisk',
     label: 'At-Risk',
-    desc: '1 session this week',
+    desc: '1–2 sessions',
     dot: 'bg-orange-400',
     badge: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
     active: 'border-orange-400 text-orange-400',
   },
   {
-    key: 'moderate',
-    label: 'Moderate',
-    desc: '2–3 sessions this week',
-    dot: 'bg-yellow-400',
-    badge: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-    active: 'border-yellow-400 text-yellow-400',
-  },
-  {
     key: 'engaged',
     label: 'Engaged',
-    desc: '4+ sessions this week',
+    desc: '3+ sessions',
     dot: 'bg-emerald-400',
     badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
     active: 'border-emerald-400 text-emerald-400',
@@ -31,7 +29,6 @@ const SEGMENTS = [
 function TrendIndicator({ trend }) {
   if (!trend) return null;
   const { direction, avg } = trend;
-
   if (direction === 'new') {
     return (
       <span className="flex items-center gap-0.5 text-xs text-blue-400">
@@ -40,10 +37,8 @@ function TrendIndicator({ trend }) {
       </span>
     );
   }
-
   const Icon  = direction === 'up' ? ArrowUp : direction === 'down' ? ArrowDown : ArrowRight;
   const color = direction === 'up' ? 'text-emerald-400' : direction === 'down' ? 'text-red-400' : 'text-gray-400';
-
   return (
     <span className={`flex items-center gap-0.5 text-xs tabular-nums ${color}`}>
       <Icon className="h-3 w-3" />
@@ -52,10 +47,33 @@ function TrendIndicator({ trend }) {
   );
 }
 
-export default function FringeClientsTable({ data, loading, error }) {
+export default function FringeClientsTable() {
+  const [period, setPeriod]     = useState('7days');
+  const [data, setData]         = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
   const [activeTab, setActiveTab] = useState('atRisk');
-  const segments = data?.fringeSegments || {};
+  const [selected, setSelected] = useState(null);
+  const [contacted, setContacted] = useState(new Set());
 
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    fetch(`/api/mb-client-analytics?period=${period}`)
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then((d) => { if (!cancelled) { setData(d); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
+
+    return () => { cancelled = true; };
+  }, [period]);
+
+  function handleContacted(id) {
+    setContacted((prev) => new Set([...prev, id]));
+  }
+
+  const segments      = data?.fringeSegments || {};
   const currentSeg    = SEGMENTS.find((s) => s.key === activeTab);
   const currentClients = segments[activeTab]?.clients || [];
   const currentCount   = segments[activeTab]?.count   || 0;
@@ -63,24 +81,41 @@ export default function FringeClientsTable({ data, loading, error }) {
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900 flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 pb-4 border-b border-gray-800">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-gray-400" />
           <h2 className="font-semibold text-white">Fringe Clients</h2>
         </div>
-        <p className="text-xs text-gray-500">Segmented by sessions · last 7 days</p>
+
+        {/* Period filter */}
+        <div className="flex gap-1">
+          {PERIODS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setPeriod(p.key)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                period === p.key
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+          {loading && <RefreshCw className="h-3.5 w-3.5 text-gray-500 animate-spin self-center ml-1" />}
+        </div>
       </div>
 
       {/* Segment tabs */}
-      <div className="flex border-b border-gray-800 overflow-x-auto">
+      <div className="flex border-b border-gray-800">
         {SEGMENTS.map((seg) => {
-          const count = segments[seg.key]?.count || 0;
+          const count    = segments[seg.key]?.count || 0;
           const isActive = activeTab === seg.key;
           return (
             <button
               key={seg.key}
               onClick={() => setActiveTab(seg.key)}
-              className={`flex-1 min-w-[80px] px-3 py-3 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex-1 px-3 py-3 text-xs font-medium border-b-2 transition-colors ${
                 isActive
                   ? `${seg.active} bg-gray-800/40`
                   : 'border-transparent text-gray-500 hover:text-gray-300 hover:bg-gray-800/20'
@@ -126,16 +161,18 @@ export default function FringeClientsTable({ data, loading, error }) {
         )}
 
         {!loading && !error && currentClients.map((client) => {
-          const fullyUtil = client.isFullyUtilising;
+          const fullyUtil  = client.isFullyUtilising;
+          const isContacted = contacted.has(client.id);
           return (
             <div
               key={client.id}
-              className={`flex items-center justify-between px-5 py-2.5 border-b border-gray-800/50 last:border-0 transition-colors ${
+              className={`flex items-center gap-3 px-5 py-2.5 border-b border-gray-800/50 last:border-0 transition-colors ${
                 fullyUtil
                   ? 'border-l-2 border-l-emerald-500 bg-emerald-950/20 hover:bg-emerald-950/30'
                   : 'hover:bg-gray-800/30'
-              }`}
+              } ${isContacted ? 'opacity-50' : ''}`}
             >
+              {/* Name + trend */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className={`text-sm truncate ${fullyUtil ? 'text-emerald-200 font-medium' : 'text-gray-200'}`}>
@@ -147,16 +184,30 @@ export default function FringeClientsTable({ data, loading, error }) {
                     </span>
                   )}
                   <TrendIndicator trend={client.trend} />
+                  {isContacted && (
+                    <span className="shrink-0 flex items-center gap-1 text-xs text-emerald-500">
+                      <CheckCircle className="h-3 w-3" /> Contacted
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-gray-600 truncate">{client.email || client.phone || '–'}</p>
               </div>
-              <span className={`ml-3 shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums ${
-                fullyUtil
-                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                  : currentSeg?.badge
+
+              {/* Session count badge */}
+              <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums ${
+                fullyUtil ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : currentSeg?.badge
               }`}>
                 {client.sessionsThisWeek} {client.sessionsThisWeek === 1 ? 'session' : 'sessions'}
               </span>
+
+              {/* Contact button */}
+              <button
+                onClick={() => setSelected(client)}
+                disabled={isContacted}
+                className="shrink-0 rounded-lg border border-gray-600 bg-gray-800 px-2.5 py-1 text-xs font-medium text-gray-300 hover:bg-gray-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Contact
+              </button>
             </div>
           );
         })}
@@ -165,9 +216,17 @@ export default function FringeClientsTable({ data, loading, error }) {
       {!loading && currentCount > currentClients.length && (
         <div className="px-5 py-3 border-t border-gray-800">
           <p className="text-xs text-gray-600">
-            Showing {currentClients.length} of {currentCount} clients in this segment
+            Showing {currentClients.length} of {currentCount} · {contacted.size} contacted this session
           </p>
         </div>
+      )}
+
+      {selected && (
+        <ContactModal
+          client={selected}
+          onClose={() => setSelected(null)}
+          onContacted={handleContacted}
+        />
       )}
     </div>
   );
