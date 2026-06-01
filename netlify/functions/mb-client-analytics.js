@@ -40,30 +40,28 @@ async function getVisits(token, classId) {
   }
 }
 
-async function getClientsByIds(token, ids) {
-  if (!ids.length) return {};
-  try {
-    const chunks = [];
-    for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
-    const clientMap = {};
-    for (const chunk of chunks) {
-      const data = await mbGet('/site/clients', token, {
-        clientIds: chunk.join(','),
-        Limit: 200,
-      });
-      for (const c of (data.Clients || [])) {
-        clientMap[String(c.Id)] = {
-          id: String(c.Id),
-          name: `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
-          email: c.Email || '',
-          phone: c.MobilePhone || c.HomePhone || '',
-        };
-      }
+async function getAllClients(token) {
+  const clientMap = {};
+  let offset = 0;
+  while (true) {
+    const data = await mbGet('/client/clients', token, {
+      ActiveOnly: false,
+      Limit: 200,
+      Offset: offset,
+    });
+    const clients = data.Clients || [];
+    for (const c of clients) {
+      clientMap[String(c.Id)] = {
+        id: String(c.Id),
+        name: `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
+        email: c.Email || '',
+        phone: c.MobilePhone || c.HomePhone || '',
+      };
     }
-    return clientMap;
-  } catch {
-    return {};
+    if (clients.length < 200 || offset >= 1800) break;
+    offset += 200;
   }
+  return clientMap;
 }
 
 export const handler = async (event) => {
@@ -112,7 +110,7 @@ export const handler = async (event) => {
 
     // Fetch client details for all IDs we've seen
     const allIds = [...new Set([...setA, ...Object.keys(setB)])];
-    const clientMap = await getClientsByIds(token, allIds);
+    const clientMap = await getAllClients(token);
 
     function clientRow(id, extra = {}) {
       const c = clientMap[id] || { id, name: `Client ${id}`, email: '', phone: '' };

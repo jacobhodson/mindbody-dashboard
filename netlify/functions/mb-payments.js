@@ -22,26 +22,27 @@ function isOnAccount(payments = []) {
   return payments.some((p) => (p.Type || '').toLowerCase().includes('account'));
 }
 
-async function getClientsByIds(token, ids) {
-  if (!ids.length) return {};
-  try {
-    const clientMap = {};
-    const chunks = [];
-    for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
-    for (const chunk of chunks) {
-      const data = await mbGet('/site/clients', token, { clientIds: chunk.join(','), Limit: 200 });
-      for (const c of (data.Clients || [])) {
-        clientMap[String(c.Id)] = {
-          name: `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
-          email: c.Email || '',
-          phone: c.MobilePhone || c.HomePhone || '',
-        };
-      }
+async function getAllClients(token) {
+  const clientMap = {};
+  let offset = 0;
+  while (true) {
+    const data = await mbGet('/client/clients', token, {
+      ActiveOnly: false,
+      Limit: 200,
+      Offset: offset,
+    });
+    const clients = data.Clients || [];
+    for (const c of clients) {
+      clientMap[String(c.Id)] = {
+        name: `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
+        email: c.Email || '',
+        phone: c.MobilePhone || c.HomePhone || '',
+      };
     }
-    return clientMap;
-  } catch {
-    return {};
+    if (clients.length < 200 || offset >= 1800) break;
+    offset += 200;
   }
+  return clientMap;
 }
 
 export const handler = async (event) => {
@@ -97,7 +98,7 @@ export const handler = async (event) => {
       ]),
     ].filter(Boolean);
 
-    const clientMap = await getClientsByIds(token, clientIds);
+    const clientMap = await getAllClients(token);
     function clientName(id) {
       return clientMap[String(id)]?.name || `Client ${id}`;
     }
