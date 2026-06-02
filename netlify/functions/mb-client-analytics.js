@@ -16,8 +16,9 @@ import { subDays, format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'dat
 const BATCH = 15;
 
 // Statuses that are NOT a suspension — exclude from suspensions list
+// 'declined' is handled separately under finances
 const EXCLUDED_SUSPENSION_STATUSES = new Set([
-  'active', 'terminated', 'expired', 'non member', 'non-member',
+  'active', 'terminated', 'expired', 'non member', 'non-member', 'declined',
 ]);
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -206,14 +207,12 @@ export const handler = async (event) => {
       .slice(0, 50);
 
     // Suspensions — only include actual holds/suspensions
-    // Exclude: Active, Terminated, Expired, Non Member
+    // Excludes: Active, Terminated, Expired, Non Member, Declined (Declined goes to Finances)
     const suspensions = Object.values(clientMap)
       .filter((c) => {
         const statusLower = (c.status || '').toLowerCase();
         if (EXCLUDED_SUSPENSION_STATUSES.has(statusLower)) return false;
-        // Include if they have populated suspension info
         if (c.suspensionInfo && Object.keys(c.suspensionInfo).length > 0) return true;
-        // Include any other non-excluded, non-Active status
         if (c.status && c.status !== 'Active') return true;
         return false;
       })
@@ -227,17 +226,32 @@ export const handler = async (event) => {
       }))
       .slice(0, 50);
 
+    // Declined clients — payment-declined status, shown under Finances
+    const declinedClients = Object.values(clientMap)
+      .filter((c) => (c.status || '').toLowerCase() === 'declined')
+      .map((c) => ({
+        id:     c.id,
+        name:   c.name,
+        email:  c.email,
+        phone:  c.phone,
+        status: c.status,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 100);
+
     return ok({
       period,
       reds:           reds.slice(0, 150),
       fringeSegments,
       noShows,
       suspensions,
+      declinedClients,
       summary: {
         redsCount:        reds.length,
         visitedThisWeek:  visitedW1.size,
         noShowCount:      noShows.length,
         suspensionCount:  suspensions.length,
+        declinedCount:    declinedClients.length,
         totalTracked:     Object.keys(weeks).length,
       },
     });

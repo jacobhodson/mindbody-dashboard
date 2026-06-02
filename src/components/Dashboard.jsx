@@ -9,6 +9,7 @@ import RedsList           from './RedsList.jsx';
 import FringeClientsTable from './FringeClientsTable.jsx';
 import RevenueCards       from './RevenueCards.jsx';
 import PaymentIssuesTable from './PaymentIssuesTable.jsx';
+import DeclinedList       from './DeclinedList.jsx';
 
 const TABS = [
   { key: 'operations', label: 'Operations', Icon: Activity },
@@ -112,6 +113,12 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               data={data.revenue}
               loading={loading.revenue}
               error={errors.revenue}
+            />
+
+            <DeclinedList
+              data={data.clientAnalytics}
+              loading={loading.clientAnalytics}
+              error={errors.clientAnalytics}
             />
 
             <PaymentIssuesTable
