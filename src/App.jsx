@@ -7,8 +7,8 @@ import { useContactLog } from './utils/useContactLog.js';
 // time — but the frontend always reads fresh so there's no stale-cache risk.
 // The 5-minute auto-refresh interval has been removed to save API credits.
 
-const LOADING_ALL = { attendance: true, clientAnalytics: true, payments: true, revenue: true };
-const LOADED_ALL  = { attendance: false, clientAnalytics: false, payments: false, revenue: false };
+const LOADING_ALL = { attendance: true, clientAnalytics: true, payments: true, revenue: true, onboarding: true };
+const LOADED_ALL  = { attendance: false, clientAnalytics: false, payments: false, revenue: false, onboarding: false };
 
 async function safeFetch(url) {
   const res = await fetch(url);
@@ -17,7 +17,7 @@ async function safeFetch(url) {
 }
 
 export default function App() {
-  const [data, setData]               = useState({ attendance: null, clientAnalytics: null, payments: null, revenue: null });
+  const [data, setData]               = useState({ attendance: null, clientAnalytics: null, payments: null, revenue: null, onboarding: null });
   const [loading, setLoading]         = useState(LOADING_ALL);
   const [errors, setErrors]           = useState({});
   const [lastRefresh, setLastRefresh] = useState(null);
@@ -38,6 +38,7 @@ export default function App() {
       load('clientAnalytics', '/api/mb-client-analytics'),
       load('payments',        '/api/mb-payments'),
       load('revenue',         '/api/mb-revenue'),
+      load('onboarding',      '/api/mb-onboarding'),
     ]).then(() => setLastRefresh(new Date()));
   }, []);
 

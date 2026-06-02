@@ -48,7 +48,7 @@ function TrendIndicator({ trend }) {
   );
 }
 
-export default function FringeClientsTable({ contactLog }) {
+export default function FringeClientsTable({ contactLog, onboardingIds = new Set() }) {
   const [period, setPeriod]       = useState('7days');
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(true);
@@ -75,8 +75,9 @@ export default function FringeClientsTable({ contactLog }) {
 
   const segments      = data?.fringeSegments || {};
   const currentSeg    = SEGMENTS.find((s) => s.key === activeTab);
-  const currentClients = segments[activeTab]?.clients || [];
-  const currentCount   = segments[activeTab]?.count   || 0;
+  // Exclude onboarding clients — they are tracked on the Onboarding tab
+  const currentClients = (segments[activeTab]?.clients || []).filter((c) => !onboardingIds.has(c.id));
+  const currentCount   = currentClients.length;
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900 flex flex-col">
@@ -109,7 +110,8 @@ export default function FringeClientsTable({ contactLog }) {
       {/* Segment tabs */}
       <div className="flex border-b border-gray-800">
         {SEGMENTS.map((seg) => {
-          const count    = segments[seg.key]?.count || 0;
+          // Show the count after filtering out onboarding clients
+          const count    = (segments[seg.key]?.clients || []).filter((c) => !onboardingIds.has(c.id)).length;
           const isActive = activeTab === seg.key;
           return (
             <button

@@ -27,11 +27,12 @@ function TrendBadge({ trend }) {
   );
 }
 
-export default function RedsList({ data, loading, error, contactLog }) {
+export default function RedsList({ data, loading, error, contactLog, onboardingIds = new Set() }) {
   const [search, setSearch]     = useState('');
   const [selected, setSelected] = useState(null);
 
-  const clients = data?.reds || [];
+  // Exclude clients currently in the onboarding pipeline — they're tracked separately
+  const clients = (data?.reds || []).filter((c) => !onboardingIds.has(c.id));
 
   const isContacted   = contactLog?.isContacted  ?? (() => false);
   const logContact    = contactLog?.logContact    ?? null;

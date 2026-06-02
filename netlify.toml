@@ -9,6 +9,9 @@
 [functions]
   node_bundler = "esbuild"
 
+[functions."mb-onboarding"]
+  timeout = 26
+
 [dev]
   command = "vite"
   port = 8888

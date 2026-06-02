@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Activity, DollarSign } from 'lucide-react';
+import { RefreshCw, Activity, DollarSign, Users2 } from 'lucide-react';
 import StatsGrid          from './StatsGrid.jsx';
 import AttendanceChart    from './AttendanceChart.jsx';
 import NoShowsList        from './NoShowsList.jsx';
@@ -10,15 +10,21 @@ import FringeClientsTable from './FringeClientsTable.jsx';
 import RevenueCards       from './RevenueCards.jsx';
 import PaymentIssuesTable from './PaymentIssuesTable.jsx';
 import DeclinedList       from './DeclinedList.jsx';
+import OnboardingTab      from './OnboardingTab.jsx';
 
 const TABS = [
   { key: 'operations', label: 'Operations', Icon: Activity },
   { key: 'finances',   label: 'Finances',   Icon: DollarSign },
+  { key: 'onboarding', label: 'Onboarding', Icon: Users2 },
 ];
 
 export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh, contactLog }) {
   const [tab, setTab] = useState('operations');
   const anyLoading = Object.values(loading).some(Boolean);
+
+  // Build set of active onboarding client IDs so we can filter them from
+  // the Operations reds / fringe lists (they're tracked separately on the Onboarding tab)
+  const onboardingIds = new Set(data.onboarding?.onboardingIds || []);
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -27,7 +33,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         <div className="mx-auto max-w-7xl flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-white">Operations Dashboard</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Newstrength · auto-refreshes every 5 min</p>
+            <p className="text-xs text-gray-500 mt-0.5">Newstrength</p>
           </div>
           <div className="flex items-center gap-4">
             {lastRefresh && (
@@ -63,6 +69,12 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               >
                 <Icon className="h-4 w-4" />
                 {label}
+                {/* Onboarding at-risk badge */}
+                {key === 'onboarding' && (data.onboarding?.summary?.atRisk ?? 0) > 0 && (
+                  <span className="rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-400 border border-red-500/30">
+                    {data.onboarding.summary.atRisk}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
@@ -101,9 +113,13 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               loading={loading.clientAnalytics}
               error={errors.clientAnalytics}
               contactLog={contactLog}
+              onboardingIds={onboardingIds}
             />
 
-            <FringeClientsTable contactLog={contactLog} />
+            <FringeClientsTable
+              contactLog={contactLog}
+              onboardingIds={onboardingIds}
+            />
           </>
         )}
 
@@ -128,6 +144,16 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               error={errors.payments}
             />
           </>
+        )}
+
+        {/* ─ Onboarding ─ */}
+        {tab === 'onboarding' && (
+          <OnboardingTab
+            data={data.onboarding}
+            loading={loading.onboarding}
+            error={errors.onboarding}
+            contactLog={contactLog}
+          />
         )}
       </main>
     </div>
