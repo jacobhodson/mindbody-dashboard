@@ -2,29 +2,21 @@ import { useState } from 'react';
 import { X, Mail, Phone, CheckCircle, Loader2 } from 'lucide-react';
 
 export default function ContactModal({ client, onClose, onContacted }) {
-  const [note, setNote]       = useState('');
-  const [status, setStatus]   = useState('idle'); // idle | loading | done | failed | error
-  const [resultMsg, setResultMsg] = useState('');
+  const [note, setNote]     = useState('');
+  const [status, setStatus] = useState('idle'); // idle | loading | done | error
 
-  async function handleLog() {
+  async function handleMark() {
     setStatus('loading');
     try {
-      const res  = await fetch('/api/mb-contact-client', {
+      // Fire-and-forget — endpoint is a stub; tracking is session-only
+      fetch('/api/mb-contact-client', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId: client.id, note: note || undefined }),
-      });
-      const data = await res.json();
+      }).catch(() => {});
 
-      if (data.logged) {
-        setResultMsg(data.message || 'Saved to Mindbody');
-        setStatus('done');
-        setTimeout(() => { onContacted(client.id); onClose(); }, 1200);
-      } else {
-        // Logged to our server but Mindbody endpoints both failed
-        setResultMsg(data.message || 'Could not save to Mindbody');
-        setStatus('failed');
-      }
+      setStatus('done');
+      setTimeout(() => { onContacted(client.id); onClose(); }, 800);
     } catch {
       setStatus('error');
     }
@@ -44,11 +36,9 @@ export default function ContactModal({ client, onClose, onContacted }) {
         </button>
 
         <h3 className="text-lg font-semibold text-white mb-1">Contact client</h3>
-        <p className="text-sm text-gray-400 mb-5">
-          {client.name || 'Unknown client'}
-        </p>
+        <p className="text-sm text-gray-400 mb-5">{client.name || 'Unknown client'}</p>
 
-        {/* Contact options */}
+        {/* Contact action buttons */}
         <div className="flex gap-3 mb-5">
           {client.email && (
             <a
@@ -89,9 +79,9 @@ export default function ContactModal({ client, onClose, onContacted }) {
           )}
         </div>
 
-        {/* Log note */}
+        {/* Session note (not saved externally) */}
         <label className="block text-xs text-gray-400 mb-1.5">
-          Note (optional — logged to Mindbody)
+          Note <span className="text-gray-600">(session only)</span>
         </label>
         <textarea
           value={note}
@@ -102,25 +92,17 @@ export default function ContactModal({ client, onClose, onContacted }) {
         />
 
         <button
-          onClick={handleLog}
+          onClick={handleMark}
           disabled={status === 'loading' || status === 'done'}
           className="w-full flex items-center justify-center gap-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-60 px-4 py-2.5 text-sm font-medium text-white transition-colors"
         >
           {status === 'loading' && <Loader2 className="h-4 w-4 animate-spin" />}
           {status === 'done'    && <CheckCircle className="h-4 w-4 text-emerald-400" />}
-          {status === 'loading' ? 'Saving…' : status === 'done' ? 'Saved!' : 'Log contact in Mindbody'}
+          {status === 'done' ? 'Marked as contacted!' : 'Mark as contacted'}
         </button>
 
-        {status === 'done' && resultMsg && (
-          <p className="mt-2 text-xs text-emerald-400 text-center">✓ {resultMsg}</p>
-        )}
-        {status === 'failed' && (
-          <p className="mt-2 text-xs text-amber-400 text-center">
-            Mindbody didn't accept the log — {resultMsg}
-          </p>
-        )}
         {status === 'error' && (
-          <p className="mt-2 text-xs text-red-400 text-center">Network error — check connection.</p>
+          <p className="mt-2 text-xs text-red-400 text-center">Something went wrong — try again.</p>
         )}
       </div>
     </div>
