@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Users, ArrowUp, ArrowDown, ArrowRight, Sparkles, RefreshCw, CheckCircle } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import ContactModal from './ContactModal.jsx';
 
 const PERIODS = [
@@ -47,14 +48,17 @@ function TrendIndicator({ trend }) {
   );
 }
 
-export default function FringeClientsTable() {
-  const [period, setPeriod]     = useState('7days');
-  const [data, setData]         = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
+export default function FringeClientsTable({ contactLog }) {
+  const [period, setPeriod]       = useState('7days');
+  const [data, setData]           = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
   const [activeTab, setActiveTab] = useState('atRisk');
-  const [selected, setSelected] = useState(null);
-  const [contacted, setContacted] = useState(new Set());
+  const [selected, setSelected]   = useState(null);
+
+  const isContacted   = contactLog?.isContacted  ?? (() => false);
+  const logContact    = contactLog?.logContact    ?? null;
+  const getClientLogs = contactLog?.getClientLogs ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -68,10 +72,6 @@ export default function FringeClientsTable() {
 
     return () => { cancelled = true; };
   }, [period]);
-
-  function handleContacted(id) {
-    setContacted((prev) => new Set([...prev, id]));
-  }
 
   const segments      = data?.fringeSegments || {};
   const currentSeg    = SEGMENTS.find((s) => s.key === activeTab);
@@ -161,8 +161,10 @@ export default function FringeClientsTable() {
         )}
 
         {!loading && !error && currentClients.map((client) => {
-          const fullyUtil  = client.isFullyUtilising;
-          const isContacted = contacted.has(client.id);
+          const fullyUtil    = client.isFullyUtilising;
+          const wasContacted = isContacted(client.id);
+          const lastLog      = contactLog?.contacted?.[String(client.id)];
+
           return (
             <div
               key={client.id}
@@ -170,7 +172,7 @@ export default function FringeClientsTable() {
                 fullyUtil
                   ? 'border-l-2 border-l-emerald-500 bg-emerald-950/20 hover:bg-emerald-950/30'
                   : 'hover:bg-gray-800/30'
-              } ${isContacted ? 'opacity-50' : ''}`}
+              } ${wasContacted ? 'opacity-60' : ''}`}
             >
               {/* Name + trend */}
               <div className="min-w-0 flex-1">
@@ -184,9 +186,10 @@ export default function FringeClientsTable() {
                     </span>
                   )}
                   <TrendIndicator trend={client.trend} />
-                  {isContacted && (
+                  {wasContacted && (
                     <span className="shrink-0 flex items-center gap-1 text-xs text-emerald-500">
-                      <CheckCircle className="h-3 w-3" /> Contacted
+                      <CheckCircle className="h-3 w-3" />
+                      {lastLog ? formatDistanceToNow(new Date(lastLog.at), { addSuffix: true }) : 'Contacted'}
                     </span>
                   )}
                 </div>
@@ -203,10 +206,13 @@ export default function FringeClientsTable() {
               {/* Contact button */}
               <button
                 onClick={() => setSelected(client)}
-                disabled={isContacted}
-                className="shrink-0 rounded-lg border border-gray-600 bg-gray-800 px-2.5 py-1 text-xs font-medium text-gray-300 hover:bg-gray-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className={`shrink-0 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+                  wasContacted
+                    ? 'border-gray-700 bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
+                    : 'border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
               >
-                Contact
+                {wasContacted ? 'View log' : 'Contact'}
               </button>
             </div>
           );
@@ -216,7 +222,7 @@ export default function FringeClientsTable() {
       {!loading && currentCount > currentClients.length && (
         <div className="px-5 py-3 border-t border-gray-800">
           <p className="text-xs text-gray-600">
-            Showing {currentClients.length} of {currentCount} · {contacted.size} contacted this session
+            Showing {currentClients.length} of {currentCount}
           </p>
         </div>
       )}
@@ -225,7 +231,9 @@ export default function FringeClientsTable() {
         <ContactModal
           client={selected}
           onClose={() => setSelected(null)}
-          onContacted={handleContacted}
+          onContacted={() => {}}
+          logContact={logContact}
+          getClientLogs={getClientLogs}
         />
       )}
     </div>

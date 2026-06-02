@@ -1,22 +1,46 @@
-import { useState } from 'react';
-import { X, Mail, Phone, CheckCircle, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Mail, Phone, CheckCircle, Loader2, Clock, MessageSquare } from 'lucide-react';
+import { formatDistanceToNow, format } from 'date-fns';
 
-export default function ContactModal({ client, onClose, onContacted }) {
+function LogEntry({ entry }) {
+  const date = new Date(entry.at);
+  return (
+    <div className="flex gap-3 text-xs">
+      <div className="shrink-0 mt-0.5">
+        <div className="h-2 w-2 rounded-full bg-emerald-500/60 ring-2 ring-gray-900 mt-1" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-gray-400">
+          {formatDistanceToNow(date, { addSuffix: true })}
+          <span className="ml-2 text-gray-600">{format(date, 'd MMM yyyy, h:mm a')}</span>
+        </p>
+        {entry.note && (
+          <p className="text-gray-300 mt-0.5 italic">"{entry.note}"</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function ContactModal({ client, onClose, onContacted, logContact, getClientLogs }) {
   const [note, setNote]     = useState('');
   const [status, setStatus] = useState('idle'); // idle | loading | done | error
+  const [history, setHistory] = useState(null); // null = loading, [] = none
+
+  // Fetch this client's contact history on open
+  useEffect(() => {
+    if (!getClientLogs) { setHistory([]); return; }
+    getClientLogs(client.id).then(setHistory).catch(() => setHistory([]));
+  }, [client.id, getClientLogs]);
 
   async function handleMark() {
     setStatus('loading');
     try {
-      // Fire-and-forget — endpoint is a stub; tracking is session-only
-      fetch('/api/mb-contact-client', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: client.id, note: note || undefined }),
-      }).catch(() => {});
-
+      if (logContact) {
+        await logContact(client.id, client.name, note);
+      }
       setStatus('done');
-      setTimeout(() => { onContacted(client.id); onClose(); }, 800);
+      setTimeout(() => { onContacted(client.id); onClose(); }, 900);
     } catch {
       setStatus('error');
     }
@@ -27,7 +51,7 @@ export default function ContactModal({ client, onClose, onContacted }) {
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl p-6">
+      <div className="relative w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}
           className="absolute right-4 top-4 text-gray-500 hover:text-gray-300 transition-colors"
@@ -35,7 +59,7 @@ export default function ContactModal({ client, onClose, onContacted }) {
           <X className="h-5 w-5" />
         </button>
 
-        <h3 className="text-lg font-semibold text-white mb-1">Contact client</h3>
+        <h3 className="text-lg font-semibold text-white mb-0.5">Contact client</h3>
         <p className="text-sm text-gray-400 mb-5">{client.name || 'Unknown client'}</p>
 
         {/* Contact action buttons */}
@@ -79,9 +103,39 @@ export default function ContactModal({ client, onClose, onContacted }) {
           )}
         </div>
 
-        {/* Session note (not saved externally) */}
+        {/* Contact history */}
+        <div className="mb-5">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
+            <Clock className="h-3.5 w-3.5" />
+            Contact history
+          </div>
+
+          {history === null && (
+            <div className="flex items-center gap-2 text-xs text-gray-600 py-2">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Loading history…
+            </div>
+          )}
+
+          {history !== null && history.length === 0 && (
+            <div className="flex items-center gap-2 text-xs text-gray-600 py-1">
+              <MessageSquare className="h-3.5 w-3.5" />
+              No previous contacts recorded
+            </div>
+          )}
+
+          {history !== null && history.length > 0 && (
+            <div className="space-y-3 border-l border-gray-700 pl-3">
+              {[...history].reverse().map((entry, i) => (
+                <LogEntry key={i} entry={entry} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Note for this contact */}
         <label className="block text-xs text-gray-400 mb-1.5">
-          Note <span className="text-gray-600">(session only)</span>
+          Note <span className="text-gray-600">(saved to contact log)</span>
         </label>
         <textarea
           value={note}
@@ -98,7 +152,7 @@ export default function ContactModal({ client, onClose, onContacted }) {
         >
           {status === 'loading' && <Loader2 className="h-4 w-4 animate-spin" />}
           {status === 'done'    && <CheckCircle className="h-4 w-4 text-emerald-400" />}
-          {status === 'done' ? 'Marked as contacted!' : 'Mark as contacted'}
+          {status === 'loading' ? 'Saving…' : status === 'done' ? 'Logged!' : 'Mark as contacted'}
         </button>
 
         {status === 'error' && (

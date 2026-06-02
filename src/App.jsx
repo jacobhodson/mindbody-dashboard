@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Dashboard from './components/Dashboard.jsx';
+import { useContactLog } from './utils/useContactLog.js';
 
 const REFRESH_MS = 5 * 60 * 1000;
 
@@ -24,6 +25,7 @@ export default function App() {
   });
   const [errors, setErrors]         = useState({});
   const [lastRefresh, setLastRefresh] = useState(null);
+  const contactLog = useContactLog();
 
   const refresh = useCallback(() => {
     setLoading({ attendance: true, clientAnalytics: true, payments: true, revenue: true });
@@ -56,6 +58,7 @@ export default function App() {
       errors={errors}
       lastRefresh={lastRefresh}
       onRefresh={refresh}
+      contactLog={contactLog}
     />
   );
 }

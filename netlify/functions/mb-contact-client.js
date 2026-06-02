@@ -1,25 +1,34 @@
 /**
- * Contact tracking endpoint.
- *
- * The Mindbody write endpoints (/client/addclientcontactlog, /client/addclientnote)
- * return 404 on this API plan, so logging is handled client-side only.
- * This endpoint is kept as a no-op stub so the frontend call doesn't error.
- *
  * POST /api/mb-contact-client
- * Body: { clientId: string, note?: string }
- * Returns: { logged: false, method: 'session-only' }
+ * Body: { clientId, clientName?, note? }
+ *
+ * Appends a contact log entry to Netlify Blobs (persistent, cross-device).
+ * Each client has a key in the 'contact-logs' store containing an array of
+ * { at: ISO string, note: string, name: string } entries.
  */
-import { CORS } from './utils/mb-auth.js';
+import { getStore } from '@netlify/blobs';
+import { ok, err, CORS } from './utils/mb-auth.js';
 
 export const handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: CORS, body: JSON.stringify({ error: 'Method not allowed' }) };
-  }
+  if (event.httpMethod !== 'POST') return err('Method not allowed', 405);
 
-  return {
-    statusCode: 200,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ logged: false, method: 'session-only' }),
-  };
+  try {
+    const { clientId, clientName = '', note = '' } = JSON.parse(event.body || '{}');
+    if (!clientId) return err('clientId is required', 400);
+
+    const store = getStore('contact-logs');
+    const raw   = await store.get(String(clientId));
+    const logs  = raw ? JSON.parse(raw) : [];
+
+    const entry = { at: new Date().toISOString(), note, name: clientName };
+    logs.push(entry);
+
+    await store.set(String(clientId), JSON.stringify(logs));
+
+    return ok({ logged: true, entry, total: logs.length });
+  } catch (e) {
+    console.error('mb-contact-client:', e);
+    return err(e.message);
+  }
 };

@@ -16,7 +16,7 @@ const TABS = [
   { key: 'finances',   label: 'Finances',   Icon: DollarSign },
 ];
 
-export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh }) {
+export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh, contactLog }) {
   const [tab, setTab] = useState('operations');
   const anyLoading = Object.values(loading).some(Boolean);
 
@@ -100,9 +100,10 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               data={data.clientAnalytics}
               loading={loading.clientAnalytics}
               error={errors.clientAnalytics}
+              contactLog={contactLog}
             />
 
-            <FringeClientsTable />
+            <FringeClientsTable contactLog={contactLog} />
           </>
         )}
 

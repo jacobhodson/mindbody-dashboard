@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { TrendingDown, Search, CheckCircle, ArrowUp, ArrowDown, ArrowRight, Sparkles } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import ContactModal from './ContactModal.jsx';
 
 function TrendBadge({ trend }) {
@@ -26,12 +27,15 @@ function TrendBadge({ trend }) {
   );
 }
 
-export default function RedsList({ data, loading, error }) {
+export default function RedsList({ data, loading, error, contactLog }) {
   const [search, setSearch]     = useState('');
   const [selected, setSelected] = useState(null);
-  const [contacted, setContacted] = useState(new Set());
 
   const clients = data?.reds || [];
+
+  const isContacted   = contactLog?.isContacted  ?? (() => false);
+  const logContact    = contactLog?.logContact    ?? null;
+  const getClientLogs = contactLog?.getClientLogs ?? null;
 
   const filtered = clients.filter((c) => {
     if (!search) return true;
@@ -43,9 +47,8 @@ export default function RedsList({ data, loading, error }) {
     );
   });
 
-  function handleContacted(id) {
-    setContacted((prev) => new Set([...prev, id]));
-  }
+  // Count how many in this list are in the 7-day window
+  const contactedCount = clients.filter((c) => isContacted(c.id)).length;
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900 flex flex-col">
@@ -101,19 +104,22 @@ export default function RedsList({ data, loading, error }) {
         )}
 
         {!loading && !error && filtered.map((client) => {
-          const isContacted = contacted.has(client.id);
+          const wasContacted = isContacted(client.id);
+          const lastLog = contactLog?.contacted?.[String(client.id)];
+
           return (
             <div
               key={client.id}
-              className={`flex items-center justify-between px-5 py-3 border-b border-gray-800/60 last:border-0 hover:bg-gray-800/40 transition-colors ${isContacted ? 'opacity-50' : ''}`}
+              className={`flex items-center justify-between px-5 py-3 border-b border-gray-800/60 last:border-0 hover:bg-gray-800/40 transition-colors ${wasContacted ? 'opacity-60' : ''}`}
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-medium text-gray-200 truncate">{client.name || 'Unknown'}</p>
                   <TrendBadge trend={client.trend} />
-                  {isContacted && (
+                  {wasContacted && (
                     <span className="shrink-0 flex items-center gap-1 text-xs text-emerald-500">
-                      <CheckCircle className="h-3 w-3" /> Contacted
+                      <CheckCircle className="h-3 w-3" />
+                      {lastLog ? formatDistanceToNow(new Date(lastLog.at), { addSuffix: true }) : 'Contacted'}
                     </span>
                   )}
                 </div>
@@ -126,10 +132,13 @@ export default function RedsList({ data, loading, error }) {
               </div>
               <button
                 onClick={() => setSelected(client)}
-                disabled={isContacted}
-                className="ml-4 shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className={`ml-4 shrink-0 rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${
+                  wasContacted
+                    ? 'border-gray-700 bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
+                    : 'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                }`}
               >
-                Contact
+                {wasContacted ? 'View log' : 'Contact'}
               </button>
             </div>
           );
@@ -139,7 +148,7 @@ export default function RedsList({ data, loading, error }) {
       {!loading && clients.length > 0 && (
         <div className="px-5 py-3 border-t border-gray-800">
           <p className="text-xs text-gray-600">
-            Showing {filtered.length} of {clients.length} · {contacted.size} contacted this session
+            Showing {filtered.length} of {clients.length} · {contactedCount} contacted in last 7 days
           </p>
         </div>
       )}
@@ -148,7 +157,9 @@ export default function RedsList({ data, loading, error }) {
         <ContactModal
           client={selected}
           onClose={() => setSelected(null)}
-          onContacted={handleContacted}
+          onContacted={() => {}}
+          logContact={logContact}
+          getClientLogs={getClientLogs}
         />
       )}
     </div>
