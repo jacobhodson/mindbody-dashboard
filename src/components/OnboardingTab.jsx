@@ -1,7 +1,11 @@
-import { RefreshCw, Users2, AlertTriangle } from 'lucide-react';
+import { useMemo } from 'react';
+import { Users2 } from 'lucide-react';
 import OnboardingBoard from './OnboardingBoard.jsx';
 import OnboardingReds  from './OnboardingReds.jsx';
 import { useOnboardingTasks } from '../utils/useOnboardingTasks.js';
+
+// Short-program products get removed from the board if no-rollover is selected
+const SHORT_PRODUCTS = new Set(['3-Session', '14-Day']);
 
 function StatPill({ label, value, color = 'text-gray-300' }) {
   return (
@@ -12,11 +16,45 @@ function StatPill({ label, value, color = 'text-gray-300' }) {
   );
 }
 
-export default function OnboardingTab({ data, loading, error, contactLog }) {
+export default function OnboardingTab({
+  data,
+  loading,
+  error,
+  contactLog,
+  decisions,
+  getDecision,
+  setDecision,
+}) {
   const { isComplete, toggleTask } = useOnboardingTasks();
 
-  const summary      = data?.summary    || {};
-  const pipelineReds = data?.pipelineReds || [];
+  // Filter out short-product clients who explicitly chose no-rollover
+  const displayData = useMemo(() => {
+    if (!data) return null;
+    const keep = (arr = []) =>
+      arr.filter((c) => {
+        if (!SHORT_PRODUCTS.has(c.shortProduct)) return true;
+        return decisions[c.id]?.decision !== 'no-rollover';
+      });
+    const w1 = keep(data.week1);
+    const w2 = keep(data.week2);
+    const w3 = keep(data.week3);
+    const w4 = keep(data.week4);
+    const reds = keep(data.pipelineReds);
+    return {
+      ...data,
+      week1: w1, week2: w2, week3: w3, week4: w4,
+      pipelineReds: reds,
+      summary: {
+        ...data.summary,
+        total:      w1.length + w2.length + w3.length + w4.length,
+        atRisk:     reds.length,
+        week1Count: w1.length,
+        week2Count: w2.length,
+        week3Count: w3.length,
+        week4Count: w4.length,
+      },
+    };
+  }, [data, decisions]);
 
   if (loading) {
     return (
@@ -43,23 +81,26 @@ export default function OnboardingTab({ data, loading, error, contactLog }) {
     );
   }
 
-  const isEmpty = !data || (
-    (data.week1?.length || 0) +
-    (data.week2?.length || 0) +
-    (data.week3?.length || 0) +
-    (data.week4?.length || 0) === 0
+  const summary      = displayData?.summary    || {};
+  const pipelineReds = displayData?.pipelineReds || [];
+
+  const isEmpty = !displayData || (
+    (displayData.week1?.length || 0) +
+    (displayData.week2?.length || 0) +
+    (displayData.week3?.length || 0) +
+    (displayData.week4?.length || 0) === 0
   );
 
   return (
     <div className="space-y-6">
       {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatPill label="In pipeline"  value={summary.total      ?? 0} color="text-white" />
-        <StatPill label="At risk"      value={summary.atRisk     ?? 0} color={summary.atRisk > 0 ? 'text-red-400' : 'text-gray-300'} />
-        <StatPill label="Week 1"       value={summary.week1Count ?? 0} color="text-blue-400" />
-        <StatPill label="Week 2"       value={summary.week2Count ?? 0} color="text-amber-400" />
-        <StatPill label="Week 3"       value={summary.week3Count ?? 0} color="text-violet-400" />
-        <StatPill label="Week 4"       value={summary.week4Count ?? 0} color="text-emerald-400" />
+        <StatPill label="In pipeline" value={summary.total      ?? 0} color="text-white" />
+        <StatPill label="At risk"     value={summary.atRisk     ?? 0} color={summary.atRisk > 0 ? 'text-red-400' : 'text-gray-300'} />
+        <StatPill label="Week 1"      value={summary.week1Count ?? 0} color="text-blue-400" />
+        <StatPill label="Week 2"      value={summary.week2Count ?? 0} color="text-amber-400" />
+        <StatPill label="Week 3"      value={summary.week3Count ?? 0} color="text-violet-400" />
+        <StatPill label="Week 4"      value={summary.week4Count ?? 0} color="text-emerald-400" />
       </div>
 
       {/* Pipeline reds */}
@@ -78,7 +119,14 @@ export default function OnboardingTab({ data, loading, error, contactLog }) {
           </p>
         </div>
       ) : (
-        <OnboardingBoard data={data} isComplete={isComplete} toggleTask={toggleTask} />
+        <OnboardingBoard
+          data={displayData}
+          isComplete={isComplete}
+          toggleTask={toggleTask}
+          contactLog={contactLog}
+          getDecision={getDecision}
+          setDecision={setDecision}
+        />
       )}
     </div>
   );

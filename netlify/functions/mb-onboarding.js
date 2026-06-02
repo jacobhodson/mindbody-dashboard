@@ -2,22 +2,17 @@
  * GET /api/mb-onboarding
  *
  * Identifies clients currently in the 4-week onboarding program, groups them
- * into week columns (1–4), and calculates their session counts per week.
+ * into week columns (1–4), and counts sessions via the class-visit approach
+ * (proven to work — same pattern as mb-client-analytics.js).
  *
  * Triggered by purchases of any of these products:
  *   "3 Session Pass" | "14 Day Pass" | "4 Week Kickstarter"
  *   "Strong Dad Transformation" | "Strong Mum Transformation"
- *
- * Response:
- *   week1, week2, week3, week4  — arrays of enriched client objects
- *   pipelineReds                — clients with 0 sessions in their current week
- *   onboardingIds               — flat list of all active onboarding client IDs
- *   summary                     — aggregate counts
  */
 import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
 import { subDays, format, parseISO, differenceInDays } from 'date-fns';
 
-const BATCH = 10;
+const BATCH = 15;
 
 const ONBOARDING_KEYWORDS = [
   '3 session pass',
@@ -32,24 +27,24 @@ function isOnboardingProduct(name = '') {
   return ONBOARDING_KEYWORDS.some((k) => lower.includes(k));
 }
 
-// Short display name for the product badge on the card
 function shortProduct(name = '') {
   const lower = name.toLowerCase();
-  if (lower.includes('strong dad'))      return 'Strong Dad';
-  if (lower.includes('strong mum'))      return 'Strong Mum';
+  if (lower.includes('strong dad'))                            return 'Strong Dad';
+  if (lower.includes('strong mum'))                            return 'Strong Mum';
   if (lower.includes('4 week') || lower.includes('kickstarter')) return '4-Week';
-  if (lower.includes('14 day'))          return '14-Day';
-  if (lower.includes('3 session'))       return '3-Session';
+  if (lower.includes('14 day'))                                return '14-Day';
+  if (lower.includes('3 session'))                             return '3-Session';
   return name.split(' ').slice(0, 2).join(' ');
 }
 
-async function getSales(token, fetchStart, fetchEnd) {
-  let all = [];
-  let offset = 0;
+// ─── Data fetchers ────────────────────────────────────────────────────────────
+
+async function getSales(token, start, end) {
+  let all = [], offset = 0;
   while (true) {
     const data = await mbGet('/sale/sales', token, {
-      StartSaleDateTime: fetchStart,
-      EndSaleDateTime:   fetchEnd,
+      StartSaleDateTime: start,
+      EndSaleDateTime:   end,
       Limit:  200,
       Offset: offset,
     });
@@ -60,18 +55,28 @@ async function getSales(token, fetchStart, fetchEnd) {
   return all;
 }
 
-async function getClientVisits(token, clientId, startDate, endDate) {
-  try {
-    const data = await mbGet('/client/clientvisits', token, {
-      ClientId:  clientId,
-      StartDate: format(startDate, 'yyyy-MM-dd'),
-      EndDate:   format(endDate,   'yyyy-MM-dd'),
-      Limit: 200,
+async function getClasses(token, start, end) {
+  let all = [], offset = 0;
+  while (true) {
+    const data = await mbGet('/class/classes', token, {
+      StartDateTime: start,
+      EndDateTime:   end,
+      Limit:  200,
+      Offset: offset,
     });
-    // MB API returns ClientVisits array; each item has SignedIn + StartDateTime
-    return (data.ClientVisits || []).filter(
-      (v) => v.SignedIn === true && !v.LateCancelled
-    );
+    // Only fetch visits for classes that actually had bookings
+    const classes = (data.Classes || []).filter((c) => (c.TotalBooked || 0) > 0);
+    all = all.concat(classes);
+    if ((data.Classes || []).length < 200 || offset >= 1800) break;
+    offset += 200;
+  }
+  return all;
+}
+
+async function getClassVisits(token, classId) {
+  try {
+    const data = await mbGet('/class/classvisits', token, { ClassID: classId });
+    return data.Class?.Visits || [];
   } catch {
     return [];
   }
@@ -101,6 +106,8 @@ async function getAllClients(token) {
   return map;
 }
 
+// ─── Handler ──────────────────────────────────────────────────────────────────
+
 export const handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
 
@@ -108,64 +115,54 @@ export const handler = async (event) => {
     const token = await getStaffToken();
     const now   = new Date();
 
-    // Fetch sales from the last 29 days (28-day program + 1-day buffer)
-    const windowStart  = subDays(now, 29);
-    const fetchStart   = format(windowStart, "yyyy-MM-dd'T'00:00:00");
-    const fetchEnd     = format(now,         "yyyy-MM-dd'T'23:59:59");
+    const windowStart = subDays(now, 29);
+    const fetchStart  = format(windowStart, "yyyy-MM-dd'T'00:00:00");
+    const fetchEnd    = format(now,         "yyyy-MM-dd'T'23:59:59");
 
-    // ── Step 1: identify onboarding clients from sales ───────────────────
-    const [allSales, clientMap] = await Promise.all([
+    // Fetch sales, clients, and classes in parallel to minimise wall-clock time
+    console.log('[mb-onboarding] Starting parallel fetch…');
+    const [allSales, clientMap, allClasses] = await Promise.all([
       getSales(token, fetchStart, fetchEnd),
       getAllClients(token),
+      getClasses(token, fetchStart, fetchEnd),
     ]);
+    console.log(`[mb-onboarding] Got ${allSales.length} sales, ${Object.keys(clientMap).length} clients, ${allClasses.length} classes`);
 
-    // Map: clientId → { startDate, product (raw), clientInfo from sale }
-    const onboardingMap = {};
+    // ── Identify onboarding clients from sales ────────────────────────────
+    const onboardingMap = {};  // clientId → { startDate, product, shortProduct }
 
     for (const sale of allSales) {
       if (!sale.SaleDate) continue;
-
-      // Client ID can be at sale.Client.Id or sale.ClientId
-      const clientId = String(
-        sale.Client?.Id ?? sale.ClientId ?? ''
-      );
+      const clientId = String(sale.Client?.Id ?? sale.ClientId ?? '');
       if (!clientId || clientId === 'undefined') continue;
 
       for (const item of (sale.PurchasedItems || [])) {
-        const productName = item.Description || item.Name || '';
-        if (!isOnboardingProduct(productName)) continue;
+        const name = item.Description || item.Name || '';
+        if (!isOnboardingProduct(name)) continue;
 
         const saleDate = parseISO(sale.SaleDate);
-        // Keep the most recent onboarding sale per client
-        if (
-          !onboardingMap[clientId] ||
-          saleDate > onboardingMap[clientId].startDate
-        ) {
-          // Try to get client details from the sale object first (faster)
-          const saleClient = sale.Client || {};
+        // Keep only the most recent onboarding purchase per client
+        if (!onboardingMap[clientId] || saleDate > onboardingMap[clientId].startDate) {
           onboardingMap[clientId] = {
-            startDate:   saleDate,
-            product:     productName,
-            shortProduct: shortProduct(productName),
-            // Prefer client map (more reliable); fall back to sale data
-            name:  clientMap[clientId]?.name  || `${saleClient.FirstName || ''} ${saleClient.LastName || ''}`.trim() || `Client ${clientId}`,
-            email: clientMap[clientId]?.email || saleClient.Email        || '',
-            phone: clientMap[clientId]?.phone || saleClient.MobilePhone  || saleClient.HomePhone || '',
+            startDate:    saleDate,
+            product:      name,
+            shortProduct: shortProduct(name),
           };
         }
-        break; // Only process one matching product per sale
+        break; // One onboarding product per sale is enough
       }
     }
 
-    // Filter to clients whose program is currently active (days 0–27)
+    // Filter to clients currently in the 0–27 day window
     const activeOnboarding = Object.entries(onboardingMap)
       .map(([clientId, info]) => {
         const daysSinceStart = differenceInDays(now, info.startDate);
-        // Week 1 = days 0–6, Week 2 = days 7–13, etc.
         const week = Math.min(4, Math.floor(daysSinceStart / 7) + 1);
         return { clientId, ...info, daysSinceStart, week };
       })
       .filter((c) => c.daysSinceStart >= 0 && c.daysSinceStart <= 27);
+
+    console.log(`[mb-onboarding] ${activeOnboarding.length} active onboarding clients`);
 
     if (activeOnboarding.length === 0) {
       return ok({
@@ -176,34 +173,36 @@ export const handler = async (event) => {
       });
     }
 
-    // ── Step 2: fetch client visits per onboarding client (batched) ───────
-    const visitsByClient = {}; // clientId → signed-in visit dates
+    // ── Batch-fetch class visits, counting only for onboarding clients ────
+    const onboardingSet = new Set(activeOnboarding.map((c) => c.clientId));
+    const visitsByClient = {};   // clientId → Date[]
 
-    for (let i = 0; i < activeOnboarding.length; i += BATCH) {
-      const batch = activeOnboarding.slice(i, i + BATCH);
+    for (let i = 0; i < allClasses.length; i += BATCH) {
+      const batch   = allClasses.slice(i, i + BATCH);
       const results = await Promise.allSettled(
-        batch.map(({ clientId, startDate }) =>
-          getClientVisits(token, clientId, startDate, now)
-        )
+        batch.map((cls) => getClassVisits(token, cls.Id))
       );
 
-      batch.forEach(({ clientId }, idx) => {
-        if (results[idx].status !== 'fulfilled') {
-          visitsByClient[clientId] = [];
-          return;
+      batch.forEach((cls, idx) => {
+        if (results[idx].status !== 'fulfilled') return;
+        const classDate = parseISO(cls.StartDateTime);
+
+        for (const visit of results[idx].value) {
+          const id = String(visit.ClientId || '');
+          if (!id || !onboardingSet.has(id)) continue;  // Skip non-onboarding clients
+          if (visit.SignedIn === true && !visit.LateCancelled) {
+            if (!visitsByClient[id]) visitsByClient[id] = [];
+            visitsByClient[id].push(classDate);
+          }
         }
-        visitsByClient[clientId] = results[idx].value.map((v) =>
-          parseISO(v.StartDateTime || v.ClassStartTime || '')
-        ).filter(Boolean);
       });
     }
 
-    // ── Step 3: count sessions per onboarding week for each client ────────
+    // ── Count sessions per onboarding week (relative to each client's start date) ─
     const enriched = activeOnboarding.map((c) => {
-      const visits = visitsByClient[c.clientId] || [];
+      const visits       = visitsByClient[c.clientId] || [];
+      const weekSessions = [0, 0, 0, 0];   // index 0 = Week 1
 
-      // weekSessions[0] = week 1, [1] = week 2, etc.
-      const weekSessions = [0, 0, 0, 0];
       for (const visitDate of visits) {
         const day = differenceInDays(visitDate, c.startDate);
         if      (day >= 0  && day < 7)  weekSessions[0]++;
@@ -214,32 +213,31 @@ export const handler = async (event) => {
 
       const totalSessions       = weekSessions.reduce((s, w) => s + w, 0);
       const currentWeekSessions = weekSessions[c.week - 1];
-      const isAtRisk            = currentWeekSessions === 0;
+      const client              = clientMap[c.clientId] || { id: c.clientId, name: `Client ${c.clientId}`, email: '', phone: '' };
 
       return {
         id:                 c.clientId,
-        name:               c.name,
-        email:              c.email,
-        phone:              c.phone,
+        name:               client.name,
+        email:              client.email,
+        phone:              client.phone,
         product:            c.product,
         shortProduct:       c.shortProduct,
         startDate:          format(c.startDate, 'yyyy-MM-dd'),
         daysSinceStart:     c.daysSinceStart,
         week:               c.week,
-        weekSessions,       // [w1, w2, w3, w4]
+        weekSessions,
         totalSessions,
         currentWeekSessions,
-        isAtRisk,
+        isAtRisk:           currentWeekSessions === 0,
       };
     });
 
-    // ── Step 4: group into kanban columns ─────────────────────────────────
     const byWeek = (w) => enriched.filter((c) => c.week === w).sort((a, b) => a.name.localeCompare(b.name));
-
     const pipelineReds = enriched
       .filter((c) => c.isAtRisk)
-      // Sort: furthest into their program first (most urgent)
       .sort((a, b) => b.daysSinceStart - a.daysSinceStart);
+
+    console.log(`[mb-onboarding] Done. ${enriched.length} clients, ${pipelineReds.length} at risk`);
 
     return ok({
       week1:         byWeek(1),
@@ -258,7 +256,7 @@ export const handler = async (event) => {
       },
     });
   } catch (e) {
-    console.error('mb-onboarding:', e);
+    console.error('[mb-onboarding] Failed:', e.message);
     return err(e.message);
   }
 };

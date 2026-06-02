@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { format, isToday } from 'date-fns';
 import { RefreshCw, Activity, DollarSign, Users2 } from 'lucide-react';
 import StatsGrid          from './StatsGrid.jsx';
@@ -11,20 +11,49 @@ import RevenueCards       from './RevenueCards.jsx';
 import PaymentIssuesTable from './PaymentIssuesTable.jsx';
 import DeclinedList       from './DeclinedList.jsx';
 import OnboardingTab      from './OnboardingTab.jsx';
+import { useOnboardingRollover } from '../utils/useOnboardingRollover.js';
 
 const TABS = [
-  { key: 'operations', label: 'Operations', Icon: Activity },
+  { key: 'operations', label: 'Operations', Icon: Activity  },
   { key: 'finances',   label: 'Finances',   Icon: DollarSign },
-  { key: 'onboarding', label: 'Onboarding', Icon: Users2 },
+  { key: 'onboarding', label: 'Onboarding', Icon: Users2    },
 ];
+
+// Short-program products: removed from pipeline on no-rollover
+const SHORT_PRODUCTS = new Set(['3-Session', '14-Day']);
 
 export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh, contactLog }) {
   const [tab, setTab] = useState('operations');
-  const anyLoading = Object.values(loading).some(Boolean);
+  const anyLoading    = Object.values(loading).some(Boolean);
 
-  // Build set of active onboarding client IDs so we can filter them from
-  // the Operations reds / fringe lists (they're tracked separately on the Onboarding tab)
-  const onboardingIds = new Set(data.onboarding?.onboardingIds || []);
+  const { decisions, getDecision, setDecision } = useOnboardingRollover();
+
+  // All onboarding clients (from each week column)
+  const allOnboardingClients = useMemo(() => [
+    ...(data.onboarding?.week1 || []),
+    ...(data.onboarding?.week2 || []),
+    ...(data.onboarding?.week3 || []),
+    ...(data.onboarding?.week4 || []),
+  ], [data.onboarding]);
+
+  // IDs of currently active onboarding clients — excludes any short-product
+  // clients who have explicitly said no-rollover (they're done with onboarding)
+  const onboardingIds = useMemo(() => new Set(
+    allOnboardingClients
+      .filter((c) => {
+        if (!SHORT_PRODUCTS.has(c.shortProduct)) return true;
+        return decisions[c.id]?.decision !== 'no-rollover';
+      })
+      .map((c) => c.id)
+  ), [allOnboardingClients, decisions]);
+
+  const atRiskCount = useMemo(() => {
+    const reds = data.onboarding?.pipelineReds || [];
+    return reds.filter((c) => {
+      if (!SHORT_PRODUCTS.has(c.shortProduct)) return true;
+      return decisions[c.id]?.decision !== 'no-rollover';
+    }).length;
+  }, [data.onboarding, decisions]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -69,10 +98,10 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               >
                 <Icon className="h-4 w-4" />
                 {label}
-                {/* Onboarding at-risk badge */}
-                {key === 'onboarding' && (data.onboarding?.summary?.atRisk ?? 0) > 0 && (
+                {/* Red badge for at-risk onboarding clients */}
+                {key === 'onboarding' && atRiskCount > 0 && (
                   <span className="rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-400 border border-red-500/30">
-                    {data.onboarding.summary.atRisk}
+                    {atRiskCount}
                   </span>
                 )}
               </button>
@@ -92,9 +121,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               clientAnalytics={data.clientAnalytics}
               loading={loading}
             />
-
             <AttendanceChart />
-
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <NoShowsList
                 data={data.clientAnalytics}
@@ -107,7 +134,6 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
                 error={errors.clientAnalytics}
               />
             </div>
-
             <RedsList
               data={data.clientAnalytics}
               loading={loading.clientAnalytics}
@@ -115,7 +141,6 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               contactLog={contactLog}
               onboardingIds={onboardingIds}
             />
-
             <FringeClientsTable
               contactLog={contactLog}
               onboardingIds={onboardingIds}
@@ -131,13 +156,11 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               loading={loading.revenue}
               error={errors.revenue}
             />
-
             <DeclinedList
               data={data.clientAnalytics}
               loading={loading.clientAnalytics}
               error={errors.clientAnalytics}
             />
-
             <PaymentIssuesTable
               data={data.payments}
               loading={loading.payments}
@@ -153,6 +176,9 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             loading={loading.onboarding}
             error={errors.onboarding}
             contactLog={contactLog}
+            decisions={decisions}
+            getDecision={getDecision}
+            setDecision={setDecision}
           />
         )}
       </main>
