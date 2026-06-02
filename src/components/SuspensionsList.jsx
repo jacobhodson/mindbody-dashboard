@@ -1,5 +1,5 @@
+import { useEffect } from 'react';
 import { PauseCircle, CheckCircle, Calendar } from 'lucide-react';
-import { format, parseISO, isPast, differenceInDays } from 'date-fns';
 
 function statusColor(status) {
   const s = (status || '').toLowerCase();
@@ -8,48 +8,69 @@ function statusColor(status) {
   return 'text-gray-400 bg-gray-700/30 border-gray-700/50';
 }
 
-function parseEndDate(info) {
-  // Mindbody may use ResumeDate or EndDate depending on the endpoint version
+/**
+ * Try every field name variant that Mindbody might use for the resume/end date.
+ * Returns a formatted string, or null if no date is found.
+ */
+function resumeDateLabel(info) {
   if (!info) return null;
-  const raw = info.ResumeDate || info.EndDate || info.SuspensionEnd || null;
+
+  // Try every possible field name MB might use
+  const raw =
+    info.ResumeDate      ||
+    info.resumeDate      ||
+    info.EndDate         ||
+    info.endDate         ||
+    info.SuspensionEnd   ||
+    info.suspensionEnd   ||
+    info.ReturnDate      ||
+    info.returnDate      ||
+    null;
+
   if (!raw) return null;
-  try { return parseISO(raw); } catch { return null; }
+
+  let d;
+  try { d = new Date(raw); } catch { return null; }
+  if (isNaN(d.getTime())) return null;
+
+  const now  = new Date();
+  const days = Math.round((d - now) / 86400000);
+
+  if (days < -1)   return `Ended ${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  if (days < 0)    return 'Ended yesterday';
+  if (days === 0)  return 'Resumes today';
+  if (days === 1)  return 'Resumes tomorrow';
+  if (days < 60)   return `Resumes ${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} (${days}d)`;
+  return `Resumes ${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 }
 
-function parseStartDate(info) {
+function startDateLabel(info) {
   if (!info) return null;
-  const raw = info.SuspendedDate || info.StartDate || info.BookedDate || null;
+  const raw =
+    info.SuspendedDate ||
+    info.suspendedDate ||
+    info.StartDate     ||
+    info.startDate     ||
+    info.BookedDate    ||
+    info.bookedDate    ||
+    null;
   if (!raw) return null;
-  try { return parseISO(raw); } catch { return null; }
-}
-
-function suspensionMeta(client) {
-  const info     = client.suspensionInfo;
-  const endDate  = parseEndDate(info);
-  const startDate = parseStartDate(info);
-  const reason   = info?.Reason || (info?.ReasonId ? `Reason #${info.ReasonId}` : null);
-
-  let endLabel = null;
-  if (endDate) {
-    if (isPast(endDate)) {
-      endLabel = `Ended ${format(endDate, 'd MMM yyyy')}`;
-    } else {
-      const days = differenceInDays(endDate, new Date());
-      endLabel = days === 0
-        ? 'Resumes today'
-        : days === 1
-          ? 'Resumes tomorrow'
-          : `Resumes ${format(endDate, 'd MMM yyyy')} (${days}d)`;
-    }
-  }
-
-  const startLabel = startDate ? `From ${format(startDate, 'd MMM')}` : null;
-
-  return { reason, startLabel, endLabel };
+  let d;
+  try { d = new Date(raw); } catch { return null; }
+  if (isNaN(d.getTime())) return null;
+  return `From ${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`;
 }
 
 export default function SuspensionsList({ data, loading, error }) {
   const clients = data?.suspensions || [];
+
+  // Log to browser DevTools so we can inspect actual SuspensionInfo fields
+  useEffect(() => {
+    if (clients.length > 0) {
+      console.log('[SuspensionsList] suspensionInfo sample:', clients[0]?.suspensionInfo);
+      console.log('[SuspensionsList] all suspension clients:', clients);
+    }
+  }, [clients]);
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900 flex flex-col">
@@ -64,7 +85,7 @@ export default function SuspensionsList({ data, loading, error }) {
             </span>
           )}
         </div>
-        <p className="text-xs text-gray-500">Active suspension or non-active status</p>
+        <p className="text-xs text-gray-500">Hold or non-active status</p>
       </div>
 
       {/* Body */}
@@ -72,7 +93,7 @@ export default function SuspensionsList({ data, loading, error }) {
         {loading && (
           <div className="space-y-2 p-5">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-10 animate-pulse rounded-lg bg-gray-800" />
+              <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-800" />
             ))}
           </div>
         )}
@@ -89,35 +110,42 @@ export default function SuspensionsList({ data, loading, error }) {
         )}
 
         {!loading && !error && clients.map((client) => {
-          const { reason, startLabel, endLabel } = suspensionMeta(client);
+          const info    = client.suspensionInfo;
+          const reason  = info?.Reason || info?.reason || (info?.ReasonId ? `Reason #${info.ReasonId}` : null);
+          const endLbl  = resumeDateLabel(info);
+          const startLbl = startDateLabel(info);
+
           return (
             <div
               key={client.id}
-              className="flex items-center gap-3 px-5 py-3 border-b border-gray-800/50 last:border-0 hover:bg-gray-800/30 transition-colors"
+              className="px-5 py-3 border-b border-gray-800/50 last:border-0 hover:bg-gray-800/30 transition-colors"
             >
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-gray-200 truncate">{client.name || 'Unknown'}</p>
-                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  {reason && (
-                    <span className="text-xs text-gray-600 truncate">{reason}</span>
-                  )}
-                  {startLabel && (
-                    <span className="text-xs text-gray-600">{startLabel}</span>
-                  )}
-                  {endLabel && (
-                    <span className="flex items-center gap-1 text-xs text-orange-400 font-medium">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-200 truncate">{client.name || 'Unknown'}</p>
+
+                  {/* Date row — prominent */}
+                  {endLbl ? (
+                    <p className="flex items-center gap-1.5 mt-1 text-xs font-medium text-orange-400">
                       <Calendar className="h-3 w-3 shrink-0" />
-                      {endLabel}
-                    </span>
+                      {endLbl}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-gray-600">No end date recorded</p>
                   )}
-                  {!reason && !startLabel && !endLabel && (
-                    <span className="text-xs text-gray-600">{client.status}</span>
+
+                  {/* Reason + start date */}
+                  {(reason || startLbl) && (
+                    <p className="mt-0.5 text-xs text-gray-600 truncate">
+                      {[reason, startLbl].filter(Boolean).join(' · ')}
+                    </p>
                   )}
                 </div>
+
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${statusColor(client.status)}`}>
+                  {client.status || 'Suspended'}
+                </span>
               </div>
-              <span className={`ml-2 shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${statusColor(client.status)}`}>
-                {client.status || 'Suspended'}
-              </span>
             </div>
           );
         })}

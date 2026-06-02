@@ -248,6 +248,11 @@ export const handler = async (event) => {
       }))
       .slice(0, 50);
 
+    // Log suspension info structure so we can see what MB actually returns
+    if (suspensions.length > 0) {
+      console.log('[mb-client-analytics] suspension sample:', JSON.stringify(suspensions[0]));
+    }
+
     // Declined clients — payment-declined status, shown under Finances
     const declinedClients = Object.values(clientMap)
       .filter((c) => (c.status || '').toLowerCase() === 'declined')
