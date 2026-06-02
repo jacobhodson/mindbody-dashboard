@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { format } from 'date-fns';
+import { format, isToday } from 'date-fns';
 import { RefreshCw, Activity, DollarSign } from 'lucide-react';
 import StatsGrid          from './StatsGrid.jsx';
 import AttendanceChart    from './AttendanceChart.jsx';
@@ -32,7 +32,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
           <div className="flex items-center gap-4">
             {lastRefresh && (
               <span className="hidden sm:block text-xs text-gray-500">
-                Last update {format(lastRefresh, 'h:mm a')}
+                Data from {isToday(lastRefresh) ? format(lastRefresh, 'h:mm a') : format(lastRefresh, 'EEE d MMM, h:mm a')}
               </span>
             )}
             <button
