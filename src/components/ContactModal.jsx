@@ -2,23 +2,29 @@ import { useState } from 'react';
 import { X, Mail, Phone, CheckCircle, Loader2 } from 'lucide-react';
 
 export default function ContactModal({ client, onClose, onContacted }) {
-  const [note, setNote] = useState('');
-  const [status, setStatus] = useState('idle'); // idle | loading | done | error
+  const [note, setNote]       = useState('');
+  const [status, setStatus]   = useState('idle'); // idle | loading | done | failed | error
+  const [resultMsg, setResultMsg] = useState('');
 
   async function handleLog() {
     setStatus('loading');
     try {
-      const res = await fetch('/api/mb-contact-client', {
+      const res  = await fetch('/api/mb-contact-client', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId: client.id, note: note || undefined }),
       });
       const data = await res.json();
-      setStatus('done');
-      setTimeout(() => {
-        onContacted(client.id);
-        onClose();
-      }, 800);
+
+      if (data.logged) {
+        setResultMsg(data.message || 'Saved to Mindbody');
+        setStatus('done');
+        setTimeout(() => { onContacted(client.id); onClose(); }, 1200);
+      } else {
+        // Logged to our server but Mindbody endpoints both failed
+        setResultMsg(data.message || 'Could not save to Mindbody');
+        setStatus('failed');
+      }
     } catch {
       setStatus('error');
     }
@@ -102,10 +108,19 @@ export default function ContactModal({ client, onClose, onContacted }) {
         >
           {status === 'loading' && <Loader2 className="h-4 w-4 animate-spin" />}
           {status === 'done'    && <CheckCircle className="h-4 w-4 text-emerald-400" />}
-          {status === 'done' ? 'Logged!' : 'Log contact in Mindbody'}
+          {status === 'loading' ? 'Saving…' : status === 'done' ? 'Saved!' : 'Log contact in Mindbody'}
         </button>
+
+        {status === 'done' && resultMsg && (
+          <p className="mt-2 text-xs text-emerald-400 text-center">✓ {resultMsg}</p>
+        )}
+        {status === 'failed' && (
+          <p className="mt-2 text-xs text-amber-400 text-center">
+            Mindbody didn't accept the log — {resultMsg}
+          </p>
+        )}
         {status === 'error' && (
-          <p className="mt-2 text-xs text-red-400 text-center">Failed to log — check Mindbody connection.</p>
+          <p className="mt-2 text-xs text-red-400 text-center">Network error — check connection.</p>
         )}
       </div>
     </div>
