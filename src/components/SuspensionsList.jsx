@@ -8,51 +8,29 @@ function statusColor(status) {
   return 'text-gray-400 bg-gray-700/30 border-gray-700/50';
 }
 
-/**
- * Try every field name variant that Mindbody might use for the resume/end date.
- * Returns a formatted string, or null if no date is found.
- */
-function resumeDateLabel(info) {
-  if (!info) return null;
-
-  // Try every possible field name MB might use
-  const raw =
-    info.ResumeDate      ||
-    info.resumeDate      ||
-    info.EndDate         ||
-    info.endDate         ||
-    info.SuspensionEnd   ||
-    info.suspensionEnd   ||
-    info.ReturnDate      ||
-    info.returnDate      ||
-    null;
-
-  if (!raw) return null;
-
+function resumeLabel(isoDate) {
+  if (!isoDate) return null;
   let d;
-  try { d = new Date(raw); } catch { return null; }
+  try { d = new Date(isoDate); } catch { return null; }
   if (isNaN(d.getTime())) return null;
 
   const now  = new Date();
   const days = Math.round((d - now) / 86400000);
 
-  if (days < -1)   return `Ended ${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-  if (days < 0)    return 'Ended yesterday';
-  if (days === 0)  return 'Resumes today';
-  if (days === 1)  return 'Resumes tomorrow';
-  if (days < 60)   return `Resumes ${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} (${days}d)`;
+  if (days < -1)  return `Ended ${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  if (days < 0)   return 'Ended yesterday';
+  if (days === 0) return 'Resumes today';
+  if (days === 1) return 'Resumes tomorrow';
+  if (days < 60)  return `Resumes ${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} · ${days}d`;
   return `Resumes ${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 }
 
 function startDateLabel(info) {
   if (!info) return null;
   const raw =
-    info.SuspendedDate ||
-    info.suspendedDate ||
-    info.StartDate     ||
-    info.startDate     ||
-    info.BookedDate    ||
-    info.bookedDate    ||
+    info.SuspendedDate || info.suspendedDate ||
+    info.StartDate     || info.startDate     ||
+    info.BookedDate    || info.bookedDate    ||
     null;
   if (!raw) return null;
   let d;
@@ -64,11 +42,14 @@ function startDateLabel(info) {
 export default function SuspensionsList({ data, loading, error }) {
   const clients = data?.suspensions || [];
 
-  // Log to browser DevTools so we can inspect actual SuspensionInfo fields
+  // DevTools diagnostic — helps identify what Mindbody actually returns
   useEffect(() => {
     if (clients.length > 0) {
-      console.log('[SuspensionsList] suspensionInfo sample:', clients[0]?.suspensionInfo);
-      console.log('[SuspensionsList] all suspension clients:', clients);
+      console.log('[SuspensionsList] sample:', {
+        resumeDate:     clients[0]?.resumeDate,
+        suspensionInfo: clients[0]?.suspensionInfo,
+        status:         clients[0]?.status,
+      });
     }
   }, [clients]);
 
@@ -110,10 +91,10 @@ export default function SuspensionsList({ data, loading, error }) {
         )}
 
         {!loading && !error && clients.map((client) => {
-          const info    = client.suspensionInfo;
-          const reason  = info?.Reason || info?.reason || (info?.ReasonId ? `Reason #${info.ReasonId}` : null);
-          const endLbl  = resumeDateLabel(info);
-          const startLbl = startDateLabel(info);
+          const lbl      = resumeLabel(client.resumeDate);
+          const startLbl = startDateLabel(client.suspensionInfo);
+          const reason   = client.suspensionInfo?.Reason || client.suspensionInfo?.reason ||
+                           (client.suspensionInfo?.ReasonId ? `Reason #${client.suspensionInfo.ReasonId}` : null);
 
           return (
             <div
@@ -124,17 +105,17 @@ export default function SuspensionsList({ data, loading, error }) {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-gray-200 truncate">{client.name || 'Unknown'}</p>
 
-                  {/* Date row — prominent */}
-                  {endLbl ? (
+                  {/* Resume date — prominent orange line */}
+                  {lbl ? (
                     <p className="flex items-center gap-1.5 mt-1 text-xs font-medium text-orange-400">
                       <Calendar className="h-3 w-3 shrink-0" />
-                      {endLbl}
+                      {lbl}
                     </p>
                   ) : (
-                    <p className="mt-1 text-xs text-gray-600">No end date recorded</p>
+                    <p className="mt-1 text-xs text-gray-700">No end date set</p>
                   )}
 
-                  {/* Reason + start date */}
+                  {/* Reason + start date secondary row */}
                   {(reason || startLbl) && (
                     <p className="mt-0.5 text-xs text-gray-600 truncate">
                       {[reason, startLbl].filter(Boolean).join(' · ')}

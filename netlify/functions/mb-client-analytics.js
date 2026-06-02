@@ -50,6 +50,35 @@ async function getVisits(token, classId) {
   }
 }
 
+// Fetch active contracts for a client and return the soonest future resume date
+async function getContractResumeDate(token, clientId) {
+  try {
+    const data = await mbGet('/client/clientcontracts', token, { clientId, Limit: 20 });
+    const contracts = data.ClientContracts || data.Contracts || [];
+    let earliest = null;
+    for (const c of contracts) {
+      // Try all field name variants MB might use
+      const raw =
+        c.ResumeDate    || c.resumeDate    ||
+        c.SuspendedUntil|| c.suspendedUntil||
+        c.HoldEndDate   || c.holdEndDate   ||
+        c.EndSuspension || c.endSuspension ||
+        null;
+      if (!raw) continue;
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) continue;
+      if (!earliest || d < earliest) earliest = d;
+    }
+    // Log the full contract array once so we can see the actual field names
+    if (contracts.length > 0) {
+      console.log(`[mb-analytics] contract sample for ${clientId}:`, JSON.stringify(contracts[0]));
+    }
+    return earliest;
+  } catch {
+    return null;
+  }
+}
+
 async function getAllClients(token) {
   const map = {};
   let offset = 0;
@@ -230,7 +259,7 @@ export const handler = async (event) => {
 
     // Suspensions — only include actual holds/suspensions
     // Excludes: Active, Terminated, Expired, Non Member, Declined (Declined goes to Finances)
-    const suspensions = Object.values(clientMap)
+    const rawSuspensions = Object.values(clientMap)
       .filter((c) => {
         const statusLower = (c.status || '').toLowerCase();
         if (EXCLUDED_SUSPENSION_STATUSES.has(statusLower)) return false;
@@ -238,20 +267,44 @@ export const handler = async (event) => {
         if (c.status && c.status !== 'Active') return true;
         return false;
       })
-      .map((c) => ({
+      .slice(0, 50);
+
+    // Log suspension info structure so we can see what MB actually returns
+    if (rawSuspensions.length > 0) {
+      console.log('[mb-analytics] suspensionInfo sample:', JSON.stringify(rawSuspensions[0].suspensionInfo));
+    }
+
+    // Fetch resume dates from client contracts (suspension dates live on contracts, not client profiles)
+    const contractResumes = await Promise.allSettled(
+      rawSuspensions.map((c) => getContractResumeDate(token, c.id))
+    );
+
+    const suspensions = rawSuspensions.map((c, i) => {
+      const contractResume = contractResumes[i].status === 'fulfilled' ? contractResumes[i].value : null;
+
+      // Also check the SuspensionInfo on the client object for dates
+      const info = c.suspensionInfo || {};
+      const infoResume =
+        info.ResumeDate    || info.resumeDate    ||
+        info.EndDate       || info.endDate       ||
+        info.SuspensionEnd || info.suspensionEnd ||
+        null;
+
+      // Prefer the contract resume date; fall back to client-level SuspensionInfo date
+      const resumeDate = contractResume
+        ? contractResume.toISOString()
+        : infoResume || null;
+
+      return {
         id:             c.id,
         name:           c.name,
         email:          c.email,
         phone:          c.phone,
         status:         c.status,
         suspensionInfo: c.suspensionInfo,
-      }))
-      .slice(0, 50);
-
-    // Log suspension info structure so we can see what MB actually returns
-    if (suspensions.length > 0) {
-      console.log('[mb-client-analytics] suspension sample:', JSON.stringify(suspensions[0]));
-    }
+        resumeDate,     // ISO string or null
+      };
+    });
 
     // Declined clients — payment-declined status, shown under Finances
     const declinedClients = Object.values(clientMap)
