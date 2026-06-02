@@ -1,7 +1,16 @@
 import { useState } from 'react';
 import { AlertTriangle, CheckCircle } from 'lucide-react';
-import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import { format, parseISO, formatDistanceToNow, differenceInDays } from 'date-fns';
 import ContactModal from './ContactModal.jsx';
+
+function lastSeenText(dateStr) {
+  if (!dateStr) return null;
+  const days = differenceInDays(new Date(), parseISO(dateStr));
+  if (days === 0) return 'Last seen today';
+  if (days === 1) return 'Last seen yesterday';
+  if (days < 14) return `Last seen ${days}d ago`;
+  return `Last seen ${format(parseISO(dateStr), 'd MMM')}`;
+}
 
 export default function OnboardingReds({ clients = [], contactLog }) {
   const [selected, setSelected] = useState(null);
@@ -31,6 +40,7 @@ export default function OnboardingReds({ clients = [], contactLog }) {
           const lastLog      = contactLog?.contacted?.[String(client.id)];
           const startDate    = parseISO(client.startDate);
           const dayText      = `Day ${client.daysSinceStart + 1} of 28`;
+          const lastSeen     = lastSeenText(client.lastSessionDate);
 
           return (
             <div
@@ -56,8 +66,9 @@ export default function OnboardingReds({ clients = [], contactLog }) {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-600 mt-0.5">
+                <p className="text-xs text-gray-600 mt-0.5 truncate">
                   {dayText} · Started {format(startDate, 'd MMM')}
+                  {lastSeen && <span className="ml-2 text-gray-700">{lastSeen}</span>}
                   {(client.email || client.phone) && (
                     <span className="ml-2">{client.email || client.phone}</span>
                   )}

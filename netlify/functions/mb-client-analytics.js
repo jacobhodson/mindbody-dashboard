@@ -120,9 +120,10 @@ export const handler = async (event) => {
     const allClasses = await getClasses(token, startStr, endStr);
 
     // Per-client data structures
-    const weeks     = {};  // id → { w1, w2, w3, w4 }
-    const services  = {};  // id → most-recent service name
-    const noShowMap = {};  // id → no-show count (W1 window)
+    const weeks         = {};  // id → { w1, w2, w3, w4 }
+    const services      = {};  // id → most-recent service name
+    const noShowMap     = {};  // id → no-show count (W1 window)
+    const lastVisitDate = {};  // id → most recent signed-in Date
 
     for (let i = 0; i < allClasses.length; i += BATCH) {
       const batch   = allClasses.slice(i, i + BATCH);
@@ -153,6 +154,11 @@ export const handler = async (event) => {
             // Track the most recent service name (W1 priority)
             if (inW1 && visit.ServiceName) services[id] = visit.ServiceName;
             else if (!services[id] && visit.ServiceName) services[id] = visit.ServiceName;
+
+            // Track most recent signed-in visit date across all windows
+            if (!lastVisitDate[id] || classDate > lastVisitDate[id]) {
+              lastVisitDate[id] = classDate;
+            }
           }
 
           // No-show: booked but didn't sign in (W1 window)
@@ -173,18 +179,34 @@ export const handler = async (event) => {
       const t   = trend(w.w1, w.w2, w.w3, w.w4);
       const is2x        = svc.toLowerCase().includes('2x');
       const isFullyUtil = is2x && (extra.sessionsThisWeek ?? w.w1) >= 2;
-      return { ...c, service: svc, trend: t, is2xMember: is2x, isFullyUtilising: isFullyUtil, ...extra };
+      const lastDate    = lastVisitDate[id] ? format(lastVisitDate[id], 'yyyy-MM-dd') : null;
+      return { ...c, service: svc, trend: t, is2xMember: is2x, isFullyUtilising: isFullyUtil, lastSessionDate: lastDate, ...extra };
     }
 
-    // Red's List: visited W2–W4 but NOT W1
+    // Red's List: visited W2–W4 but NOT W1, active contract only, not suspended
     const visitedW1   = new Set(Object.keys(weeks).filter((id) => weeks[id].w1 > 0));
     const visitedPrev = new Set(
       Object.keys(weeks).filter((id) => weeks[id].w2 > 0 || weeks[id].w3 > 0 || weeks[id].w4 > 0)
     );
     const reds = [...visitedPrev]
       .filter((id) => !visitedW1.has(id))
+      .filter((id) => {
+        const c = clientMap[id];
+        if (!c) return false;
+        // Active contract members only
+        if ((c.status || '').toLowerCase() !== 'active') return false;
+        // Exclude anyone on a suspension / hold
+        if (c.suspensionInfo && Object.keys(c.suspensionInfo).length > 0) return false;
+        return true;
+      })
       .map((id) => enrichClient(id, { sessionsThisWeek: 0 }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      // Sort: most recently seen first → longest absent last
+      .sort((a, b) => {
+        if (!a.lastSessionDate && !b.lastSessionDate) return 0;
+        if (!a.lastSessionDate) return 1;
+        if (!b.lastSessionDate) return -1;
+        return b.lastSessionDate.localeCompare(a.lastSessionDate);
+      });
 
     // Fringe (visited W1): atRisk = 1–2, engaged = 3+
     const byCount = (min, max) =>

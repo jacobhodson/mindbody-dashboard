@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { TrendingDown, Search, CheckCircle, ArrowUp, ArrowDown, ArrowRight, Sparkles } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, parseISO, format, differenceInDays } from 'date-fns';
 import ContactModal from './ContactModal.jsx';
 
 function TrendBadge({ trend }) {
@@ -106,7 +106,16 @@ export default function RedsList({ data, loading, error, contactLog, onboardingI
 
         {!loading && !error && filtered.map((client) => {
           const wasContacted = isContacted(client.id);
-          const lastLog = contactLog?.contacted?.[String(client.id)];
+          const lastLog      = contactLog?.contacted?.[String(client.id)];
+          const lastSeen     = client.lastSessionDate
+            ? (() => {
+                const days = differenceInDays(new Date(), parseISO(client.lastSessionDate));
+                if (days === 0) return 'Last seen today';
+                if (days === 1) return 'Last seen yesterday';
+                if (days < 14) return `Last seen ${days}d ago`;
+                return `Last seen ${format(parseISO(client.lastSessionDate), 'd MMM')}`;
+              })()
+            : null;
 
           return (
             <div
@@ -128,6 +137,9 @@ export default function RedsList({ data, loading, error, contactLog, onboardingI
                   {client.email || client.phone || 'No contact details'}
                   {client.service && (
                     <span className="ml-2 text-gray-600">{client.service}</span>
+                  )}
+                  {lastSeen && (
+                    <span className="ml-2 text-gray-600">{lastSeen}</span>
                   )}
                 </p>
               </div>

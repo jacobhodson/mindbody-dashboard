@@ -215,6 +215,11 @@ export const handler = async (event) => {
       const currentWeekSessions = weekSessions[c.week - 1];
       const client              = clientMap[c.clientId] || { id: c.clientId, name: `Client ${c.clientId}`, email: '', phone: '' };
 
+      // Most recent signed-in visit across the entire onboarding window
+      const lastVisit = visits.length > 0
+        ? visits.reduce((max, d) => (d > max ? d : max))
+        : null;
+
       return {
         id:                 c.clientId,
         name:               client.name,
@@ -229,13 +234,20 @@ export const handler = async (event) => {
         totalSessions,
         currentWeekSessions,
         isAtRisk:           currentWeekSessions === 0,
+        lastSessionDate:    lastVisit ? format(lastVisit, 'yyyy-MM-dd') : null,
       };
     });
 
     const byWeek = (w) => enriched.filter((c) => c.week === w).sort((a, b) => a.name.localeCompare(b.name));
     const pipelineReds = enriched
       .filter((c) => c.isAtRisk)
-      .sort((a, b) => b.daysSinceStart - a.daysSinceStart);
+      // Sort: most recently active first, then by how far through their program
+      .sort((a, b) => {
+        if (!a.lastSessionDate && !b.lastSessionDate) return b.daysSinceStart - a.daysSinceStart;
+        if (!a.lastSessionDate) return 1;
+        if (!b.lastSessionDate) return -1;
+        return b.lastSessionDate.localeCompare(a.lastSessionDate);
+      });
 
     console.log(`[mb-onboarding] Done. ${enriched.length} clients, ${pipelineReds.length} at risk`);
 

@@ -103,11 +103,6 @@ export default function OnboardingTab({
         <StatPill label="Week 4"      value={summary.week4Count ?? 0} color="text-emerald-400" />
       </div>
 
-      {/* Pipeline reds */}
-      {pipelineReds.length > 0 && (
-        <OnboardingReds clients={pipelineReds} contactLog={contactLog} />
-      )}
-
       {/* Kanban board */}
       {isEmpty ? (
         <div className="rounded-xl border border-gray-800 bg-gray-900 py-20 text-center">
@@ -127,6 +122,11 @@ export default function OnboardingTab({
           getDecision={getDecision}
           setDecision={setDecision}
         />
+      )}
+
+      {/* Pipeline reds — below the board so you can see the full kanban first */}
+      {pipelineReds.length > 0 && (
+        <OnboardingReds clients={pipelineReds} contactLog={contactLog} />
       )}
     </div>
   );
