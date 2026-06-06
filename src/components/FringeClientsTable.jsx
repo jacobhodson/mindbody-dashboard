@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Users, ArrowUp, ArrowDown, ArrowRight, Sparkles, RefreshCw, CheckCircle } from 'lucide-react';
+import { Users, ArrowUp, ArrowDown, ArrowRight, Sparkles, RefreshCw, CheckCircle, ChevronDown } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import ContactModal from './ContactModal.jsx';
+import ContactModal          from './ContactModal.jsx';
+import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
 
 const PERIODS = [
   { key: '7days',        label: 'Last 7 Days' },
@@ -10,20 +11,22 @@ const PERIODS = [
 
 const SEGMENTS = [
   {
-    key: 'atRisk',
-    label: 'At-Risk',
-    desc: '1–2 sessions',
-    dot: 'bg-orange-400',
-    badge: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+    key:    'atRisk',
+    label:  'Moderate',
+    desc:   '1–2 sessions',
+    dot:    'bg-orange-400',
+    badge:  'bg-orange-500/10 text-orange-400 border-orange-500/20',
     active: 'border-orange-400 text-orange-400',
+    status: 'moderate',
   },
   {
-    key: 'engaged',
-    label: 'Engaged',
-    desc: '3+ sessions',
-    dot: 'bg-emerald-400',
-    badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    key:    'engaged',
+    label:  'Engaged',
+    desc:   '3+ sessions',
+    dot:    'bg-emerald-400',
+    badge:  'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
     active: 'border-emerald-400 text-emerald-400',
+    status: 'engaged',
   },
 ];
 
@@ -53,8 +56,9 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
-  const [activeTab, setActiveTab] = useState('atRisk');
-  const [selected, setSelected]   = useState(null);
+  const [activeTab, setActiveTab]   = useState('atRisk');
+  const [selected, setSelected]     = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
   const isContacted   = contactLog?.isContacted  ?? (() => false);
   const logContact    = contactLog?.logContact    ?? null;
@@ -73,11 +77,15 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
     return () => { cancelled = true; };
   }, [period]);
 
-  const segments      = data?.fringeSegments || {};
-  const currentSeg    = SEGMENTS.find((s) => s.key === activeTab);
+  const segments       = data?.fringeSegments || {};
+  const currentSeg     = SEGMENTS.find((s) => s.key === activeTab);
   // Exclude onboarding clients — they are tracked on the Onboarding tab
   const currentClients = (segments[activeTab]?.clients || []).filter((c) => !onboardingIds.has(c.id));
   const currentCount   = currentClients.length;
+
+  const toggleExpand = (id) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900 flex flex-col">
@@ -166,56 +174,70 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
           const fullyUtil    = client.isFullyUtilising;
           const wasContacted = isContacted(client.id);
           const lastLog      = contactLog?.contacted?.[String(client.id)];
+          const isExpanded   = expandedId === client.id;
 
           return (
             <div
               key={client.id}
-              className={`flex items-center gap-3 px-5 py-2.5 border-b border-gray-800/50 last:border-0 transition-colors ${
-                fullyUtil
-                  ? 'border-l-2 border-l-emerald-500 bg-emerald-950/20 hover:bg-emerald-950/30'
-                  : 'hover:bg-gray-800/30'
-              } ${wasContacted ? 'opacity-60' : ''}`}
+              className={`border-b border-gray-800/50 last:border-0 ${
+                fullyUtil ? 'border-l-2 border-l-emerald-500' : ''
+              }`}
             >
-              {/* Name + trend */}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className={`text-sm truncate ${fullyUtil ? 'text-emerald-200 font-medium' : 'text-gray-200'}`}>
-                    {client.name || 'Unknown'}
-                  </p>
-                  {fullyUtil && (
-                    <span className="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
-                      2× ✓
-                    </span>
-                  )}
-                  <TrendIndicator trend={client.trend} />
-                  {wasContacted && (
-                    <span className="shrink-0 flex items-center gap-1 text-xs text-emerald-500">
-                      <CheckCircle className="h-3 w-3" />
-                      {lastLog ? formatDistanceToNow(new Date(lastLog.at), { addSuffix: true }) : 'Contacted'}
-                    </span>
-                  )}
+              {/* Main row — click to expand */}
+              <div
+                className={`flex items-center gap-3 px-5 py-2.5 transition-colors cursor-pointer select-none ${
+                  fullyUtil
+                    ? 'bg-emerald-950/20 hover:bg-emerald-950/30'
+                    : 'hover:bg-gray-800/30'
+                } ${wasContacted ? 'opacity-60' : ''}`}
+                onClick={() => toggleExpand(client.id)}
+              >
+                {/* Name + trend */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className={`text-sm truncate ${fullyUtil ? 'text-emerald-200 font-medium' : 'text-gray-200'}`}>
+                      {client.name || 'Unknown'}
+                    </p>
+                    {fullyUtil && (
+                      <span className="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                        2× ✓
+                      </span>
+                    )}
+                    <TrendIndicator trend={client.trend} />
+                    {wasContacted && (
+                      <span className="shrink-0 flex items-center gap-1 text-xs text-emerald-500">
+                        <CheckCircle className="h-3 w-3" />
+                        {lastLog ? formatDistanceToNow(new Date(lastLog.at), { addSuffix: true }) : 'Contacted'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600 truncate">{client.email || client.phone || '–'}</p>
                 </div>
-                <p className="text-xs text-gray-600 truncate">{client.email || client.phone || '–'}</p>
+
+                {/* Session count badge */}
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums ${
+                  fullyUtil ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : currentSeg?.badge
+                }`}>
+                  {client.sessionsThisWeek} {client.sessionsThisWeek === 1 ? 'session' : 'sessions'}
+                </span>
+
+                {/* Contact button */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSelected(client); }}
+                  className={`shrink-0 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+                    wasContacted
+                      ? 'border-gray-700 bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
+                      : 'border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
+                  }`}
+                >
+                  {wasContacted ? 'View log' : 'Contact'}
+                </button>
+
+                <ChevronDown className={`shrink-0 h-3.5 w-3.5 text-gray-600 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
               </div>
 
-              {/* Session count badge */}
-              <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums ${
-                fullyUtil ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : currentSeg?.badge
-              }`}>
-                {client.sessionsThisWeek} {client.sessionsThisWeek === 1 ? 'session' : 'sessions'}
-              </span>
-
-              {/* Contact button */}
-              <button
-                onClick={() => setSelected(client)}
-                className={`shrink-0 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
-                  wasContacted
-                    ? 'border-gray-700 bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
-                    : 'border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
-                {wasContacted ? 'View log' : 'Contact'}
-              </button>
+              {/* Expandable attendance panel */}
+              {isExpanded && <WeeklyAttendancePanel client={client} status={currentSeg?.status || 'moderate'} />}
             </div>
           );
         })}

@@ -208,8 +208,9 @@ export const handler = async (event) => {
       const t   = trend(w.w1, w.w2, w.w3, w.w4);
       const is2x        = svc.toLowerCase().includes('2x');
       const isFullyUtil = is2x && (extra.sessionsThisWeek ?? w.w1) >= 2;
-      const lastDate    = lastVisitDate[id] ? format(lastVisitDate[id], 'yyyy-MM-dd') : null;
-      return { ...c, service: svc, trend: t, is2xMember: is2x, isFullyUtilising: isFullyUtil, lastSessionDate: lastDate, ...extra };
+      const lastDate          = lastVisitDate[id] ? format(lastVisitDate[id], 'yyyy-MM-dd') : null;
+      const weeklyAttendance  = { w1: w.w1, w2: w.w2, w3: w.w3, w4: w.w4 };
+      return { ...c, service: svc, trend: t, is2xMember: is2x, isFullyUtilising: isFullyUtil, lastSessionDate: lastDate, weeklyAttendance, ...extra };
     }
 
     // Red's List: visited W2–W4 but NOT W1, active contract only, not suspended

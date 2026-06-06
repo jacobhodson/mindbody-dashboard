@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { TrendingDown, Search, CheckCircle, ArrowUp, ArrowDown, ArrowRight, Sparkles } from 'lucide-react';
+import { TrendingDown, Search, CheckCircle, ArrowUp, ArrowDown, ArrowRight, Sparkles, ChevronDown } from 'lucide-react';
 import { formatDistanceToNow, parseISO, format, differenceInDays } from 'date-fns';
-import ContactModal from './ContactModal.jsx';
+import ContactModal          from './ContactModal.jsx';
+import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
 
 function TrendBadge({ trend }) {
   if (!trend) return null;
@@ -28,8 +29,9 @@ function TrendBadge({ trend }) {
 }
 
 export default function RedsList({ data, loading, error, contactLog, onboardingIds = new Set() }) {
-  const [search, setSearch]     = useState('');
-  const [selected, setSelected] = useState(null);
+  const [search, setSearch]       = useState('');
+  const [selected, setSelected]   = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
   // Exclude clients currently in the onboarding pipeline — they're tracked separately
   const clients = (data?.reds || []).filter((c) => !onboardingIds.has(c.id));
@@ -48,8 +50,8 @@ export default function RedsList({ data, loading, error, contactLog, onboardingI
     );
   });
 
-  // Count how many in this list are in the 7-day window
   const contactedCount = clients.filter((c) => isContacted(c.id)).length;
+  const toggleExpand   = (id) => setExpandedId((prev) => (prev === id ? null : id));
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900 flex flex-col">
@@ -107,6 +109,7 @@ export default function RedsList({ data, loading, error, contactLog, onboardingI
         {!loading && !error && filtered.map((client) => {
           const wasContacted = isContacted(client.id);
           const lastLog      = contactLog?.contacted?.[String(client.id)];
+          const isExpanded   = expandedId === client.id;
           const lastSeen     = client.lastSessionDate
             ? (() => {
                 const days = differenceInDays(new Date(), parseISO(client.lastSessionDate));
@@ -118,41 +121,47 @@ export default function RedsList({ data, loading, error, contactLog, onboardingI
             : null;
 
           return (
-            <div
-              key={client.id}
-              className={`flex items-center justify-between px-5 py-3 border-b border-gray-800/60 last:border-0 hover:bg-gray-800/40 transition-colors ${wasContacted ? 'opacity-60' : ''}`}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-medium text-gray-200 truncate">{client.name || 'Unknown'}</p>
-                  <TrendBadge trend={client.trend} />
-                  {wasContacted && (
-                    <span className="shrink-0 flex items-center gap-1 text-xs text-emerald-500">
-                      <CheckCircle className="h-3 w-3" />
-                      {lastLog ? formatDistanceToNow(new Date(lastLog.at), { addSuffix: true }) : 'Contacted'}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500 truncate mt-0.5">
-                  {client.email || client.phone || 'No contact details'}
-                  {client.service && (
-                    <span className="ml-2 text-gray-600">{client.service}</span>
-                  )}
-                  {lastSeen && (
-                    <span className="ml-2 text-gray-600">{lastSeen}</span>
-                  )}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelected(client)}
-                className={`ml-4 shrink-0 rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${
-                  wasContacted
-                    ? 'border-gray-700 bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
-                    : 'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20'
-                }`}
+            <div key={client.id} className="border-b border-gray-800/60 last:border-0">
+              {/* Main row — click anywhere to expand */}
+              <div
+                className={`flex items-center justify-between px-5 py-3 hover:bg-gray-800/40 transition-colors cursor-pointer select-none ${wasContacted ? 'opacity-60' : ''}`}
+                onClick={() => toggleExpand(client.id)}
               >
-                {wasContacted ? 'View log' : 'Contact'}
-              </button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-gray-200 truncate">{client.name || 'Unknown'}</p>
+                    <TrendBadge trend={client.trend} />
+                    {wasContacted && (
+                      <span className="shrink-0 flex items-center gap-1 text-xs text-emerald-500">
+                        <CheckCircle className="h-3 w-3" />
+                        {lastLog ? formatDistanceToNow(new Date(lastLog.at), { addSuffix: true }) : 'Contacted'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 truncate mt-0.5">
+                    {client.email || client.phone || 'No contact details'}
+                    {client.service && <span className="ml-2 text-gray-600">{client.service}</span>}
+                    {lastSeen      && <span className="ml-2 text-gray-600">{lastSeen}</span>}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 ml-4 shrink-0">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setSelected(client); }}
+                    className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${
+                      wasContacted
+                        ? 'border-gray-700 bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
+                        : 'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                    }`}
+                  >
+                    {wasContacted ? 'View log' : 'Contact'}
+                  </button>
+                  <ChevronDown className={`h-3.5 w-3.5 text-gray-600 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                </div>
+              </div>
+
+              {/* Expandable attendance panel */}
+              {isExpanded && <WeeklyAttendancePanel client={client} status="red" />}
             </div>
           );
         })}
