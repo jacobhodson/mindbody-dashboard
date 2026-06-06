@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Activity, DollarSign, Users2 } from 'lucide-react';
+import { RefreshCw, Activity, DollarSign, Users2, Dumbbell } from 'lucide-react';
 import StatsGrid          from './StatsGrid.jsx';
 import AttendanceChart    from './AttendanceChart.jsx';
 import NoShowsList        from './NoShowsList.jsx';
@@ -10,13 +10,15 @@ import FringeClientsTable from './FringeClientsTable.jsx';
 import RevenueCards       from './RevenueCards.jsx';
 import PaymentIssuesTable from './PaymentIssuesTable.jsx';
 import DeclinedList       from './DeclinedList.jsx';
-import OnboardingTab      from './OnboardingTab.jsx';
+import OnboardingTab          from './OnboardingTab.jsx';
+import PersonalTrainingTab    from './PersonalTrainingTab.jsx';
 import { useOnboardingRollover } from '../utils/useOnboardingRollover.js';
 
 const TABS = [
-  { key: 'operations', label: 'Operations', Icon: Activity  },
-  { key: 'finances',   label: 'Finances',   Icon: DollarSign },
-  { key: 'onboarding', label: 'Onboarding', Icon: Users2    },
+  { key: 'operations',        label: 'Operations',        Icon: Activity  },
+  { key: 'finances',          label: 'Finances',          Icon: DollarSign },
+  { key: 'onboarding',        label: 'Onboarding',        Icon: Users2    },
+  { key: 'personalTraining',  label: 'Personal Training', Icon: Dumbbell  },
 ];
 
 // Short-program products: removed from pipeline on no-rollover
@@ -179,6 +181,16 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             decisions={decisions}
             getDecision={getDecision}
             setDecision={setDecision}
+          />
+        )}
+
+        {/* ─ Personal Training ─ */}
+        {tab === 'personalTraining' && (
+          <PersonalTrainingTab
+            data={data.pt}
+            loading={loading.pt}
+            error={errors.pt}
+            contactLog={contactLog}
           />
         )}
       </main>
