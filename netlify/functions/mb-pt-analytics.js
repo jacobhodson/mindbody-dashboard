@@ -23,11 +23,13 @@ const CREDIT_BATCH = 10;
 const CLIENT_BATCH = 50;
 
 // ─── Session-type classifier ─────────────────────────────────────────────────
+// SP check must come BEFORE PT — "Semi Private Personal Training" contains
+// "personal train" so would wrongly match pt first.
 function classify(name = '') {
   const s = name.toLowerCase();
-  if (/personal\s*train/.test(s) || /\bpt\b/.test(s) || /\bpt\d/.test(s) || /1[:\s]1/.test(s) || /1on1/.test(s)) return 'pt';
   if (/semi.?private/.test(s) || /\bsp\b/.test(s) || /\bsp\d/.test(s) || /small.?private/.test(s) || /partner.?train/.test(s) || /2:1/.test(s) || /3:1/.test(s)) return 'sp';
-  if (/open.?gym/.test(s) || /open.?train/.test(s) || /gym.?access/.test(s)) return 'gym';
+  if (/personal\s*train/.test(s) || /\bpt\b/.test(s) || /\bpt\d/.test(s) || /1[:\s]1/.test(s) || /1on1/.test(s) || /individual\s*(coach|program)/.test(s)) return 'pt';
+  if (/open.?gym/.test(s) || /open.?train/.test(s) || /gym.?access/.test(s) || s === 'open gym') return 'gym';
   return 'other';
 }
 
@@ -49,15 +51,16 @@ async function fetchSessionTypeMap(token) {
 // ─── Client info map: clientId → { name, email, phone } ──────────────────────
 // Returns { map, _firstRawClient, _firstResponseKeys } for debug
 async function fetchClientMap(token, clientIds) {
-  if (!clientIds.length) return { map: {}, _firstRawClient: null, _firstResponseKeys: [] };
+  if (!clientIds.length) return { map: {}, _firstRawClient: null, _firstResponseKeys: [], _error: null };
   const map = {};
   let _firstRawClient = null;
   let _firstResponseKeys = [];
+  let _error = null;
   for (let i = 0; i < clientIds.length; i += CLIENT_BATCH) {
     const batch = clientIds.slice(i, i + CLIENT_BATCH);
     try {
       const data = await mbGet('/client/clients', token, {
-        ClientIds: batch,   // array → appended as separate ?ClientIds= params
+        ClientIds: batch,
         Limit:     CLIENT_BATCH,
       });
       if (_firstResponseKeys.length === 0) _firstResponseKeys = Object.keys(data);
@@ -72,10 +75,11 @@ async function fetchClientMap(token, clientIds) {
         };
       }
     } catch (e) {
+      _error = e.message;
       console.warn('[mb-pt-analytics] client batch error:', e.message);
     }
   }
-  return { map, _firstRawClient, _firstResponseKeys };
+  return { map, _firstRawClient, _firstResponseKeys, _error };
 }
 
 // ─── Appointment fetcher ──────────────────────────────────────────────────────
@@ -164,7 +168,7 @@ export const handler = async (event) => {
     // ── Fetch client names for all PT/SP clients ──────────────────────────
     const ptspAppts = appts.filter(a => a._type === 'pt' || a._type === 'sp');
     const ptspIds   = [...new Set(ptspAppts.map(a => a._id))];
-    const { map: clientMap, _firstRawClient, _firstResponseKeys } = await fetchClientMap(token, ptspIds);
+    const { map: clientMap, _firstRawClient, _firstResponseKeys, _error: _clientError } = await fetchClientMap(token, ptspIds);
 
     // Back-fill names/email/phone
     for (const a of appts) {
@@ -304,11 +308,12 @@ export const handler = async (event) => {
         counts: { pt: ptAppts.length, sp: spAppts.length, gym: gymAppts.length },
         fetchStart, fetchEnd,
         clientFetch: {
-          queriedIds:        ptspIds.slice(0, 5),   // first 5 IDs we asked for
-          mapSize:           Object.keys(clientMap).length,
-          mapKeySample:      Object.keys(clientMap).slice(0, 5),  // first 5 keys returned
-          responseKeys:      _firstResponseKeys,
-          firstRawClient:    _firstRawClient,        // raw object from API
+          queriedIds:     ptspIds.slice(0, 5),
+          mapSize:        Object.keys(clientMap).length,
+          mapKeySample:   Object.keys(clientMap).slice(0, 5),
+          responseKeys:   _firstResponseKeys,
+          firstRawClient: _firstRawClient,
+          error:          _clientError,
         },
       },
     });
