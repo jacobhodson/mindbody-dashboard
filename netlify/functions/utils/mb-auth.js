@@ -40,7 +40,10 @@ export async function mbGet(path, token, params = {}) {
     }
   }
   const res = await fetch(url.toString(), { headers: authHeaders(token) });
-  if (!res.ok) throw new Error(`MB GET ${path} → ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`MB GET ${path} → ${res.status}: ${body.slice(0, 300)}`);
+  }
   return res.json();
 }
 

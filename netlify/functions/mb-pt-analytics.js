@@ -60,7 +60,7 @@ async function fetchClientMap(token, clientIds) {
     const batch = clientIds.slice(i, i + CLIENT_BATCH);
     try {
       const data = await mbGet('/client/clients', token, {
-        ClientIds: batch,
+        clientIds: batch,   // camelCase — matches Mindbody's client endpoint convention
         Limit:     CLIENT_BATCH,
       });
       if (_firstResponseKeys.length === 0) _firstResponseKeys = Object.keys(data);
