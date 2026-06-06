@@ -54,7 +54,7 @@ async function fetchClientMap(token, clientIds) {
     const batch = clientIds.slice(i, i + CLIENT_BATCH);
     try {
       const data = await mbGet('/client/clients', token, {
-        ClientIds: batch.join(','),
+        ClientIds: batch,   // array → appended as separate ?ClientIds= params
         Limit:     CLIENT_BATCH,
       });
       for (const c of (data.Clients || [])) {
@@ -235,8 +235,10 @@ export const handler = async (event) => {
     const openGym = Object.values(gymMap).filter(c => c.count > 0).sort((a, b) => b.count - a.count);
 
     // ── Unchecked Sessions ────────────────────────────────────────────────
+    // Any past PT/SP appointment still in "Booked" status — session ran but
+    // trainer hasn't signed it off yet (deducts from client's session package)
     const unchecked = ptsp
-      .filter(a => a._date >= w1Start && a._date <= w1End && a.Status === 'Booked')
+      .filter(a => a._date < now && a.Status === 'Booked')
       .map(a => ({
         id:         String(a.Id),
         clientId:   a._id,

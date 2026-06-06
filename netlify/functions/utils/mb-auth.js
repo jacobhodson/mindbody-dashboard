@@ -32,7 +32,12 @@ export function authHeaders(token) {
 export async function mbGet(path, token, params = {}) {
   const url = new URL(`${MB_BASE}${path}`);
   for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+    if (v === undefined || v === null) continue;
+    if (Array.isArray(v)) {
+      for (const item of v) url.searchParams.append(k, String(item));
+    } else {
+      url.searchParams.set(k, String(v));
+    }
   }
   const res = await fetch(url.toString(), { headers: authHeaders(token) });
   if (!res.ok) throw new Error(`MB GET ${path} → ${res.status}`);
