@@ -11,7 +11,7 @@
  *                 (excludes Terminated, Expired, Non Member)
  */
 import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
-import { subDays, format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
+import { subDays, endOfDay, format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 
 const BATCH = 15;
 
@@ -133,9 +133,9 @@ export const handler = async (event) => {
       w1Start = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       w1End   = endOfWeek(subWeeks(now, 1),   { weekStartsOn: 1 });
     } else {
-      // default: rolling last 7 days
+      // default: rolling last 7 days, ending yesterday (today excluded)
       w1Start = subDays(now, 7);
-      w1End   = now;
+      w1End   = endOfDay(subDays(now, 1)); // 23:59:59.999 yesterday
     }
 
     // ── W2–W4 boundaries (7-day buckets going back from w1Start) ───────────
