@@ -55,6 +55,7 @@ function classify(name = '') {
 async function fetchAppointments(token, startDate, endDate) {
   let all = [];
   let offset = 0;
+  let firstCall = true;
   while (true) {
     const data = await mbGet('/appointment/staffappointments', token, {
       StartDate: startDate,
@@ -62,7 +63,19 @@ async function fetchAppointments(token, startDate, endDate) {
       Limit:     200,
       Offset:    offset,
     });
-    const appts = data.Appointments || [];
+    // Log the response shape on the first call so we can diagnose key mismatches
+    if (firstCall) {
+      firstCall = false;
+      const keys = Object.keys(data);
+      console.log('[mb-pt-analytics] /appointment/staffappointments response keys:', keys);
+      // Log first item of whichever array key exists
+      for (const k of keys) {
+        if (Array.isArray(data[k]) && data[k].length > 0) {
+          console.log(`[mb-pt-analytics] data.${k}[0]:`, JSON.stringify(data[k][0]).slice(0, 400));
+        }
+      }
+    }
+    const appts = data.Appointments || data.StaffAppointments || [];
     all = all.concat(appts);
     if (appts.length < 200 || offset >= 1800) break;
     offset += 200;
@@ -252,10 +265,12 @@ export const handler = async (event) => {
 
     // ── Debug logging ──────────────────────────────────────────────────────
     const sampleTypes = [...new Set(raw.slice(0, 30).map(a => a.SessionTypeName || a.ServiceName).filter(Boolean))];
+    const sampleKeys  = raw.length === 0 ? [] : Object.keys(raw[0] || {}).slice(0, 20);
     console.log('[mb-pt-analytics] sample types:', sampleTypes);
     console.log(`[mb-pt-analytics] total=${raw.length} pt=${ptAppts.length} sp=${spAppts.length} gym=${gymAppts.length}`);
+    console.log('[mb-pt-analytics] fetchStart:', fetchStart, 'fetchEnd:', fetchEnd);
 
-    return ok({ stats, ptReds, openGym, unchecked, sessionCredits, _debug: { sampleTypes } });
+    return ok({ stats, ptReds, openGym, unchecked, sessionCredits, _debug: { sampleTypes, totalRaw: raw.length, sampleKeys, fetchStart, fetchEnd } });
 
   } catch (e) {
     console.error('mb-pt-analytics:', e);
