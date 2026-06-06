@@ -47,9 +47,12 @@ async function fetchSessionTypeMap(token) {
 }
 
 // ─── Client info map: clientId → { name, email, phone } ──────────────────────
+// Returns { map, _firstRawClient, _firstResponseKeys } for debug
 async function fetchClientMap(token, clientIds) {
-  if (!clientIds.length) return {};
+  if (!clientIds.length) return { map: {}, _firstRawClient: null, _firstResponseKeys: [] };
   const map = {};
+  let _firstRawClient = null;
+  let _firstResponseKeys = [];
   for (let i = 0; i < clientIds.length; i += CLIENT_BATCH) {
     const batch = clientIds.slice(i, i + CLIENT_BATCH);
     try {
@@ -57,7 +60,10 @@ async function fetchClientMap(token, clientIds) {
         ClientIds: batch,   // array → appended as separate ?ClientIds= params
         Limit:     CLIENT_BATCH,
       });
-      for (const c of (data.Clients || [])) {
+      if (_firstResponseKeys.length === 0) _firstResponseKeys = Object.keys(data);
+      const clients = data.Clients || data.clients || [];
+      if (_firstRawClient === null && clients.length > 0) _firstRawClient = clients[0];
+      for (const c of clients) {
         const id = String(c.UniqueId || c.Id || '');
         if (id) map[id] = {
           name:  `${c.FirstName || ''} ${c.LastName || ''}`.trim() || `Client ${id}`,
@@ -69,7 +75,7 @@ async function fetchClientMap(token, clientIds) {
       console.warn('[mb-pt-analytics] client batch error:', e.message);
     }
   }
-  return map;
+  return { map, _firstRawClient, _firstResponseKeys };
 }
 
 // ─── Appointment fetcher ──────────────────────────────────────────────────────
@@ -158,7 +164,7 @@ export const handler = async (event) => {
     // ── Fetch client names for all PT/SP clients ──────────────────────────
     const ptspAppts = appts.filter(a => a._type === 'pt' || a._type === 'sp');
     const ptspIds   = [...new Set(ptspAppts.map(a => a._id))];
-    const clientMap = await fetchClientMap(token, ptspIds);
+    const { map: clientMap, _firstRawClient, _firstResponseKeys } = await fetchClientMap(token, ptspIds);
 
     // Back-fill names/email/phone
     for (const a of appts) {
@@ -296,6 +302,13 @@ export const handler = async (event) => {
         totalRaw: raw.length,
         counts: { pt: ptAppts.length, sp: spAppts.length, gym: gymAppts.length },
         fetchStart, fetchEnd,
+        clientFetch: {
+          queriedIds:        ptspIds.slice(0, 5),   // first 5 IDs we asked for
+          mapSize:           Object.keys(clientMap).length,
+          mapKeySample:      Object.keys(clientMap).slice(0, 5),  // first 5 keys returned
+          responseKeys:      _firstResponseKeys,
+          firstRawClient:    _firstRawClient,        // raw object from API
+        },
       },
     });
 
