@@ -5,11 +5,12 @@
  *   stats         – PT and SP session counts across 4 time windows
  *   ptReds        – clients who had PT/SP last week but not this week
  *   openGym       – clients with 1+ open-gym sessions this week
- *   unchecked     – past PT/SP sessions still in "Booked" status (not checked off)
+ *   unchecked     – past PT/SP sessions still in "Booked" status
  *   sessionCredits– clients with accumulated unused PT/SP session credits
  *
- * Session types are matched by keywords against SessionTypeName / ServiceName.
- * Requires no extra env vars — uses the same Mindbody token as other functions.
+ * Mindbody appointment objects carry only SessionTypeId (not a name), so we
+ * fetch /site/sessiontypes first to build an id→name lookup for classification.
+ * Client names are fetched in bulk via /client/clients.
  */
 import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
 import {
@@ -17,46 +18,64 @@ import {
   startOfMonth, endOfMonth, endOfDay, subMonths,
 } from 'date-fns';
 
-const SKIP_STATUS = new Set(['NoShow', 'LateCancelled', 'Cancelled']);
+const SKIP_STATUS  = new Set(['NoShow', 'LateCancelled', 'Cancelled']);
 const CREDIT_BATCH = 10;
+const CLIENT_BATCH = 50;
 
 // ─── Session-type classifier ─────────────────────────────────────────────────
-// Returns 'pt' | 'sp' | 'gym' | 'other'
 function classify(name = '') {
   const s = name.toLowerCase();
-  if (
-    /personal\s*train/.test(s) ||
-    /\bpt\b/.test(s)           ||
-    /\bpt\d/.test(s)           ||   // PT1, PT2, PT3
-    /1[:\s]1/.test(s)          ||   // 1:1 or 1 1
-    /1on1/.test(s)
-  ) return 'pt';
-
-  if (
-    /semi.?private/.test(s)   ||
-    /\bsp\b/.test(s)          ||
-    /\bsp\d/.test(s)          ||   // SP1, SP2, SP3
-    /small.?private/.test(s)  ||
-    /partner.?train/.test(s)  ||
-    /2:1/.test(s)             ||
-    /3:1/.test(s)
-  ) return 'sp';
-
-  if (
-    /open.?gym/.test(s)       ||
-    /open.?train/.test(s)     ||
-    /gym.?access/.test(s)
-  ) return 'gym';
-
+  if (/personal\s*train/.test(s) || /\bpt\b/.test(s) || /\bpt\d/.test(s) || /1[:\s]1/.test(s) || /1on1/.test(s)) return 'pt';
+  if (/semi.?private/.test(s) || /\bsp\b/.test(s) || /\bsp\d/.test(s) || /small.?private/.test(s) || /partner.?train/.test(s) || /2:1/.test(s) || /3:1/.test(s)) return 'sp';
+  if (/open.?gym/.test(s) || /open.?train/.test(s) || /gym.?access/.test(s)) return 'gym';
   return 'other';
 }
 
-// ─── Appointment fetcher ─────────────────────────────────────────────────────
-// Returns { appts, firstPageRaw } so the handler can expose the raw shape in _debug
+// ─── Session type map: SessionTypeId → name ───────────────────────────────────
+async function fetchSessionTypeMap(token) {
+  try {
+    const data = await mbGet('/site/sessiontypes', token, { OnlineOnly: false });
+    const types = data.SessionTypes || [];
+    const map = {};
+    for (const t of types) map[t.Id] = t.Name || '';
+    console.log('[mb-pt-analytics] session types:', types.map(t => `${t.Id}=${t.Name}`).join(', '));
+    return map;
+  } catch (e) {
+    console.warn('[mb-pt-analytics] could not fetch session types:', e.message);
+    return {};
+  }
+}
+
+// ─── Client info map: clientId → { name, email, phone } ──────────────────────
+async function fetchClientMap(token, clientIds) {
+  if (!clientIds.length) return {};
+  const map = {};
+  for (let i = 0; i < clientIds.length; i += CLIENT_BATCH) {
+    const batch = clientIds.slice(i, i + CLIENT_BATCH);
+    try {
+      const data = await mbGet('/client/clients', token, {
+        ClientIds: batch.join(','),
+        Limit:     CLIENT_BATCH,
+      });
+      for (const c of (data.Clients || [])) {
+        const id = String(c.UniqueId || c.Id || '');
+        if (id) map[id] = {
+          name:  `${c.FirstName || ''} ${c.LastName || ''}`.trim() || `Client ${id}`,
+          email: c.Email || '',
+          phone: c.MobilePhone || c.HomePhone || '',
+        };
+      }
+    } catch (e) {
+      console.warn('[mb-pt-analytics] client batch error:', e.message);
+    }
+  }
+  return map;
+}
+
+// ─── Appointment fetcher ──────────────────────────────────────────────────────
 async function fetchAppointments(token, startDate, endDate) {
   let all = [];
   let offset = 0;
-  let firstPageRaw = null;
   while (true) {
     const data = await mbGet('/appointment/staffappointments', token, {
       StartDate: startDate,
@@ -64,31 +83,15 @@ async function fetchAppointments(token, startDate, endDate) {
       Limit:     200,
       Offset:    offset,
     });
-    if (firstPageRaw === null) {
-      // Capture response shape: all keys + first item of any array key
-      firstPageRaw = {
-        keys: Object.keys(data),
-        arraySizes: Object.fromEntries(
-          Object.entries(data).filter(([, v]) => Array.isArray(v)).map(([k, v]) => [k, v.length])
-        ),
-        firstItem: (() => {
-          for (const v of Object.values(data)) {
-            if (Array.isArray(v) && v.length > 0) return v[0];
-          }
-          return null;
-        })(),
-      };
-      console.log('[mb-pt-analytics] first page keys:', firstPageRaw.keys, 'array sizes:', firstPageRaw.arraySizes);
-    }
-    const appts = data.Appointments || data.StaffAppointments || [];
+    const appts = data.Appointments || [];
     all = all.concat(appts);
     if (appts.length < 200 || offset >= 1800) break;
     offset += 200;
   }
-  return { appts: all, firstPageRaw };
+  return all;
 }
 
-// ─── Client services fetcher (remaining PT/SP credits) ──────────────────────
+// ─── Client services fetcher (remaining PT/SP credits) ───────────────────────
 async function fetchClientServices(token, clientId) {
   try {
     const data = await mbGet('/client/clientservices', token, {
@@ -102,7 +105,7 @@ async function fetchClientServices(token, clientId) {
   }
 }
 
-// ─── Handler ────────────────────────────────────────────────────────────────
+// ─── Handler ─────────────────────────────────────────────────────────────────
 export const handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
 
@@ -110,50 +113,63 @@ export const handler = async (event) => {
     const token = await getStaffToken();
     const now   = new Date();
 
-    // ── Date windows ─────────────────────────────────────────────────────
+    // ── Date windows ──────────────────────────────────────────────────────
     const yesterday = endOfDay(subDays(now, 1));
 
-    // W1 = last 7 days ending yesterday
     const w1End   = yesterday;
     const w1Start = subDays(w1End, 6);
 
-    // W2 = 7 days before that
     const w2End   = endOfDay(subDays(w1Start, 1));
     const w2Start = subDays(w2End, 6);
 
-    // W3 = 7 days before W2
     const w3End   = endOfDay(subDays(w2Start, 1));
     const w3Start = subDays(w3End, 6);
 
-    // W4 = 7 days before W3
     const w4End   = endOfDay(subDays(w3Start, 1));
     const w4Start = subDays(w4End, 6);
 
-    // Calendar windows
     const thisMonthStart = startOfMonth(now);
     const thisMonthEnd   = yesterday;
     const lastMonthStart = startOfMonth(subMonths(now, 1));
     const lastMonthEnd   = endOfMonth(subMonths(now, 1));
 
-    // Fetch span: last month start → yesterday (covers all 4 weekly windows + months)
     const fetchStart = format(lastMonthStart, "yyyy-MM-dd'T'00:00:00");
     const fetchEnd   = format(yesterday,      "yyyy-MM-dd'T'23:59:59");
 
-    // ── Fetch & classify ─────────────────────────────────────────────────
-    const { appts: raw, firstPageRaw } = await fetchAppointments(token, fetchStart, fetchEnd);
+    // ── Fetch session types + appointments in parallel ────────────────────
+    const [sessionTypeMap, raw] = await Promise.all([
+      fetchSessionTypeMap(token),
+      fetchAppointments(token, fetchStart, fetchEnd),
+    ]);
 
+    // ── Classify & enrich (names placeholder — filled after client fetch) ─
     const appts = raw.map(a => ({
       ...a,
-      _type: classify(a.SessionTypeName || a.ServiceName || ''),
-      _date: parseISO(a.StartDateTime),
-      _id:   String(a.ClientId),
-      _name: `${a.FirstName || ''} ${a.LastName || ''}`.trim() || `Client ${a.ClientId}`,
+      _typeName:  sessionTypeMap[a.SessionTypeId] || '',
+      _type:      classify(sessionTypeMap[a.SessionTypeId] || ''),
+      _date:      parseISO(a.StartDateTime),
+      _id:        String(a.ClientId),
+      _name:      `Client ${a.ClientId}`,
+      _email:     '',
+      _phone:     '',
+      _staffName: `${a.Staff?.FirstName || ''} ${a.Staff?.LastName || ''}`.trim(),
     }));
 
-    const ptAppts   = appts.filter(a => a._type === 'pt');
-    const spAppts   = appts.filter(a => a._type === 'sp');
-    const ptsp      = appts.filter(a => a._type === 'pt' || a._type === 'sp');
-    const gymAppts  = appts.filter(a => a._type === 'gym');
+    // ── Fetch client names for all PT/SP clients ──────────────────────────
+    const ptspAppts = appts.filter(a => a._type === 'pt' || a._type === 'sp');
+    const ptspIds   = [...new Set(ptspAppts.map(a => a._id))];
+    const clientMap = await fetchClientMap(token, ptspIds);
+
+    // Back-fill names/email/phone
+    for (const a of appts) {
+      const info = clientMap[a._id];
+      if (info) { a._name = info.name; a._email = info.email; a._phone = info.phone; }
+    }
+
+    const ptAppts  = appts.filter(a => a._type === 'pt');
+    const spAppts  = appts.filter(a => a._type === 'sp');
+    const ptsp     = appts.filter(a => a._type === 'pt' || a._type === 'sp');
+    const gymAppts = appts.filter(a => a._type === 'gym');
 
     // ── Helpers ───────────────────────────────────────────────────────────
     function countIn(arr, start, end) {
@@ -199,10 +215,10 @@ export const handler = async (event) => {
         return {
           id,
           name:             last._name,
-          email:            last.Email || last.email || '',
-          phone:            last.MobilePhone || last.HomePhone || '',
-          service:          last.SessionTypeName || last.ServiceName || '',
-          staffName:        `${last.StaffFirstName || ''} ${last.StaffLastName || ''}`.trim(),
+          email:            last._email,
+          phone:            last._phone,
+          service:          last._typeName,
+          staffName:        last._staffName,
           lastSession:      format(last._date, 'yyyy-MM-dd'),
           weeklyAttendance: weekCounts(ptsp, id),
         };
@@ -213,27 +229,26 @@ export const handler = async (event) => {
     const gymMap = {};
     for (const a of gymAppts) {
       if (SKIP_STATUS.has(a.Status) || a._date < w1Start || a._date > w1End) continue;
-      if (!gymMap[a._id]) gymMap[a._id] = { id: a._id, name: a._name, email: a.Email || '', count: 0 };
+      if (!gymMap[a._id]) gymMap[a._id] = { id: a._id, name: a._name, email: a._email, count: 0 };
       gymMap[a._id].count++;
     }
     const openGym = Object.values(gymMap).filter(c => c.count > 0).sort((a, b) => b.count - a.count);
 
-    // ── Unchecked Sessions (past PT/SP sessions still "Booked") ───────────
+    // ── Unchecked Sessions ────────────────────────────────────────────────
     const unchecked = ptsp
       .filter(a => a._date >= w1Start && a._date <= w1End && a.Status === 'Booked')
       .map(a => ({
         id:         String(a.Id),
         clientId:   a._id,
         clientName: a._name,
-        service:    a.SessionTypeName || a.ServiceName || '',
-        staffName:  `${a.StaffFirstName || ''} ${a.StaffLastName || ''}`.trim(),
+        service:    a._typeName,
+        staffName:  a._staffName,
         startTime:  a.StartDateTime,
         type:       a._type,
       }))
       .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
 
-    // ── Session Credits ────────────────────────────────────────────────────
-    // Fetch for unique PT/SP clients seen in last 28 days (capped at 60)
+    // ── Session Credits ───────────────────────────────────────────────────
     const recentIds = [...new Set(
       ptsp.filter(a => a._date >= w4Start).map(a => a._id)
     )].slice(0, 60);
@@ -257,23 +272,30 @@ export const handler = async (event) => {
       });
       if (ptSvcs.length === 0) continue;
       const total = ptSvcs.reduce((sum, s) => sum + (s.Remaining || 0), 0);
-      const appt  = ptsp.find(a => a._id === clientId);
+      const info  = clientMap[clientId];
       sessionCredits.push({
         id:       clientId,
-        name:     appt ? appt._name : `Client ${clientId}`,
-        email:    appt?.Email || '',
+        name:     info?.name || `Client ${clientId}`,
+        email:    info?.email || '',
         credits:  total,
         services: ptSvcs.map(s => ({ name: s.Name || s.ServiceName || '', remaining: s.Remaining || 0 })),
       });
     }
     sessionCredits.sort((a, b) => b.credits - a.credits);
 
-    // ── Debug logging ──────────────────────────────────────────────────────
-    const sampleTypes = [...new Set(raw.slice(0, 30).map(a => a.SessionTypeName || a.ServiceName).filter(Boolean))];
-    console.log('[mb-pt-analytics] sample types:', sampleTypes);
+    // ── Debug ─────────────────────────────────────────────────────────────
+    const sampleTypes = Object.entries(sessionTypeMap).map(([id, name]) => `${id}=${name}`);
     console.log(`[mb-pt-analytics] total=${raw.length} pt=${ptAppts.length} sp=${spAppts.length} gym=${gymAppts.length}`);
 
-    return ok({ stats, ptReds, openGym, unchecked, sessionCredits, _debug: { sampleTypes, totalRaw: raw.length, fetchStart, fetchEnd, firstPageRaw } });
+    return ok({
+      stats, ptReds, openGym, unchecked, sessionCredits,
+      _debug: {
+        sampleTypes,
+        totalRaw: raw.length,
+        counts: { pt: ptAppts.length, sp: spAppts.length, gym: gymAppts.length },
+        fetchStart, fetchEnd,
+      },
+    });
 
   } catch (e) {
     console.error('mb-pt-analytics:', e);
