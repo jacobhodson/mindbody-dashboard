@@ -20,7 +20,7 @@ import {
 
 const SKIP_STATUS  = new Set(['NoShow', 'LateCancelled', 'Cancelled']);
 const CREDIT_BATCH = 10;
-const CLIENT_BATCH = 50;
+const CLIENT_BATCH = 20; // Mindbody caps ClientIds at 20 per request
 
 // ─── Session-type classifier ─────────────────────────────────────────────────
 // SP check must come BEFORE PT — "Semi Private Personal Training" contains
@@ -60,7 +60,7 @@ async function fetchClientMap(token, clientIds) {
     const batch = clientIds.slice(i, i + CLIENT_BATCH);
     try {
       const data = await mbGet('/client/clients', token, {
-        clientIds: batch,   // camelCase — matches Mindbody's client endpoint convention
+        ClientIds: batch,   // max 20 per request
         Limit:     CLIENT_BATCH,
       });
       if (_firstResponseKeys.length === 0) _firstResponseKeys = Object.keys(data);
