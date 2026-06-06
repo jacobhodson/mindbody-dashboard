@@ -52,10 +52,11 @@ function classify(name = '') {
 }
 
 // ─── Appointment fetcher ─────────────────────────────────────────────────────
+// Returns { appts, firstPageRaw } so the handler can expose the raw shape in _debug
 async function fetchAppointments(token, startDate, endDate) {
   let all = [];
   let offset = 0;
-  let firstCall = true;
+  let firstPageRaw = null;
   while (true) {
     const data = await mbGet('/appointment/staffappointments', token, {
       StartDate: startDate,
@@ -63,24 +64,28 @@ async function fetchAppointments(token, startDate, endDate) {
       Limit:     200,
       Offset:    offset,
     });
-    // Log the response shape on the first call so we can diagnose key mismatches
-    if (firstCall) {
-      firstCall = false;
-      const keys = Object.keys(data);
-      console.log('[mb-pt-analytics] /appointment/staffappointments response keys:', keys);
-      // Log first item of whichever array key exists
-      for (const k of keys) {
-        if (Array.isArray(data[k]) && data[k].length > 0) {
-          console.log(`[mb-pt-analytics] data.${k}[0]:`, JSON.stringify(data[k][0]).slice(0, 400));
-        }
-      }
+    if (firstPageRaw === null) {
+      // Capture response shape: all keys + first item of any array key
+      firstPageRaw = {
+        keys: Object.keys(data),
+        arraySizes: Object.fromEntries(
+          Object.entries(data).filter(([, v]) => Array.isArray(v)).map(([k, v]) => [k, v.length])
+        ),
+        firstItem: (() => {
+          for (const v of Object.values(data)) {
+            if (Array.isArray(v) && v.length > 0) return v[0];
+          }
+          return null;
+        })(),
+      };
+      console.log('[mb-pt-analytics] first page keys:', firstPageRaw.keys, 'array sizes:', firstPageRaw.arraySizes);
     }
     const appts = data.Appointments || data.StaffAppointments || [];
     all = all.concat(appts);
     if (appts.length < 200 || offset >= 1800) break;
     offset += 200;
   }
-  return all;
+  return { appts: all, firstPageRaw };
 }
 
 // ─── Client services fetcher (remaining PT/SP credits) ──────────────────────
@@ -135,7 +140,7 @@ export const handler = async (event) => {
     const fetchEnd   = format(yesterday,      "yyyy-MM-dd'T'23:59:59");
 
     // ── Fetch & classify ─────────────────────────────────────────────────
-    const raw = await fetchAppointments(token, fetchStart, fetchEnd);
+    const { appts: raw, firstPageRaw } = await fetchAppointments(token, fetchStart, fetchEnd);
 
     const appts = raw.map(a => ({
       ...a,
@@ -265,12 +270,10 @@ export const handler = async (event) => {
 
     // ── Debug logging ──────────────────────────────────────────────────────
     const sampleTypes = [...new Set(raw.slice(0, 30).map(a => a.SessionTypeName || a.ServiceName).filter(Boolean))];
-    const sampleKeys  = raw.length === 0 ? [] : Object.keys(raw[0] || {}).slice(0, 20);
     console.log('[mb-pt-analytics] sample types:', sampleTypes);
     console.log(`[mb-pt-analytics] total=${raw.length} pt=${ptAppts.length} sp=${spAppts.length} gym=${gymAppts.length}`);
-    console.log('[mb-pt-analytics] fetchStart:', fetchStart, 'fetchEnd:', fetchEnd);
 
-    return ok({ stats, ptReds, openGym, unchecked, sessionCredits, _debug: { sampleTypes, totalRaw: raw.length, sampleKeys, fetchStart, fetchEnd } });
+    return ok({ stats, ptReds, openGym, unchecked, sessionCredits, _debug: { sampleTypes, totalRaw: raw.length, fetchStart, fetchEnd, firstPageRaw } });
 
   } catch (e) {
     console.error('mb-pt-analytics:', e);
