@@ -241,10 +241,11 @@ export const handler = async (event) => {
     const openGym = Object.values(gymMap).filter(c => c.count > 0).sort((a, b) => b.count - a.count);
 
     // ── Unchecked Sessions ────────────────────────────────────────────────
-    // Any past PT/SP appointment still in "Booked" status — session ran but
-    // trainer hasn't signed it off yet (deducts from client's session package)
+    // Past PT/SP sessions (last 7 days) not marked Completed or legitimately
+    // cancelled — trainer hasn't signed them off yet
+    const DONE_STATUS = new Set(['Completed', 'Cancelled', 'LateCancelled']);
     const unchecked = ptsp
-      .filter(a => a._date < now && a.Status === 'Booked')
+      .filter(a => a._date >= w1Start && a._date < now && !DONE_STATUS.has(a.Status))
       .map(a => ({
         id:         String(a.Id),
         clientId:   a._id,
