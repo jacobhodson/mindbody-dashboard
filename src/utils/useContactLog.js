@@ -28,24 +28,20 @@ export function useContactLog() {
   );
 
   const logContact = useCallback(async (clientId, clientName, note) => {
-    try {
-      const res  = await fetch('/api/mb-contact-client', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ clientId: String(clientId), clientName, note }),
-      });
-      const data = await res.json();
-      if (data.logged) {
-        // Optimistically update local state
-        setContacted((prev) => ({
-          ...prev,
-          [String(clientId)]: { at: new Date().toISOString(), note, name: clientName },
-        }));
-      }
-      return data;
-    } catch {
-      return { logged: false };
+    const res  = await fetch('/api/mb-contact-client', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ clientId: String(clientId), clientName, note }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.logged) {
+      throw new Error(data.error || `Contact log failed (${res.status})`);
     }
+    setContacted((prev) => ({
+      ...prev,
+      [String(clientId)]: { at: new Date().toISOString(), note, name: clientName },
+    }));
+    return data;
   }, []);
 
   const getClientLogs = useCallback(async (clientId) => {

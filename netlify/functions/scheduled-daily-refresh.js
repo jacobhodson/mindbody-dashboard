@@ -93,6 +93,8 @@ async function fetchRevenue(token) {
   };
 }
 
+const BASE_URL = process.env.URL || 'https://newstrength-ops-dashboard.netlify.app';
+
 // ─── Handler ────────────────────────────────────────────────────────────────
 
 export const handler = async () => {
@@ -100,24 +102,29 @@ export const handler = async () => {
   try {
     const token = await getStaffToken();
 
-    // Attendance and revenue can be fetched here directly.
-    // Client analytics and payments are complex — call their endpoints via fetch
-    // only as a best-effort; the scheduled function is non-critical (staff can
-    // always hit Refresh manually).
-    const [att, rev] = await Promise.allSettled([
+    // Attendance + revenue: fetched inline (simpler logic, avoids HTTP chain)
+    // clientAnalytics + payments: delegate to their own endpoints (complex N+1 logic)
+    const [att, rev, ana, pay] = await Promise.allSettled([
       fetchAttendance(token),
       fetchRevenue(token),
+      fetch(`${BASE_URL}/api/mb-client-analytics`).then(r => r.json()),
+      fetch(`${BASE_URL}/api/mb-payments`).then(r => r.json()),
     ]);
 
     const snapshot = {
-      attendance: att.status === 'fulfilled' ? att.value : null,
-      revenue:    rev.status === 'fulfilled' ? rev.value : null,
-      cachedAt:   new Date().toISOString(),
+      attendance:      att.status === 'fulfilled' ? att.value : null,
+      revenue:         rev.status === 'fulfilled' ? rev.value : null,
+      clientAnalytics: ana.status === 'fulfilled' ? ana.value : null,
+      payments:        pay.status === 'fulfilled' ? pay.value : null,
+      cachedAt:        new Date().toISOString(),
     };
 
     const store = getStore('dashboard-cache');
     await store.set('dashboard-snapshot', JSON.stringify(snapshot));
-    console.log('[scheduled-daily-refresh] Done at', snapshot.cachedAt);
+    console.log(
+      '[scheduled-daily-refresh] Done.',
+      `att=${att.status} rev=${rev.status} ana=${ana.status} pay=${pay.status}`,
+    );
   } catch (e) {
     console.error('[scheduled-daily-refresh] Failed:', e.message);
   }

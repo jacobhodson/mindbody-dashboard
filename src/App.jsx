@@ -2,16 +2,22 @@ import { useState, useEffect, useCallback } from 'react';
 import Dashboard from './components/Dashboard.jsx';
 import { useContactLog } from './utils/useContactLog.js';
 
-// Data is fetched live from Mindbody on page load and on manual refresh.
-// A scheduled Netlify function refreshes a server-side cache at midnight Sydney
-// time — but the frontend always reads fresh so there's no stale-cache risk.
-// The 5-minute auto-refresh interval has been removed to save API credits.
+// Initial load reads from the Netlify Blobs cache via GET /api/mb-snapshot.
+// The Refresh button POSTs to /api/mb-snapshot to force a live pull + cache update.
+// onboarding and pt are always fetched live (too dynamic to cache daily).
+// If the snapshot is unavailable, each key falls back to its live endpoint.
 
 const LOADING_ALL = { attendance: true, clientAnalytics: true, payments: true, revenue: true, onboarding: true, pt: true };
-const LOADED_ALL  = { attendance: false, clientAnalytics: false, payments: false, revenue: false, onboarding: false, pt: false };
 
-async function safeFetch(url) {
-  const res = await fetch(url);
+const CACHED_ENDPOINTS = {
+  attendance:      '/api/mb-attendance',
+  clientAnalytics: '/api/mb-client-analytics',
+  payments:        '/api/mb-payments',
+  revenue:         '/api/mb-revenue',
+};
+
+async function safeFetch(url, options) {
+  const res = await fetch(url, options);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -23,28 +29,46 @@ export default function App() {
   const [lastRefresh, setLastRefresh] = useState(null);
   const contactLog = useContactLog();
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((forceRefresh = false) => {
     setLoading(LOADING_ALL);
     setErrors({});
 
-    const load = (key, url) =>
+    const liveFetch = (key, url) =>
       safeFetch(url)
-        .then((json) => setData((prev) => ({ ...prev, [key]: json })))
-        .catch((e)   => setErrors((prev) => ({ ...prev, [key]: e.message })))
-        .finally(()  => setLoading((prev) => ({ ...prev, [key]: false })));
+        .then(json => setData(prev => ({ ...prev, [key]: json })))
+        .catch(e  => setErrors(prev => ({ ...prev, [key]: e.message })))
+        .finally(() => setLoading(prev => ({ ...prev, [key]: false })));
+
+    // Try snapshot for the 4 cached endpoints.
+    // GET = serve from cache; POST = force live pull + update cache.
+    // Falls back key-by-key (or entirely) to live calls if cache is incomplete.
+    const cachedLoad = safeFetch('/api/mb-snapshot', { method: forceRefresh ? 'POST' : 'GET' })
+      .then(snap => {
+        if (snap.error) throw new Error(snap.error);
+        const update  = {};
+        const missing = [];
+        for (const [key, url] of Object.entries(CACHED_ENDPOINTS)) {
+          if (snap[key] != null) update[key] = snap[key];
+          else missing.push([key, url]);
+        }
+        if (Object.keys(update).length) setData(prev => ({ ...prev, ...update }));
+        return Promise.all(missing.map(([k, url]) => liveFetch(k, url)));
+      })
+      .catch(() =>
+        Promise.all(Object.entries(CACHED_ENDPOINTS).map(([k, url]) => liveFetch(k, url)))
+      )
+      .finally(() =>
+        setLoading(prev => ({ ...prev, attendance: false, clientAnalytics: false, payments: false, revenue: false }))
+      );
 
     Promise.all([
-      load('attendance',      '/api/mb-attendance'),
-      load('clientAnalytics', '/api/mb-client-analytics'),
-      load('payments',        '/api/mb-payments'),
-      load('revenue',         '/api/mb-revenue'),
-      load('onboarding',      '/api/mb-onboarding'),
-      load('pt',              '/api/mb-pt-analytics'),
+      cachedLoad,
+      liveFetch('onboarding', '/api/mb-onboarding'),
+      liveFetch('pt',         '/api/mb-pt-analytics'),
     ]).then(() => setLastRefresh(new Date()));
   }, []);
 
-  // Fetch once on mount — no polling interval
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { refresh(false); }, [refresh]);
 
   return (
     <Dashboard
@@ -52,7 +76,7 @@ export default function App() {
       loading={loading}
       errors={errors}
       lastRefresh={lastRefresh}
-      onRefresh={refresh}
+      onRefresh={() => refresh(true)}
       contactLog={contactLog}
     />
   );

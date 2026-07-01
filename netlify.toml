@@ -15,6 +15,12 @@
 [functions."mb-pt-analytics"]
   timeout = 26
 
+[functions."mb-snapshot"]
+  timeout = 26
+
+[functions."scheduled-daily-refresh"]
+  timeout = 26
+
 [dev]
   command = "vite"
   port = 8888
