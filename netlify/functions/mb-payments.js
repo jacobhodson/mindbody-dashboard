@@ -40,8 +40,12 @@ async function getAllClients(token) {
         name:           `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
         email:          c.Email || '',
         phone:          formatPhone(c.MobilePhone || c.HomePhone),
-        accountBalance: c.AccountBalance || 0,
+        accountBalance: c.AccountBalance ?? c.Balance ?? c.CurrentBalance ?? null,
       };
+    }
+    // Log one client's keys so we can find the real balance field name
+    if (offset === 0 && clients.length > 0) {
+      console.log('[mb-payments] sample client keys:', Object.keys(clients[0]).join(', '));
     }
     if (clients.length < 200 || offset >= 1800) break;
     offset += 200;
@@ -141,13 +145,19 @@ export const handler = async (event) => {
 
     const onAccount = onAccountClientIds
       .map((id) => {
-        const client  = clientMap[id] || {};
-        const balance = client.accountBalance || 0;
-        if (balance <= 0) return null;
-
+        const client     = clientMap[id] || {};
         const clientSales = onAccountSales
           .filter((s) => String(s.ClientId) === id)
           .sort((a, b) => new Date(b.SaleDate) - new Date(a.SaleDate));
+
+        // Use live AccountBalance if available; otherwise sum from sales
+        const fromSales = clientSales
+          .flatMap((s) => s.Payments || [])
+          .filter((p) => (p.Type || '').toLowerCase().includes('account'))
+          .reduce((sum, p) => sum + (p.Amount || 0), 0);
+        const balance = client.accountBalance != null ? client.accountBalance : fromSales;
+
+        if (balance <= 0) return null;
 
         const allItems = clientSales
           .flatMap((s) => (s.PurchasedItems || []).map((i) => i.Description))
