@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { TrendingDown, Search, CheckCircle, ArrowUp, ArrowDown, ArrowRight, Sparkles, ChevronDown } from 'lucide-react';
 import { formatDistanceToNow, parseISO, format, differenceInDays } from 'date-fns';
 import ContactModal          from './ContactModal.jsx';
@@ -28,10 +28,39 @@ function TrendBadge({ trend }) {
   );
 }
 
-export default function RedsList({ data, loading, error, contactLog, onboardingIds = new Set() }) {
-  const [search, setSearch]       = useState('');
-  const [selected, setSelected]   = useState(null);
+export default function RedsList({ data: propData, loading: propLoading, error: propError, contactLog, onboardingIds = new Set() }) {
+  const [search, setSearch]         = useState('');
+  const [selected, setSelected]     = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const [period, setPeriod]         = useState('7days');
+  const [localData, setLocalData]   = useState(null);
+  const [localLoading, setLocalLoading] = useState(false);
+  const [localError, setLocalError] = useState(null);
+
+  const data    = localData    ?? propData;
+  const loading = localLoading || (localData === null && propLoading);
+  const error   = localError   ?? propError;
+
+  const changePeriod = useCallback(async (newPeriod) => {
+    if (newPeriod === period) return;
+    setPeriod(newPeriod);
+    if (newPeriod === '7days' && propData) {
+      setLocalData(null);
+      setLocalError(null);
+      return;
+    }
+    setLocalLoading(true);
+    setLocalError(null);
+    try {
+      const res  = await fetch(`/api/mb-client-analytics?period=${newPeriod}`);
+      const json = await res.json();
+      setLocalData(json);
+    } catch (e) {
+      setLocalError(e.message);
+    } finally {
+      setLocalLoading(false);
+    }
+  }, [period, propData]);
 
   // Exclude clients currently in the onboarding pipeline — they're tracked separately
   const clients = (data?.reds || []).filter((c) => !onboardingIds.has(c.id));
@@ -66,7 +95,26 @@ export default function RedsList({ data, loading, error, contactLog, onboardingI
             </span>
           )}
         </div>
-        <p className="text-xs text-gray-500">Active recently · missed this week</p>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-gray-700 overflow-hidden text-xs">
+            {[
+              { key: '7days',        label: 'Last 7 days' },
+              { key: 'calendarWeek', label: 'This week'   },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => changePeriod(key)}
+                className={`px-3 py-1.5 transition-colors ${
+                  period === key
+                    ? 'bg-gray-700 text-white'
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Search */}
