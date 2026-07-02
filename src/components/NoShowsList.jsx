@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, User } from 'lucide-react';
 
 export default function NoShowsList({ data, loading, error }) {
   const clients = data?.noShows || [];
@@ -20,11 +20,11 @@ export default function NoShowsList({ data, loading, error }) {
       </div>
 
       {/* Body */}
-      <div className="overflow-y-auto max-h-72 scrollbar-thin">
+      <div className="overflow-y-auto max-h-96 scrollbar-thin">
         {loading && (
           <div className="space-y-2 p-5">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-10 animate-pulse rounded-lg bg-gray-800" />
+              <div key={i} className="h-14 animate-pulse rounded-lg bg-gray-800" />
             ))}
           </div>
         )}
@@ -41,19 +41,34 @@ export default function NoShowsList({ data, loading, error }) {
         )}
 
         {!loading && !error && clients.map((client) => (
-          <div
-            key={client.id}
-            className="flex items-center justify-between px-5 py-2.5 border-b border-gray-800/50 last:border-0 hover:bg-gray-800/30 transition-colors"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-gray-200 truncate">{client.name || 'Unknown'}</p>
-              <p className="text-xs text-gray-500 truncate">
-                {client.email || client.phone || 'No contact details'}
-              </p>
+          <div key={client.id} className="border-b border-gray-800/50 last:border-0">
+            {/* Client row */}
+            <div className="flex items-center justify-between px-5 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-gray-200 truncate">{client.name || 'Unknown'}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {client.email || client.phone || 'No contact details'}
+                </p>
+              </div>
+              <span className="ml-3 shrink-0 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 tabular-nums">
+                {client.noShowCount} {client.noShowCount === 1 ? 'no-show' : 'no-shows'}
+              </span>
             </div>
-            <span className="ml-3 shrink-0 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 tabular-nums">
-              {client.noShowCount} {client.noShowCount === 1 ? 'no-show' : 'no-shows'}
-            </span>
+
+            {/* Session details */}
+            {(client.sessions || []).map((s, i) => (
+              <div key={i} className="flex items-center gap-3 px-5 py-1.5 bg-gray-800/30 border-t border-gray-800/40">
+                <Clock className="h-3 w-3 text-gray-600 shrink-0" />
+                <span className="text-xs text-amber-300/80 font-medium">{s.className}</span>
+                <span className="text-xs text-gray-500">{s.day} · {s.time}</span>
+                {s.staffName && (
+                  <>
+                    <User className="h-3 w-3 text-gray-600 shrink-0 ml-auto" />
+                    <span className="text-xs text-gray-400">{s.staffName}</span>
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         ))}
       </div>

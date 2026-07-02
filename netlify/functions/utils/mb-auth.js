@@ -57,6 +57,15 @@ export async function mbPost(path, token, body) {
   return res.json();
 }
 
+// Australian phone numbers returned as JSON numbers lose their leading 0.
+// Re-add it for any 9-digit number starting with 2–9 (AU mobile & landline pattern).
+export function formatPhone(raw) {
+  if (raw === null || raw === undefined || raw === '') return '';
+  const s = String(raw).trim();
+  if (s.length === 9 && /^[2-9]/.test(s)) return '0' + s;
+  return s;
+}
+
 export const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',

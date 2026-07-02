@@ -9,7 +9,7 @@
  *   "3 Session Pass" | "14 Day Pass" | "4 Week Kickstarter"
  *   "Strong Dad Transformation" | "Strong Mum Transformation"
  */
-import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
+import { getStaffToken, mbGet, ok, err, CORS, formatPhone } from './utils/mb-auth.js';
 import { subDays, format, parseISO, differenceInDays } from 'date-fns';
 
 const BATCH = 15;
@@ -97,7 +97,7 @@ async function getAllClients(token) {
         id:    String(c.Id),
         name:  `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
         email: c.Email || '',
-        phone: c.MobilePhone || c.HomePhone || '',
+        phone: formatPhone(c.MobilePhone || c.HomePhone),
       };
     }
     if (clients.length < 200 || offset >= 1800) break;

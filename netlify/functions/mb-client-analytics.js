@@ -10,7 +10,7 @@
  *   suspensions – clients with active SuspensionInfo or hold-type status
  *                 (excludes Terminated, Expired, Non Member)
  */
-import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
+import { getStaffToken, mbGet, ok, err, CORS, formatPhone } from './utils/mb-auth.js';
 import { subDays, endOfDay, format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 
 const BATCH = 15;
@@ -94,7 +94,7 @@ async function getAllClients(token) {
         id:             String(c.Id),
         name:           `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
         email:          c.Email || '',
-        phone:          c.MobilePhone || c.HomePhone || '',
+        phone:          formatPhone(c.MobilePhone || c.HomePhone),
         status:         c.Status || 'Active',
         suspensionInfo: c.SuspensionInfo || null,
         active:         c.Active !== false,
@@ -151,7 +151,7 @@ export const handler = async (event) => {
     // Per-client data structures
     const weeks         = {};  // id → { w1, w2, w3, w4 }
     const services      = {};  // id → most-recent service name
-    const noShowMap     = {};  // id → no-show count (W1 window)
+    const noShowMap     = {};  // id → [{ className, day, time, staffName }]
     const lastVisitDate = {};  // id → most recent signed-in Date
 
     for (let i = 0; i < allClasses.length; i += BATCH) {
@@ -192,7 +192,13 @@ export const handler = async (event) => {
 
           // No-show: booked but didn't sign in (W1 window)
           if (inW1 && visit.SignedIn === false && !visit.LateCancelled) {
-            noShowMap[id] = (noShowMap[id] || 0) + 1;
+            if (!noShowMap[id]) noShowMap[id] = [];
+            noShowMap[id].push({
+              className: cls.ClassDescription?.Name || cls.Name || 'Class',
+              day:       format(classDate, 'EEE d MMM'),
+              time:      format(classDate, 'h:mm a'),
+              staffName: `${cls.Staff?.FirstName || ''} ${cls.Staff?.LastName || ''}`.trim(),
+            });
           }
         }
       });
@@ -254,7 +260,7 @@ export const handler = async (event) => {
 
     // No-shows
     const noShows = Object.entries(noShowMap)
-      .map(([id, count]) => ({ ...enrichClient(id), noShowCount: count }))
+      .map(([id, sessions]) => ({ ...enrichClient(id), noShowCount: sessions.length, sessions }))
       .sort((a, b) => b.noShowCount - a.noShowCount)
       .slice(0, 50);
 

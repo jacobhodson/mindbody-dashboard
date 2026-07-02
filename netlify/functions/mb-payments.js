@@ -9,7 +9,7 @@
  * Failed payments  = /sale/transactions where status contains Declined/Failed/etc.
  * On account       = /sale/sales where any payment Type contains "Account"
  */
-import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
+import { getStaffToken, mbGet, ok, err, CORS, formatPhone } from './utils/mb-auth.js';
 import { subDays, format, parseISO } from 'date-fns';
 
 const FAILED_KEYWORDS = ['declined', 'failed', 'error', 'chargeback', 'disputed', 'returned', 'void'];
@@ -36,7 +36,7 @@ async function getAllClients(token) {
       clientMap[String(c.Id)] = {
         name: `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
         email: c.Email || '',
-        phone: c.MobilePhone || c.HomePhone || '',
+        phone: formatPhone(c.MobilePhone || c.HomePhone),
       };
     }
     if (clients.length < 200 || offset >= 1800) break;

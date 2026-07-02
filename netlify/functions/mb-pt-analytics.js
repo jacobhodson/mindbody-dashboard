@@ -12,7 +12,7 @@
  * fetch /site/sessiontypes first to build an id→name lookup for classification.
  * Client names are fetched in bulk via /client/clients.
  */
-import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
+import { getStaffToken, mbGet, ok, err, CORS, formatPhone } from './utils/mb-auth.js';
 import {
   subDays, format, parseISO,
   startOfMonth, endOfMonth, endOfDay, subMonths,
@@ -71,7 +71,7 @@ async function fetchClientMap(token, clientIds) {
         if (id) map[id] = {
           name:  `${c.FirstName || ''} ${c.LastName || ''}`.trim() || `Client ${id}`,
           email: c.Email || '',
-          phone: c.MobilePhone || c.HomePhone || '',
+          phone: formatPhone(c.MobilePhone || c.HomePhone),
         };
       }
     } catch (e) {
