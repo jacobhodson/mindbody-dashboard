@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Cake, Star, CheckCircle } from 'lucide-react';
+import { Cake, Star, Users, CheckCircle } from 'lucide-react';
 
 function DaysChip({ days }) {
   if (days === 0) return <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 text-xs font-medium text-emerald-400">Today!</span>;
@@ -7,7 +7,19 @@ function DaysChip({ days }) {
   return <span className="rounded-full bg-gray-700/60 px-2 py-0.5 text-xs text-gray-400">{days}d</span>;
 }
 
-function EmptyState({ icon: Icon, message }) {
+function ClientRow({ c, sub }) {
+  return (
+    <div className="flex items-center justify-between px-5 py-2.5 border-b border-gray-800/50 last:border-0 hover:bg-gray-800/30 transition-colors">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-gray-200 truncate">{c.name}</p>
+        <p className="text-xs text-gray-500">{c.date} · {sub}</p>
+      </div>
+      <DaysChip days={c.daysUntil} />
+    </div>
+  );
+}
+
+function EmptyState({ message }) {
   return (
     <div className="py-8 text-center">
       <CheckCircle className="h-6 w-6 text-gray-700 mx-auto mb-2" />
@@ -17,10 +29,17 @@ function EmptyState({ icon: Icon, message }) {
 }
 
 export default function CelebrationsPanel({ data, loading, error }) {
-  const [tab, setTab] = useState('birthdays');
+  const [tab, setTab] = useState('active');
 
-  const birthdays     = data?.birthdays     || [];
-  const anniversaries = data?.anniversaries || [];
+  const birthdaysActive   = data?.birthdaysActive   || [];
+  const birthdaysInactive = data?.birthdaysInactive || [];
+  const anniversaries     = data?.anniversaries     || [];
+
+  const tabs = [
+    { key: 'active',       label: 'Birthdays',         icon: Cake,  count: birthdaysActive.length   },
+    { key: 'inactive',     label: 'Lapsed Birthdays',  icon: Users, count: birthdaysInactive.length },
+    { key: 'anniversaries',label: 'Anniversaries',     icon: Star,  count: anniversaries.length     },
+  ];
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900">
@@ -35,10 +54,7 @@ export default function CelebrationsPanel({ data, loading, error }) {
 
       {/* Tabs */}
       <div className="flex border-b border-gray-800">
-        {[
-          { key: 'birthdays',     label: 'Birthdays',     icon: Cake,  count: birthdays.length },
-          { key: 'anniversaries', label: 'Anniversaries', icon: Star,  count: anniversaries.length },
-        ].map(({ key, label, icon: Icon, count }) => (
+        {tabs.map(({ key, label, icon: Icon, count }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -51,7 +67,11 @@ export default function CelebrationsPanel({ data, loading, error }) {
             <Icon className="h-3.5 w-3.5" />
             {label}
             {!loading && count > 0 && (
-              <span className="rounded-full bg-gray-700/60 px-1.5 py-0.5 text-xs text-gray-400">
+              <span className={`rounded-full px-1.5 py-0.5 text-xs ${
+                key === 'inactive'
+                  ? 'bg-orange-500/10 text-orange-400'
+                  : 'bg-gray-700/60 text-gray-400'
+              }`}>
                 {count}
               </span>
             )}
@@ -73,33 +93,28 @@ export default function CelebrationsPanel({ data, loading, error }) {
           <p className="p-5 text-sm text-red-400">Could not load: {error}</p>
         )}
 
-        {/* Birthdays */}
-        {!loading && !error && tab === 'birthdays' && (
-          birthdays.length === 0
-            ? <EmptyState message="No birthdays in the next 30 days" />
-            : birthdays.map((c) => (
-                <div key={c.id} className="flex items-center justify-between px-5 py-2.5 border-b border-gray-800/50 last:border-0 hover:bg-gray-800/30 transition-colors">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-200 truncate">{c.name}</p>
-                    <p className="text-xs text-gray-500">{c.date} · turning {c.age}</p>
-                  </div>
-                  <DaysChip days={c.daysUntil} />
-                </div>
-              ))
+        {!loading && !error && tab === 'active' && (
+          birthdaysActive.length === 0
+            ? <EmptyState message="No active member birthdays in the next 30 days" />
+            : birthdaysActive.map(c => <ClientRow key={c.id} c={c} sub={`turning ${c.age}`} />)
         )}
 
-        {/* Anniversaries */}
+        {!loading && !error && tab === 'inactive' && (
+          birthdaysInactive.length === 0
+            ? <EmptyState message="No lapsed member birthdays in the next 30 days" />
+            : <>
+                <p className="px-5 py-2.5 text-xs text-orange-400/70 bg-orange-500/5 border-b border-gray-800/50">
+                  Reach out — a birthday is a great reason to reconnect
+                </p>
+                {birthdaysInactive.map(c => <ClientRow key={c.id} c={c} sub={`turning ${c.age}`} />)}
+              </>
+        )}
+
         {!loading && !error && tab === 'anniversaries' && (
           anniversaries.length === 0
             ? <EmptyState message="No anniversaries in the next 30 days" />
-            : anniversaries.map((c) => (
-                <div key={c.id} className="flex items-center justify-between px-5 py-2.5 border-b border-gray-800/50 last:border-0 hover:bg-gray-800/30 transition-colors">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-200 truncate">{c.name}</p>
-                    <p className="text-xs text-gray-500">{c.date} · {c.years} {c.years === 1 ? 'year' : 'years'}</p>
-                  </div>
-                  <DaysChip days={c.daysUntil} />
-                </div>
+            : anniversaries.map(c => (
+                <ClientRow key={c.id} c={c} sub={`${c.years} ${c.years === 1 ? 'year' : 'years'}`} />
               ))
         )}
       </div>
