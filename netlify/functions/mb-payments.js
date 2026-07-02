@@ -128,6 +128,7 @@ export const handler = async (event) => {
         const card = t.CCLastFour || t.ACHLastFour;
         return {
           id:         t.TransactionId,
+          key,
           clientId:   String(t.ClientId),
           clientName: clientName(t.ClientId),
           amount:     t.Amount || 0,
