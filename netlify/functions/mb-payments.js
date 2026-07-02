@@ -179,6 +179,11 @@ export const handler = async (event) => {
     const totalFailed    = failedPayments.reduce((s, p) => s + p.amount, 0);
     const totalOnAccount = onAccount.reduce((s, b) => s + b.balance, 0);
 
+    // Debug: expose raw on-account data so we can diagnose field names
+    const sampleOnAccountSale = onAccountSales[0] || null;
+    const sampleClientId = onAccountClientIds[0];
+    const sampleClient = sampleClientId ? clientMap[sampleClientId] : null;
+
     return ok({
       failedPayments: failedPayments.slice(0, 100),
       onAccount:      onAccount.slice(0, 100),
@@ -187,6 +192,14 @@ export const handler = async (event) => {
         totalFailedAmount:    totalFailed,
         onAccountCount:       onAccount.length,
         totalOnAccountAmount: totalOnAccount,
+      },
+      _debug: {
+        onAccountSalesCount:   onAccountSales.length,
+        onAccountClientCount:  onAccountClientIds.length,
+        sampleSalePayments:    sampleOnAccountSale?.Payments || null,
+        sampleSaleItems:       sampleOnAccountSale?.PurchasedItems?.map(i => i.Description) || null,
+        sampleClientKeys:      sampleClient ? Object.keys(sampleClient) : null,
+        sampleClientRaw:       sampleClient,
       },
     });
   } catch (e) {
