@@ -96,7 +96,7 @@ export default function PaymentIssuesTable({ data, loading, error }) {
                 <thead>
                   <tr className="border-b border-gray-800 text-xs text-gray-500">
                     <th className="px-5 py-3 text-left font-medium">Client</th>
-                    <th className="px-5 py-3 text-left font-medium">Description</th>
+                    <th className="px-5 py-3 text-left font-medium">Card</th>
                     <th className="px-5 py-3 text-right font-medium">Amount</th>
                     <th className="px-5 py-3 text-left font-medium">Date</th>
                     <th className="px-5 py-3 text-left font-medium">Status</th>
@@ -111,17 +111,24 @@ export default function PaymentIssuesTable({ data, loading, error }) {
                       <td className="px-5 py-3 font-medium text-gray-200 whitespace-nowrap">
                         {p.clientName}
                       </td>
-                      <td className="px-5 py-3 text-gray-400 max-w-[200px] truncate">
-                        {p.description}
+                      <td className="px-5 py-3 text-gray-400 font-mono text-xs whitespace-nowrap">
+                        {p.card || '–'}
                       </td>
                       <td className="px-5 py-3 text-right font-mono font-medium text-red-400 whitespace-nowrap">
                         {fmtAUD(p.amount)}
                       </td>
                       <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{p.date}</td>
                       <td className="px-5 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[p.status] || 'bg-gray-700/40 text-gray-400'}`}>
-                          {p.status}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[p.status] || 'bg-gray-700/40 text-gray-400'}`}>
+                            {p.status}
+                          </span>
+                          {p.retries > 0 && (
+                            <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-gray-700/60 text-gray-400">
+                              {p.retries} {p.retries === 1 ? 'retry' : 'retries'}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

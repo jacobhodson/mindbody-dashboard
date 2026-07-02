@@ -7,7 +7,10 @@
  *   GET /sale/accountbalances → 404 (not on this plan)              ✗
  *
  * Failed payments  = /sale/transactions where status contains Declined/Failed/etc.
- * On account       = /sale/sales where any payment Type contains "Account"
+ *                    Deduplicated: retries of the same charge show as one row (most recent).
+ * On account       = clients whose live AccountBalance > 0, sourced from sales window.
+ *                    Uses client.AccountBalance as source of truth so paid-off accounts
+ *                    are automatically excluded.
  */
 import { getStaffToken, mbGet, ok, err, CORS, formatPhone } from './utils/mb-auth.js';
 import { subDays, format, parseISO } from 'date-fns';
@@ -34,9 +37,10 @@ async function getAllClients(token) {
     const clients = data.Clients || [];
     for (const c of clients) {
       clientMap[String(c.Id)] = {
-        name: `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
-        email: c.Email || '',
-        phone: formatPhone(c.MobilePhone || c.HomePhone),
+        name:           `${c.FirstName || ''} ${c.LastName || ''}`.trim(),
+        email:          c.Email || '',
+        phone:          formatPhone(c.MobilePhone || c.HomePhone),
+        accountBalance: c.AccountBalance || 0,
       };
     }
     if (clients.length < 200 || offset >= 1800) break;
@@ -90,53 +94,76 @@ export const handler = async (event) => {
 
     const onAccountSales = allSales.filter((s) => isOnAccount(s.Payments || []));
 
-    // ── Fetch client names ──────────────────────────────────────────────────
-    const clientIds = [
-      ...new Set([
-        ...failedTxns.map((t) => String(t.ClientId)),
-        ...onAccountSales.map((s) => String(s.ClientId)),
-      ]),
-    ].filter(Boolean);
-
+    // ── Fetch all clients (need AccountBalance for on-account accuracy) ─────
     const clientMap = await getAllClients(token);
     function clientName(id) {
       return clientMap[String(id)]?.name || `Client ${id}`;
     }
 
-    // ── Format responses ────────────────────────────────────────────────────
-    const failedPayments = failedTxns
-      .map((t) => ({
-        id: t.TransactionId,
-        clientId: String(t.ClientId),
-        clientName: clientName(t.ClientId),
-        amount: t.Amount || 0,
-        date: t.TransactionTime
-          ? format(parseISO(t.TransactionTime), 'dd MMM yyyy')
-          : '–',
-        status: t.Status,
-        lastFour: t.CCLastFour || t.ACHLastFour || '',
-      }))
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    // ── Failed payments — deduplicate retries ───────────────────────────────
+    // Same client + same amount + same card = one recurring charge being retried.
+    // Keep only the most recent attempt; track retry count for display.
+    const dedupeKey = (t) =>
+      `${t.ClientId}|${Math.round((t.Amount || 0) * 100)}|${t.CCLastFour || t.ACHLastFour || ''}`;
 
-    const onAccount = onAccountSales
-      .map((s) => {
-        const acctPayments = (s.Payments || []).filter((p) =>
-          (p.Type || '').toLowerCase().includes('account')
-        );
-        const total = acctPayments.reduce((sum, p) => sum + (p.Amount || 0), 0);
-        const items = (s.PurchasedItems || []).map((i) => i.Description).filter(Boolean).join(', ');
+    const latestByKey = new Map();
+    const retryCounts = new Map();
+    for (const t of failedTxns) {
+      const key = dedupeKey(t);
+      retryCounts.set(key, (retryCounts.get(key) || 0) + 1);
+      const existing = latestByKey.get(key);
+      if (!existing || new Date(t.TransactionTime) > new Date(existing.TransactionTime)) {
+        latestByKey.set(key, t);
+      }
+    }
+
+    const failedPayments = [...latestByKey.values()]
+      .sort((a, b) => new Date(b.TransactionTime) - new Date(a.TransactionTime))
+      .map((t) => {
+        const key  = dedupeKey(t);
+        const card = t.CCLastFour || t.ACHLastFour;
         return {
-          saleId: s.Id,
-          clientId: String(s.ClientId),
-          clientName: clientName(s.ClientId),
-          balance: total,
-          description: items || '–',
-          date: s.SaleDate ? format(parseISO(s.SaleDate), 'dd MMM yyyy') : '–',
-          email: clientMap[String(s.ClientId)]?.email || '',
-          phone: clientMap[String(s.ClientId)]?.phone || '',
+          id:         t.TransactionId,
+          clientId:   String(t.ClientId),
+          clientName: clientName(t.ClientId),
+          amount:     t.Amount || 0,
+          date:       t.TransactionTime ? format(parseISO(t.TransactionTime), 'dd MMM yyyy') : '–',
+          status:     t.Status,
+          card:       card ? `**** ${card}` : '–',
+          retries:    retryCounts.get(key) - 1,
+        };
+      });
+
+    // ── On account — group by client, use live AccountBalance ───────────────
+    // AccountBalance on the client record reflects payments made against the account,
+    // so clients who've since cleared their balance are automatically excluded.
+    const onAccountClientIds = [...new Set(onAccountSales.map((s) => String(s.ClientId)))];
+
+    const onAccount = onAccountClientIds
+      .map((id) => {
+        const client  = clientMap[id] || {};
+        const balance = client.accountBalance || 0;
+        if (balance <= 0) return null;
+
+        const clientSales = onAccountSales
+          .filter((s) => String(s.ClientId) === id)
+          .sort((a, b) => new Date(b.SaleDate) - new Date(a.SaleDate));
+
+        const allItems = clientSales
+          .flatMap((s) => (s.PurchasedItems || []).map((i) => i.Description))
+          .filter(Boolean);
+
+        return {
+          clientId:    id,
+          clientName:  client.name || `Client ${id}`,
+          balance,
+          description: [...new Set(allItems)].join(', ') || '–',
+          date:        clientSales[0]?.SaleDate ? format(parseISO(clientSales[0].SaleDate), 'dd MMM yyyy') : '–',
+          email:       client.email || '',
+          phone:       client.phone || '',
         };
       })
-      .filter((s) => s.balance > 0)
+      .filter(Boolean)
       .sort((a, b) => b.balance - a.balance);
 
     const totalFailed    = failedPayments.reduce((s, p) => s + p.amount, 0);
@@ -144,11 +171,11 @@ export const handler = async (event) => {
 
     return ok({
       failedPayments: failedPayments.slice(0, 100),
-      onAccount: onAccount.slice(0, 100),
+      onAccount:      onAccount.slice(0, 100),
       summary: {
-        failedCount: failedPayments.length,
-        totalFailedAmount: totalFailed,
-        onAccountCount: onAccount.length,
+        failedCount:          failedPayments.length,
+        totalFailedAmount:    totalFailed,
+        onAccountCount:       onAccount.length,
         totalOnAccountAmount: totalOnAccount,
       },
     });
