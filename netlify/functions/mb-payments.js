@@ -150,12 +150,12 @@ export const handler = async (event) => {
           .filter((s) => String(s.ClientId) === id)
           .sort((a, b) => new Date(b.SaleDate) - new Date(a.SaleDate));
 
-        // Use live AccountBalance if available; otherwise sum from sales
-        const fromSales = clientSales
+        // AccountBalance returns 0 for all clients on this Mindbody plan — not usable.
+        // Sum account-type payments from sales as the best available approximation.
+        const balance = clientSales
           .flatMap((s) => s.Payments || [])
           .filter((p) => (p.Type || '').toLowerCase().includes('account'))
           .reduce((sum, p) => sum + (p.Amount || 0), 0);
-        const balance = client.accountBalance != null ? client.accountBalance : fromSales;
 
         if (balance <= 0) return null;
 
