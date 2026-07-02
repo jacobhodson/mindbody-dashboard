@@ -12,6 +12,7 @@ import PaymentIssuesTable from './PaymentIssuesTable.jsx';
 import DeclinedList       from './DeclinedList.jsx';
 import OnboardingTab          from './OnboardingTab.jsx';
 import PersonalTrainingTab    from './PersonalTrainingTab.jsx';
+import CelebrationsPanel   from './CelebrationsPanel.jsx';
 import { useOnboardingRollover } from '../utils/useOnboardingRollover.js';
 
 const TABS = [
@@ -146,6 +147,11 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             <FringeClientsTable
               contactLog={contactLog}
               onboardingIds={onboardingIds}
+            />
+            <CelebrationsPanel
+              data={data.celebrations}
+              loading={loading.celebrations}
+              error={errors.celebrations}
             />
           </>
         )}
