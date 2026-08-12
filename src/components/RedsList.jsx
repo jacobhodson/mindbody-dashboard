@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { TrendingDown, Search, CheckCircle, ArrowUp, ArrowDown, ArrowRight, Sparkles, ChevronDown } from 'lucide-react';
+import { TrendingDown, Search, CheckCircle, ArrowUp, ArrowDown, ArrowRight, Sparkles, ChevronDown, AlertTriangle, BadgeCheck } from 'lucide-react';
 import { formatDistanceToNow, parseISO, format, differenceInDays } from 'date-fns';
 import ContactModal          from './ContactModal.jsx';
 import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
@@ -63,7 +63,9 @@ export default function RedsList({ data: propData, loading: propLoading, error: 
   }, [period, propData]);
 
   // Exclude clients currently in the onboarding pipeline — they're tracked separately
+  // (Backend already sorts urgent — active-contract + long-lapsed — clients first)
   const clients = (data?.reds || []).filter((c) => !onboardingIds.has(c.id));
+  const urgentCount = clients.filter((c) => c.hasActiveContract && c.longLapsed).length;
 
   const isContacted   = contactLog?.isContacted  ?? (() => false);
   const logContact    = contactLog?.logContact    ?? null;
@@ -92,6 +94,12 @@ export default function RedsList({ data: propData, loading: propLoading, error: 
           {!loading && (
             <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-400 border border-red-500/20">
               {clients.length}
+            </span>
+          )}
+          {!loading && urgentCount > 0 && (
+            <span className="flex items-center gap-1 rounded-full bg-orange-500/10 px-2 py-0.5 text-xs font-medium text-orange-400 border border-orange-500/20">
+              <AlertTriangle className="h-3 w-3" />
+              {urgentCount} urgent
             </span>
           )}
         </div>
@@ -166,18 +174,30 @@ export default function RedsList({ data: propData, loading: propLoading, error: 
                 if (days < 14) return `Last seen ${days}d ago`;
                 return `Last seen ${format(parseISO(client.lastSessionDate), 'd MMM')}`;
               })()
-            : null;
+            : (client.longLapsed ? 'No visits in 28+ days' : null);
+          const isUrgent = client.hasActiveContract && client.longLapsed;
 
           return (
             <div key={client.id} className="border-b border-gray-800/60 last:border-0">
               {/* Main row — click anywhere to expand */}
               <div
-                className={`flex items-center justify-between px-5 py-3 hover:bg-gray-800/40 transition-colors cursor-pointer select-none ${wasContacted ? 'opacity-60' : ''}`}
+                className={`flex items-center justify-between px-5 py-3 hover:bg-gray-800/40 transition-colors cursor-pointer select-none ${wasContacted ? 'opacity-60' : ''} ${isUrgent && !wasContacted ? 'bg-orange-500/5' : ''}`}
                 onClick={() => toggleExpand(client.id)}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-medium text-gray-200 truncate">{client.name || 'Unknown'}</p>
+                    {isUrgent && (
+                      <span className="shrink-0 flex items-center gap-1 rounded-full bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-400 border border-orange-500/20">
+                        <AlertTriangle className="h-2.5 w-2.5" />
+                        Urgent · active contract
+                      </span>
+                    )}
+                    {!isUrgent && client.hasActiveContract && (
+                      <span className="shrink-0 flex items-center gap-1 text-[10px] text-emerald-500/80" title="Has an active contract">
+                        <BadgeCheck className="h-3 w-3" />
+                      </span>
+                    )}
                     <TrendBadge trend={client.trend} />
                     {wasContacted && (
                       <span className="shrink-0 flex items-center gap-1 text-xs text-emerald-500">

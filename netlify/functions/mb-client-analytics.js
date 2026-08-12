@@ -3,7 +3,13 @@
  * Supports ?period=7days (default) or ?period=calendarWeek (last Mon–Sun)
  *
  * Returns:
- *   reds        – visited W2–W4 but NOT W1 (Red's List = inactive + churning)
+ *   reds        – visited W2–W4 but NOT W1 (recent churn), PLUS active clients
+ *                 with ZERO visits anywhere in the 28-day window ("long-lapsed").
+ *                 Long-lapsed clients used to fall out of this list entirely once
+ *                 they crossed the 28-day mark — they're now flagged instead
+ *                 (`longLapsed: true`), with `hasActiveContract` set from a live
+ *                 contract check so staff can prioritise still-paying members
+ *                 for an urgent call.
  *   fringe      – visited W1, segmented by count (atRisk/engaged)
  *                 each client carries: sessionsThisWeek, trend, service, isFullyUtilising
  *   noShows     – clients with unsigned bookings in W1 window
@@ -76,6 +82,32 @@ async function getContractResumeDate(token, clientId) {
     return earliest;
   } catch {
     return null;
+  }
+}
+
+// Fetch a client's contracts and report whether any is currently active
+// (today falls within its start/end dates, or it has no end date at all —
+// i.e. an ongoing auto-pay membership). Field names are defensive since MB's
+// contract schema varies by account — same approach as getContractResumeDate.
+async function getActiveContract(token, clientId) {
+  try {
+    const data = await mbGet('/client/clientcontracts', token, { clientId, Limit: 20 });
+    const contracts = data.ClientContracts || data.Contracts || [];
+    const now = new Date();
+    for (const c of contracts) {
+      const startRaw = c.AgreementDate || c.StartDate || c.startDate || null;
+      const endRaw   = c.ExpirationDate || c.EndDate || c.endDate || null;
+      const start = startRaw ? new Date(startRaw) : null;
+      const end   = endRaw   ? new Date(endRaw)   : null;
+      const started  = !start || isNaN(start.getTime()) || start <= now;
+      const notEnded = !end   || isNaN(end.getTime())   || end   >= now;
+      if (started && notEnded) {
+        return { hasActiveContract: true, contractName: c.Name || c.ContractName || c.ProductName || null };
+      }
+    }
+    return { hasActiveContract: false, contractName: null };
+  } catch {
+    return { hasActiveContract: false, contractName: null };
   }
 }
 
@@ -244,6 +276,58 @@ export const handler = async (event) => {
         return b.lastSessionDate.localeCompare(a.lastSessionDate);
       });
 
+    // Long-lapsed: active, non-suspended clients with ZERO visits anywhere in
+    // the 28-day window. These have no entry in `weeks` at all, so without this
+    // they just vanish from Red's List the moment they cross ~28 days absent —
+    // even if they're still on an active, paying contract.
+    const seenIds = new Set(Object.keys(weeks));
+    const longLapsedCandidates = Object.values(clientMap)
+      .filter((c) => (c.status || '').toLowerCase() === 'active')
+      .filter((c) => !(c.suspensionInfo && Object.keys(c.suspensionInfo).length > 0))
+      .filter((c) => !seenIds.has(c.id))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 100);
+
+    // Contract check both groups so staff can prioritise active-contract
+    // holders first. Capped before fetching to bound parallel MB API calls
+    // (same pattern as the suspensions contract lookup below).
+    const redsForContractCheck = reds.slice(0, 100);
+    const [redsContracts, lapsedContracts] = await Promise.all([
+      Promise.allSettled(redsForContractCheck.map((c) => getActiveContract(token, c.id))),
+      Promise.allSettled(longLapsedCandidates.map((c) => getActiveContract(token, c.id))),
+    ]);
+
+    reds.forEach((c, i) => {
+      const result = i < redsContracts.length && redsContracts[i].status === 'fulfilled'
+        ? redsContracts[i].value : null;
+      c.hasActiveContract = result?.hasActiveContract ?? false;
+      c.contractName      = result?.contractName ?? null;
+      c.longLapsed         = false;
+    });
+
+    const longLapsed = longLapsedCandidates.map((c, i) => {
+      const result = lapsedContracts[i].status === 'fulfilled' ? lapsedContracts[i].value : null;
+      return enrichClient(c.id, {
+        sessionsThisWeek:  0,
+        longLapsed:        true,
+        hasActiveContract: result?.hasActiveContract ?? false,
+        contractName:      result?.contractName ?? null,
+      });
+    });
+
+    // Merge: active-contract + long-lapsed ("urgent") first, then other
+    // active-contract holders, then everyone else by most-recently-seen.
+    const allReds = [...reds, ...longLapsed].sort((a, b) => {
+      const aUrgent = a.hasActiveContract && a.longLapsed;
+      const bUrgent = b.hasActiveContract && b.longLapsed;
+      if (aUrgent !== bUrgent) return aUrgent ? -1 : 1;
+      if (a.hasActiveContract !== b.hasActiveContract) return a.hasActiveContract ? -1 : 1;
+      if (!a.lastSessionDate && !b.lastSessionDate) return 0;
+      if (!a.lastSessionDate) return 1;
+      if (!b.lastSessionDate) return -1;
+      return b.lastSessionDate.localeCompare(a.lastSessionDate);
+    });
+
     // Fringe (visited W1): atRisk = 1–2, engaged = 3+
     const byCount = (min, max) =>
       [...visitedW1]
@@ -328,13 +412,15 @@ export const handler = async (event) => {
 
     return ok({
       period,
-      reds:           reds.slice(0, 150),
+      reds:           allReds.slice(0, 200),
       fringeSegments,
       noShows,
       suspensions,
       declinedClients,
       summary: {
-        redsCount:        reds.length,
+        redsCount:        allReds.length,
+        urgentCount:      allReds.filter((c) => c.hasActiveContract && c.longLapsed).length,
+        longLapsedCount:  longLapsed.length,
         visitedThisWeek:  visitedW1.size,
         noShowCount:      noShows.length,
         suspensionCount:  suspensions.length,
