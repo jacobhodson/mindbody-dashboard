@@ -9,7 +9,10 @@
  *                 they crossed the 28-day mark — they're now flagged instead
  *                 (`longLapsed: true`), with `hasActiveContract` set from a live
  *                 contract check so staff can prioritise still-paying members
- *                 for an urgent call.
+ *                 for an urgent call. Clients whose only active contract is
+ *                 PT/semi-private are excluded from the long-lapsed group —
+ *                 they're not expected to attend group classes at all (see
+ *                 mb-pt-analytics.js ptReds for their equivalent).
  *   fringe      – visited W1, segmented by count (atRisk/engaged)
  *                 each client carries: sessionsThisWeek, trend, service, isFullyUtilising
  *   noShows     – clients with unsigned bookings in W1 window
@@ -85,15 +88,30 @@ async function getContractResumeDate(token, clientId) {
   }
 }
 
-// Fetch a client's contracts and report whether any is currently active
-// (today falls within its start/end dates, or it has no end date at all —
-// i.e. an ongoing auto-pay membership). Field names are defensive since MB's
-// contract schema varies by account — same approach as getContractResumeDate.
+// PT/semi-private contract names — these clients are tracked via appointments
+// (see mb-pt-analytics.js / the Personal Training tab), not group classes, so
+// having zero group-class visits is expected for them and shouldn't flag them
+// on the group-class Red's List. Same classifier as mb-pt-analytics.js.
+function isPtContractName(name = '') {
+  const s = name.toLowerCase();
+  if (/semi.?private/.test(s) || /\bsp\b/.test(s) || /\bsp\d/.test(s) || /small.?private/.test(s) || /partner.?train/.test(s) || /2:1/.test(s) || /3:1/.test(s)) return true;
+  if (/personal\s*train/.test(s) || /\bpt\b/.test(s) || /\bpt\d/.test(s) || /1[:\s]1/.test(s) || /1on1/.test(s) || /individual\s*(coach|program)/.test(s)) return true;
+  return false;
+}
+
+// Fetch a client's contracts and report whether a GROUP-CLASS contract is
+// currently active (today falls within its start/end dates, or it has no end
+// date at all — i.e. an ongoing auto-pay membership). PT/semi-private-only
+// contracts don't count here — see isPtContractName above — but are reported
+// via hasPtContract so callers can tell "no active contract at all" apart
+// from "active, but PT-only." Field names are defensive since MB's contract
+// schema varies by account — same approach as getContractResumeDate.
 async function getActiveContract(token, clientId) {
   try {
     const data = await mbGet('/client/clientcontracts', token, { clientId, Limit: 20 });
     const contracts = data.ClientContracts || data.Contracts || [];
     const now = new Date();
+    let hasPtContract = false;
     for (const c of contracts) {
       const startRaw = c.AgreementDate || c.StartDate || c.startDate || null;
       const endRaw   = c.ExpirationDate || c.EndDate || c.endDate || null;
@@ -101,13 +119,14 @@ async function getActiveContract(token, clientId) {
       const end   = endRaw   ? new Date(endRaw)   : null;
       const started  = !start || isNaN(start.getTime()) || start <= now;
       const notEnded = !end   || isNaN(end.getTime())   || end   >= now;
-      if (started && notEnded) {
-        return { hasActiveContract: true, contractName: c.Name || c.ContractName || c.ProductName || null };
-      }
+      if (!(started && notEnded)) continue;
+      const name = c.Name || c.ContractName || c.ProductName || '';
+      if (isPtContractName(name)) { hasPtContract = true; continue; }
+      return { hasActiveContract: true, contractName: name || null, hasPtContract };
     }
-    return { hasActiveContract: false, contractName: null };
+    return { hasActiveContract: false, contractName: null, hasPtContract };
   } catch {
-    return { hasActiveContract: false, contractName: null };
+    return { hasActiveContract: false, contractName: null, hasPtContract: false };
   }
 }
 
@@ -286,7 +305,10 @@ export const handler = async (event) => {
       .filter((c) => !(c.suspensionInfo && Object.keys(c.suspensionInfo).length > 0))
       .filter((c) => !seenIds.has(c.id))
       .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, 100);
+      // Higher cap than reds: PT/SP-only clients (filtered out below, after
+      // the contract check) will always show up here — 0 group visits is
+      // normal for them — so a chunk of this pool won't make the final list.
+      .slice(0, 150);
 
     // Contract check both groups so staff can prioritise active-contract
     // holders first. Capped before fetching to bound parallel MB API calls
@@ -305,15 +327,19 @@ export const handler = async (event) => {
       c.longLapsed         = false;
     });
 
-    const longLapsed = longLapsedCandidates.map((c, i) => {
-      const result = lapsedContracts[i].status === 'fulfilled' ? lapsedContracts[i].value : null;
-      return enrichClient(c.id, {
+    // PT/semi-private-only clients are excluded entirely — they have no
+    // active *group-class* contract, so 0 group-class visits doesn't mean
+    // they've lapsed. They're tracked on the Personal Training tab instead
+    // (mb-pt-analytics.js ptReds), via their appointments.
+    const longLapsed = longLapsedCandidates
+      .map((c, i) => ({ c, result: lapsedContracts[i].status === 'fulfilled' ? lapsedContracts[i].value : null }))
+      .filter(({ result }) => !(result && result.hasPtContract && !result.hasActiveContract))
+      .map(({ c, result }) => enrichClient(c.id, {
         sessionsThisWeek:  0,
         longLapsed:        true,
         hasActiveContract: result?.hasActiveContract ?? false,
         contractName:      result?.contractName ?? null,
-      });
-    });
+      }));
 
     // Merge: active-contract + long-lapsed ("urgent") first, then other
     // active-contract holders, then everyone else by most-recently-seen.
