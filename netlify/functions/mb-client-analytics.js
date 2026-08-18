@@ -4,16 +4,20 @@
  * (current Mon–Sun to date)
  *
  * Returns:
- *   reds        – visited W2–W4 but NOT W1 (recent churn), PLUS active clients
- *                 with ZERO visits anywhere in the 28-day window ("long-lapsed").
- *                 Long-lapsed clients used to fall out of this list entirely once
- *                 they crossed the 28-day mark — they're now flagged instead
- *                 (`longLapsed: true`), with `hasActiveContract` set from a live
- *                 contract check so staff can prioritise still-paying members
- *                 for an urgent call. Clients whose only active contract is
- *                 PT/semi-private are excluded from both groups — they're not
- *                 expected to attend group classes at all (see
- *                 mb-pt-analytics.js ptReds for their equivalent).
+ *   reds        – visited W2–W4 but NOT W1 (recent churn), PLUS clients with
+ *                 ZERO visits anywhere in the 28-day window who currently hold
+ *                 a genuine active GROUP-CLASS contract ("long-lapsed", flagged
+ *                 `longLapsed: true`). Long-lapsed requires a *live contract*
+ *                 check (see getActiveContract), not just MB's client-level
+ *                 Status field — that field isn't a reliable "still a member"
+ *                 signal (confirmed-terminated clients still report Status:
+ *                 "Active"), so gating on it alone let long-departed former
+ *                 clients pile up here permanently. Every long-lapsed entry is
+ *                 therefore always `hasActiveContract: true`, i.e. urgent.
+ *                 Clients whose only active contract is PT/semi-private are
+ *                 excluded from both groups — they're not expected to attend
+ *                 group classes at all (see mb-pt-analytics.js ptReds for
+ *                 their equivalent).
  *   fringe      – visited W1, segmented by count (atRisk/engaged)
  *                 each client carries: sessionsThisWeek, trend, service, isFullyUtilising
  *   noShows     – clients with unsigned bookings in W1 window
@@ -372,16 +376,23 @@ export const handler = async (event) => {
     // leaked onto Red's List.
     const redsFiltered = reds.filter((c) => !(c.hasPtContract && !c.hasActiveContract));
 
-    // Same filter for the long-lapsed group: 0 group-class visits doesn't
-    // mean they've lapsed when they were never expected to attend one.
+    // Long-lapsed only makes Red's List with a genuine, currently active
+    // GROUP-CLASS contract right now (see getActiveContract) — not just an
+    // MB client Status of "Active". That field turns out not to mean "still
+    // a member": clients confirmed fully terminated (zero contracts ever,
+    // or every contract long since past its TerminationDate) still come
+    // back Status: "Active" from MB, so gating on Status alone let former
+    // clients with no live contract pile up on the daily list forever.
+    // Requiring hasActiveContract here also covers the PT/semi-private-only
+    // case for free (see isPtContractName) — those never count toward it.
     const longLapsed = longLapsedCandidates
       .map((c, i) => ({ c, result: lapsedContracts[i].status === 'fulfilled' ? lapsedContracts[i].value : null }))
-      .filter(({ result }) => !(result && result.hasPtContract && !result.hasActiveContract))
+      .filter(({ result }) => result?.hasActiveContract === true)
       .map(({ c, result }) => enrichClient(c.id, {
         sessionsThisWeek:  0,
         longLapsed:        true,
-        hasActiveContract: result?.hasActiveContract ?? false,
-        contractName:      result?.contractName ?? null,
+        hasActiveContract: true,
+        contractName:      result.contractName ?? null,
       }));
 
     // Merge: active-contract + long-lapsed ("urgent") first, then other
