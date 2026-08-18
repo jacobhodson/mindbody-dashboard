@@ -33,7 +33,7 @@ export default function RedsList({ data: propData, loading: propLoading, error: 
   const [selected, setSelected]     = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [period, setPeriod]         = useState('7days');
-  const [view, setView]             = useState('all'); // 'all' | 'urgent'
+  const [view, setView]             = useState('regular'); // 'regular' | 'urgent'
   const [localData, setLocalData]   = useState(null);
   const [localLoading, setLocalLoading] = useState(false);
   const [localError, setLocalError] = useState(null);
@@ -66,14 +66,19 @@ export default function RedsList({ data: propData, loading: propLoading, error: 
   // Exclude clients currently in the onboarding pipeline — they're tracked separately
   // (Backend already sorts urgent — active-contract + long-lapsed — clients first)
   const clients = (data?.reds || []).filter((c) => !onboardingIds.has(c.id));
-  const urgentClients = clients.filter((c) => c.hasActiveContract && c.longLapsed);
-  const urgentCount   = urgentClients.length;
+  const urgentClients  = clients.filter((c) => c.hasActiveContract && c.longLapsed);
+  const regularClients = clients.filter((c) => !(c.hasActiveContract && c.longLapsed));
+  const urgentCount    = urgentClients.length;
 
   const isContacted   = contactLog?.isContacted  ?? (() => false);
   const logContact    = contactLog?.logContact    ?? null;
   const getClientLogs = contactLog?.getClientLogs ?? null;
 
-  const viewClients = view === 'urgent' ? urgentClients : clients;
+  // "Regular" and "Urgent" are a true split, not overlapping views — the
+  // day-to-day list stays clear of urgent (active-contract, 28+ days
+  // silent) clients, which get worked separately (e.g. in a weekly team
+  // meeting) rather than mixed into daily contact work.
+  const viewClients = view === 'urgent' ? urgentClients : regularClients;
 
   const filtered = viewClients.filter((c) => {
     if (!search) return true;
@@ -102,7 +107,7 @@ export default function RedsList({ data: propData, loading: propLoading, error: 
           )}
           {!loading && urgentCount > 0 && (
             <button
-              onClick={() => setView((v) => (v === 'urgent' ? 'all' : 'urgent'))}
+              onClick={() => setView((v) => (v === 'urgent' ? 'regular' : 'urgent'))}
               className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border transition-colors ${
                 view === 'urgent'
                   ? 'bg-orange-500/20 text-orange-300 border-orange-500/40'
@@ -150,8 +155,8 @@ export default function RedsList({ data: propData, loading: propLoading, error: 
         </div>
         <div className="flex rounded-lg border border-gray-700 overflow-hidden text-xs shrink-0">
           {[
-            { key: 'all',    label: 'All'    },
-            { key: 'urgent', label: 'Urgent' },
+            { key: 'regular', label: 'Regular' },
+            { key: 'urgent',  label: 'Urgent'  },
           ].map(({ key, label }) => (
             <button
               key={key}
