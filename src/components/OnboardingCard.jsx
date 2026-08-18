@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { AlertTriangle, BookOpen, MessageSquare, CheckCircle, X, RotateCcw } from 'lucide-react';
+import { AlertTriangle, BookOpen, MessageSquare, CheckCircle, X, RotateCcw, UserMinus } from 'lucide-react';
 import { TASKS_BY_WEEK } from '../utils/onboardingTasks.js';
 import ContactModal from './ContactModal.jsx';
 
@@ -108,18 +108,27 @@ export default function OnboardingCard({
           </div>
         </div>
 
-        {/* Notes / contact log button */}
-        <button
-          onClick={() => setShowContact(true)}
-          title="Notes & contact log"
-          className={`shrink-0 rounded-lg border p-1.5 transition-colors ${
-            wasContacted
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-              : 'border-gray-700 bg-gray-800/60 text-gray-600 hover:text-gray-300 hover:bg-gray-700'
-          }`}
-        >
-          <MessageSquare className="h-3.5 w-3.5" />
-        </button>
+        {/* Action buttons */}
+        <div className="shrink-0 flex items-center gap-1.5">
+          <button
+            onClick={() => setShowContact(true)}
+            title="Notes & contact log"
+            className={`rounded-lg border p-1.5 transition-colors ${
+              wasContacted
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                : 'border-gray-700 bg-gray-800/60 text-gray-600 hover:text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => setDecision(client.id, 'removed')}
+            title="Not really an onboarding client — remove from pipeline"
+            className="rounded-lg border border-gray-700 bg-gray-800/60 p-1.5 text-gray-600 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/10 transition-colors"
+          >
+            <UserMinus className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* ── Row 2: product badge + start date ── */}

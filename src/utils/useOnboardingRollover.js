@@ -1,13 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 
 /**
- * Hook for managing membership rollover decisions.
- * Persists via Netlify Blobs through /api/mb-onboarding-rollover.
+ * Hook for managing membership rollover decisions AND manual onboarding-
+ * pipeline removals (same store — 'removed' isn't a rollover outcome, it's
+ * an override for clients who never should've been swept onto the pipeline
+ * in the first place, e.g. an existing member whose contract changed, or a
+ * one-off trial visitor). Persists via Notion through /api/mb-onboarding-rollover.
  *
  * Returns:
  *   decisions                          → { [clientId]: { decision, decidedAt } }
- *   getDecision(clientId)              → 'rollover' | 'no-rollover' | null
- *   setDecision(clientId, decision)    → Promise<void> (pass null to undo)
+ *   getDecision(clientId)              → 'rollover' | 'no-rollover' | 'removed' | null
+ *   setDecision(clientId, decision)    → Promise<void> (pass null to undo/restore)
  *   loading                            → boolean
  */
 export function useOnboardingRollover() {

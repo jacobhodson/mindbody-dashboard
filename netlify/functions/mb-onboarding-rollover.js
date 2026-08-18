@@ -1,11 +1,16 @@
 /**
- * Persist membership rollover decisions in Notion.
+ * Persist membership rollover decisions — and manual onboarding-pipeline
+ * removals — in Notion. Both share one DB/property: 'removed' is not a
+ * rollover outcome, it's a manual override for clients who were never
+ * really new onboarding starts (an existing member whose contract changed,
+ * a one-off trial visitor, etc.) but got swept onto the pipeline anyway by
+ * the purchase-based detection in mb-onboarding.js.
  *
  * GET  /api/mb-onboarding-rollover
- *   → { decisions: { [clientId]: { decision: 'rollover'|'no-rollover', decidedAt: ISO } } }
+ *   → { decisions: { [clientId]: { decision: 'rollover'|'no-rollover'|'removed', decidedAt: ISO } } }
  *
- * POST /api/mb-onboarding-rollover  { clientId, decision: 'rollover'|'no-rollover'|null }
- *   → null clears/undoes the decision
+ * POST /api/mb-onboarding-rollover  { clientId, decision: 'rollover'|'no-rollover'|'removed'|null }
+ *   → null clears/undoes the decision (restores a removed client to the pipeline)
  *   → { decisions: { ... } }
  *
  * Requires env var: NOTION_TOKEN
@@ -50,7 +55,10 @@ async function fetchAllDecisions() {
       const selectVal = page.properties['Rollover']?.select?.name;
       const dateVal   = page.properties['Date']?.date?.start;
       if (!clientId || !selectVal) continue;
-      const decision = selectVal === 'Rollover' ? 'rollover' : 'no-rollover';
+      const decision =
+        selectVal === 'Rollover' ? 'rollover' :
+        selectVal === 'Removed'  ? 'removed'  :
+        'no-rollover';
       decisions[clientId] = { decision, decidedAt: dateVal || new Date().toISOString() };
     }
     if (!res.has_more) break;
@@ -112,8 +120,11 @@ export const handler = async (event) => {
           await notionReq('PATCH', `/pages/${existingPageId}`, { archived: true });
         }
 
-      } else if (decision === 'rollover' || decision === 'no-rollover') {
-        const notionVal    = decision === 'rollover' ? 'Rollover' : 'No Rollover';
+      } else if (decision === 'rollover' || decision === 'no-rollover' || decision === 'removed') {
+        const notionVal =
+          decision === 'rollover' ? 'Rollover' :
+          decision === 'removed'  ? 'Removed'  :
+          'No Rollover';
         const now          = new Date().toISOString();
         const clientPageId = await findClientPageId(id);
 
@@ -136,7 +147,7 @@ export const handler = async (event) => {
         }
 
       } else {
-        return err('decision must be "rollover", "no-rollover", or null', 400);
+        return err('decision must be "rollover", "no-rollover", "removed", or null', 400);
       }
 
       // Return the full updated decisions map so the UI syncs immediately

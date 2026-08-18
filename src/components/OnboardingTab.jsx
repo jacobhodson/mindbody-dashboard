@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { Users2 } from 'lucide-react';
-import OnboardingBoard from './OnboardingBoard.jsx';
-import OnboardingReds  from './OnboardingReds.jsx';
+import OnboardingBoard   from './OnboardingBoard.jsx';
+import OnboardingReds    from './OnboardingReds.jsx';
+import OnboardingRemoved from './OnboardingRemoved.jsx';
 import { useOnboardingTasks } from '../utils/useOnboardingTasks.js';
 
 // Short-program products get removed from the board if no-rollover is selected
@@ -27,11 +28,17 @@ export default function OnboardingTab({
 }) {
   const { isComplete, toggleTask } = useOnboardingTasks();
 
-  // Filter out short-product clients who explicitly chose no-rollover
+  // Clients manually removed from the pipeline (any product, any week) —
+  // e.g. an existing member whose contract change was mistaken for a new
+  // onboarding purchase, or a one-off trial visitor. Excluded from every
+  // board column below regardless of product type; short-product clients
+  // who explicitly chose no-rollover are excluded too, but that's a
+  // narrower, rollover-specific case (see SHORT_PRODUCTS above).
   const displayData = useMemo(() => {
     if (!data) return null;
     const keep = (arr = []) =>
       arr.filter((c) => {
+        if (decisions[c.id]?.decision === 'removed') return false;
         if (!SHORT_PRODUCTS.has(c.shortProduct)) return true;
         return decisions[c.id]?.decision !== 'no-rollover';
       });
@@ -54,6 +61,21 @@ export default function OnboardingTab({
         week4Count: w4.length,
       },
     };
+  }, [data, decisions]);
+
+  // Clients currently hidden by a 'removed' decision, so staff can restore
+  // one if it was a mistake. Read from the raw (unfiltered) data — displayData
+  // has already dropped them.
+  const removedClients = useMemo(() => {
+    if (!data) return [];
+    const all = [...(data.week1 || []), ...(data.week2 || []), ...(data.week3 || []), ...(data.week4 || [])];
+    const seen = new Set();
+    return all.filter((c) => {
+      if (decisions[c.id]?.decision !== 'removed') return false;
+      if (seen.has(c.id)) return false;
+      seen.add(c.id);
+      return true;
+    });
   }, [data, decisions]);
 
   if (loading) {
@@ -127,6 +149,11 @@ export default function OnboardingTab({
       {/* Pipeline reds — below the board so you can see the full kanban first */}
       {pipelineReds.length > 0 && (
         <OnboardingReds clients={pipelineReds} contactLog={contactLog} />
+      )}
+
+      {/* Manually removed — collapsed by default, one click to undo a mistake */}
+      {removedClients.length > 0 && (
+        <OnboardingRemoved clients={removedClients} setDecision={setDecision} />
       )}
     </div>
   );
