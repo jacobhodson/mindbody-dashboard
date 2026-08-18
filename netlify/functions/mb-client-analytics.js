@@ -1,6 +1,7 @@
 /**
  * 28-day rolling window, split into 4 weekly buckets.
- * Supports ?period=7days (default) or ?period=calendarWeek (last Mon–Sun)
+ * Supports ?period=7days (default, rolling) or ?period=calendarWeek
+ * (current Mon–Sun to date)
  *
  * Returns:
  *   reds        – visited W2–W4 but NOT W1 (recent churn), PLUS active clients
@@ -10,8 +11,8 @@
  *                 (`longLapsed: true`), with `hasActiveContract` set from a live
  *                 contract check so staff can prioritise still-paying members
  *                 for an urgent call. Clients whose only active contract is
- *                 PT/semi-private are excluded from the long-lapsed group —
- *                 they're not expected to attend group classes at all (see
+ *                 PT/semi-private are excluded from both groups — they're not
+ *                 expected to attend group classes at all (see
  *                 mb-pt-analytics.js ptReds for their equivalent).
  *   fringe      – visited W1, segmented by count (atRisk/engaged)
  *                 each client carries: sessionsThisWeek, trend, service, isFullyUtilising
@@ -181,8 +182,16 @@ export const handler = async (event) => {
     // ── W1 window ──────────────────────────────────────────────────────────
     let w1Start, w1End;
     if (period === 'calendarWeek') {
-      w1Start = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
-      w1End   = endOfWeek(subWeeks(now, 1),   { weekStartsOn: 1 });
+      // Current week to date (Mon 00:00 → yesterday 23:59:59). This used to
+      // be the *previous* completed Mon–Sun week (via subWeeks(now, 1)) from
+      // when the toggle was labelled "Last Cal. Week" — but the UI label was
+      // later changed to "This week" without updating this window, so the
+      // filter was silently showing last week's data. "Today excluded" for
+      // the same reason as the rolling window below: in-progress classes
+      // shouldn't skew the count. On a Monday this yields an empty W1 (no
+      // completed days yet this week), which is correct.
+      w1Start = startOfWeek(now, { weekStartsOn: 1 });
+      w1End   = endOfDay(subDays(now, 1));
     } else {
       // default: rolling last 7 days, ending yesterday (today excluded)
       w1Start = subDays(now, 7);
@@ -324,13 +333,22 @@ export const handler = async (event) => {
         ? redsContracts[i].value : null;
       c.hasActiveContract = result?.hasActiveContract ?? false;
       c.contractName      = result?.contractName ?? null;
+      c.hasPtContract      = result?.hasPtContract ?? false;
       c.longLapsed         = false;
     });
 
     // PT/semi-private-only clients are excluded entirely — they have no
-    // active *group-class* contract, so 0 group-class visits doesn't mean
-    // they've lapsed. They're tracked on the Personal Training tab instead
-    // (mb-pt-analytics.js ptReds), via their appointments.
+    // active *group-class* contract, so skipping W1 doesn't mean they've
+    // churned from group classes. They're tracked on the Personal Training
+    // tab instead (mb-pt-analytics.js ptReds), via their appointments. This
+    // mirrors the same filter applied to the long-lapsed group below —
+    // previously only long-lapsed clients got it, so PT-only clients who'd
+    // recently skipped a group class (rather than gone fully silent) still
+    // leaked onto Red's List.
+    const redsFiltered = reds.filter((c) => !(c.hasPtContract && !c.hasActiveContract));
+
+    // Same filter for the long-lapsed group: 0 group-class visits doesn't
+    // mean they've lapsed when they were never expected to attend one.
     const longLapsed = longLapsedCandidates
       .map((c, i) => ({ c, result: lapsedContracts[i].status === 'fulfilled' ? lapsedContracts[i].value : null }))
       .filter(({ result }) => !(result && result.hasPtContract && !result.hasActiveContract))
@@ -343,7 +361,7 @@ export const handler = async (event) => {
 
     // Merge: active-contract + long-lapsed ("urgent") first, then other
     // active-contract holders, then everyone else by most-recently-seen.
-    const allReds = [...reds, ...longLapsed].sort((a, b) => {
+    const allReds = [...redsFiltered, ...longLapsed].sort((a, b) => {
       const aUrgent = a.hasActiveContract && a.longLapsed;
       const bUrgent = b.hasActiveContract && b.longLapsed;
       if (aUrgent !== bUrgent) return aUrgent ? -1 : 1;
