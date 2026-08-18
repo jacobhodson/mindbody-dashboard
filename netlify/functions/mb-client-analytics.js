@@ -107,20 +107,45 @@ function isPtContractName(name = '') {
 // via hasPtContract so callers can tell "no active contract at all" apart
 // from "active, but PT-only." Field names are defensive since MB's contract
 // schema varies by account — same approach as getContractResumeDate.
+//
+// MB keeps every past contract on this list — upgrades/downgrades/plan
+// switches create a new ClientContract row rather than editing the old one,
+// and the old row's Start/EndDate window often still spans "today" even
+// though the client has actually moved on. The row's TerminationDate is
+// what actually marks it superseded, but the original version of this
+// function never read it — so a client who upgraded from a group plan to a
+// PT/semi-private plan still showed up with their *old* group contract as
+// "active," and the group Red's List never even reached the real, current
+// PT contract to exclude them. Now: (1) a contract with a past
+// TerminationDate is treated as no longer active regardless of its
+// Start/EndDate window, and (2) when more than one contract still
+// qualifies, the most recently started one wins — that's the one actually
+// in force.
 async function getActiveContract(token, clientId) {
   try {
     const data = await mbGet('/client/clientcontracts', token, { clientId, Limit: 20 });
     const contracts = data.ClientContracts || data.Contracts || [];
     const now = new Date();
-    let hasPtContract = false;
+
+    const live = [];
     for (const c of contracts) {
       const startRaw = c.AgreementDate || c.StartDate || c.startDate || null;
       const endRaw   = c.ExpirationDate || c.EndDate || c.endDate || null;
+      const termRaw  = c.TerminationDate || c.terminationDate || null;
       const start = startRaw ? new Date(startRaw) : null;
       const end   = endRaw   ? new Date(endRaw)   : null;
-      const started  = !start || isNaN(start.getTime()) || start <= now;
-      const notEnded = !end   || isNaN(end.getTime())   || end   >= now;
-      if (!(started && notEnded)) continue;
+      const term  = termRaw  ? new Date(termRaw)  : null;
+      const started      = !start || isNaN(start.getTime()) || start <= now;
+      const notEnded      = !end   || isNaN(end.getTime())   || end   >= now;
+      const notTerminated = !term  || isNaN(term.getTime())  || term  > now;
+      if (started && notEnded && notTerminated) live.push({ c, start });
+    }
+    // Most recently started first, so a plan switch's new contract is
+    // checked before the older one it replaced.
+    live.sort((a, b) => (b.start?.getTime() ?? 0) - (a.start?.getTime() ?? 0));
+
+    let hasPtContract = false;
+    for (const { c } of live) {
       const name = c.Name || c.ContractName || c.ProductName || '';
       if (isPtContractName(name)) { hasPtContract = true; continue; }
       return { hasActiveContract: true, contractName: name || null, hasPtContract };
