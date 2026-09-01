@@ -1,3 +1,4 @@
+import Noticeboard from './Noticeboard.jsx';
 import TargetsPanel from './TargetsPanel.jsx';
 import TaskChecklist from './TaskChecklist.jsx';
 
@@ -10,6 +11,7 @@ export default function Home({ user, staff, isManager }) {
         </h1>
         <p className="text-sm text-gray-500">Here's what's due, and how the week's tracking.</p>
       </div>
+      <Noticeboard staff={staff} isManager={isManager} />
       <TargetsPanel staff={staff} isManager={isManager} />
       <TaskChecklist user={user} staff={staff} isManager={isManager} />
     </div>
