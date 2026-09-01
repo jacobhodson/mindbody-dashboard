@@ -4,13 +4,14 @@ import OnboardingBoard   from './OnboardingBoard.jsx';
 import OnboardingReds    from './OnboardingReds.jsx';
 import OnboardingRemoved from './OnboardingRemoved.jsx';
 import { useOnboardingTasks } from '../utils/useOnboardingTasks.js';
+import { useOnboardingTaskTemplates } from '../utils/useOnboardingTaskTemplates.js';
 
 // Short-program products get removed from the board if no-rollover is selected
 const SHORT_PRODUCTS = new Set(['3-Session', '14-Day']);
 
-function StatPill({ label, value, color = 'text-gray-300' }) {
+function StatPill({ label, value, color = 'text-gray-700' }) {
   return (
-    <div className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-3 text-center">
+    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-center">
       <p className={`text-xl font-bold tabular-nums ${color}`}>{value}</p>
       <p className="text-xs text-gray-500 mt-0.5">{label}</p>
     </div>
@@ -25,8 +26,10 @@ export default function OnboardingTab({
   decisions,
   getDecision,
   setDecision,
+  staff,
 }) {
-  const { isComplete, toggleTask } = useOnboardingTasks();
+  const { templates: taskTemplates, tasksByWeek } = useOnboardingTaskTemplates();
+  const { isComplete, toggleTask } = useOnboardingTasks(staff, taskTemplates);
 
   // Clients manually removed from the pipeline (any product, any week) —
   // e.g. an existing member whose contract change was mistaken for a new
@@ -83,12 +86,12 @@ export default function OnboardingTab({
       <div className="space-y-6">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse rounded-lg bg-gray-800" />
+            <div key={i} className="h-16 animate-pulse rounded-lg bg-gray-200" />
           ))}
         </div>
         <div className="flex gap-4 overflow-x-auto">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="shrink-0 w-72 h-64 animate-pulse rounded-xl bg-gray-800" />
+            <div key={i} className="shrink-0 w-72 h-64 animate-pulse rounded-xl bg-gray-200" />
           ))}
         </div>
       </div>
@@ -97,8 +100,8 @@ export default function OnboardingTab({
 
   if (error) {
     return (
-      <div className="rounded-xl border border-gray-800 bg-gray-900 p-8 text-center">
-        <p className="text-sm text-red-400">Could not load onboarding data: {error}</p>
+      <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
+        <p className="text-sm text-red-600">Could not load onboarding data: {error}</p>
       </div>
     );
   }
@@ -117,20 +120,20 @@ export default function OnboardingTab({
     <div className="space-y-6">
       {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatPill label="In pipeline" value={summary.total      ?? 0} color="text-white" />
-        <StatPill label="At risk"     value={summary.atRisk     ?? 0} color={summary.atRisk > 0 ? 'text-red-400' : 'text-gray-300'} />
-        <StatPill label="Week 1"      value={summary.week1Count ?? 0} color="text-blue-400" />
-        <StatPill label="Week 2"      value={summary.week2Count ?? 0} color="text-amber-400" />
-        <StatPill label="Week 3"      value={summary.week3Count ?? 0} color="text-violet-400" />
-        <StatPill label="Week 4"      value={summary.week4Count ?? 0} color="text-emerald-400" />
+        <StatPill label="In pipeline" value={summary.total      ?? 0} color="text-gray-900" />
+        <StatPill label="At risk"     value={summary.atRisk     ?? 0} color={summary.atRisk > 0 ? 'text-red-600' : 'text-gray-700'} />
+        <StatPill label="Week 1"      value={summary.week1Count ?? 0} color="text-blue-600" />
+        <StatPill label="Week 2"      value={summary.week2Count ?? 0} color="text-amber-600" />
+        <StatPill label="Week 3"      value={summary.week3Count ?? 0} color="text-violet-600" />
+        <StatPill label="Week 4"      value={summary.week4Count ?? 0} color="text-emerald-600" />
       </div>
 
       {/* Kanban board */}
       {isEmpty ? (
-        <div className="rounded-xl border border-gray-800 bg-gray-900 py-20 text-center">
-          <Users2 className="h-10 w-10 text-gray-700 mx-auto mb-3" />
+        <div className="rounded-xl border border-gray-200 bg-white py-20 text-center">
+          <Users2 className="h-10 w-10 text-gray-300 mx-auto mb-3" />
           <p className="text-sm text-gray-500 font-medium">No active onboarding clients</p>
-          <p className="text-xs text-gray-600 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             Clients appear here when they purchase a 3-Session Pass, 14-Day Pass,<br />
             4-Week Kickstarter, Strong Dad or Strong Mum Transformation.
           </p>
@@ -143,6 +146,7 @@ export default function OnboardingTab({
           contactLog={contactLog}
           getDecision={getDecision}
           setDecision={setDecision}
+          tasksByWeek={tasksByWeek}
         />
       )}
 

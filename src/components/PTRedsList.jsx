@@ -17,13 +17,13 @@ export default function PTRedsList({ data, loading, error, contactLog }) {
   const toggleExpand = (id) => setExpandedId(prev => prev === id ? null : id);
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900 flex flex-col">
-      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-800">
+    <div className="rounded-xl border border-gray-200 bg-white flex flex-col">
+      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-200">
         <div className="flex items-center gap-2">
-          <TrendingDown className="h-4 w-4 text-red-400" />
-          <h2 className="font-semibold text-white">PT Red's List</h2>
+          <TrendingDown className="h-4 w-4 text-red-600" />
+          <h2 className="font-semibold text-gray-900">PT Red's List</h2>
           {!loading && (
-            <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-400 border border-red-500/20">
+            <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600 border border-red-500/20">
               {clients.length}
             </span>
           )}
@@ -35,13 +35,13 @@ export default function PTRedsList({ data, loading, error, contactLog }) {
         {loading && (
           <div className="space-y-2 p-5">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-800" />
+              <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-200" />
             ))}
           </div>
         )}
 
         {error && !loading && (
-          <p className="p-5 text-sm text-red-400">Could not load: {error}</p>
+          <p className="p-5 text-sm text-red-600">Could not load: {error}</p>
         )}
 
         {!loading && !error && clients.length === 0 && (
@@ -65,24 +65,24 @@ export default function PTRedsList({ data, loading, error, contactLog }) {
             : null;
 
           return (
-            <div key={client.id} className="border-b border-gray-800/60 last:border-0">
+            <div key={client.id} className="border-b border-gray-200/60 last:border-0">
               <div
-                className={`flex items-center justify-between px-5 py-3 hover:bg-gray-800/40 transition-colors cursor-pointer select-none ${wasContacted ? 'opacity-60' : ''}`}
+                className={`flex items-center justify-between px-5 py-3 hover:bg-gray-200/40 transition-colors cursor-pointer select-none ${wasContacted ? 'opacity-60' : ''}`}
                 onClick={() => toggleExpand(client.id)}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-gray-200 truncate">{client.name || 'Unknown'}</p>
+                    <p className="text-sm font-medium text-gray-800 truncate">{client.name || 'Unknown'}</p>
                     {client.service && (
-                      <span className="shrink-0 text-[10px] font-medium text-gray-600 bg-gray-800 rounded px-1.5 py-0.5">
+                      <span className="shrink-0 text-[10px] font-medium text-gray-400 bg-gray-200 rounded px-1.5 py-0.5">
                         {client.service}
                       </span>
                     )}
                   </div>
                   <p className="text-xs text-gray-500 truncate mt-0.5">
                     {client.email || client.phone || 'No contact details'}
-                    {lastSeen && <span className="ml-2 text-gray-600">{lastSeen}</span>}
-                    {client.staffName && <span className="ml-2 text-gray-600">· {client.staffName}</span>}
+                    {lastSeen && <span className="ml-2 text-gray-400">{lastSeen}</span>}
+                    {client.staffName && <span className="ml-2 text-gray-400">· {client.staffName}</span>}
                   </p>
                 </div>
 
@@ -91,13 +91,13 @@ export default function PTRedsList({ data, loading, error, contactLog }) {
                     onClick={(e) => { e.stopPropagation(); setSelected(client); }}
                     className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${
                       wasContacted
-                        ? 'border-gray-700 bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
-                        : 'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                        ? 'border-gray-300 bg-gray-200 text-gray-500 hover:bg-gray-300 hover:text-gray-700'
+                        : 'border-red-500/30 bg-red-500/10 text-red-600 hover:bg-red-500/20'
                     }`}
                   >
                     {wasContacted ? 'View log' : 'Contact'}
                   </button>
-                  <ChevronDown className={`h-3.5 w-3.5 text-gray-600 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                 </div>
               </div>
 

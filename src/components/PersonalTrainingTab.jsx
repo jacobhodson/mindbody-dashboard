@@ -5,9 +5,9 @@ import SessionCreditsList  from './SessionCreditsList.jsx';
 
 // ── Stats table ────────────────────────────────────────────────────────────
 function StatCell({ value, loading }) {
-  if (loading) return <td className="px-4 py-3 text-center"><div className="h-5 w-8 mx-auto animate-pulse rounded bg-gray-700" /></td>;
+  if (loading) return <td className="px-4 py-3 text-center"><div className="h-5 w-8 mx-auto animate-pulse rounded bg-gray-300" /></td>;
   return (
-    <td className="px-4 py-3 text-center tabular-nums text-sm font-semibold text-gray-200">
+    <td className="px-4 py-3 text-center tabular-nums text-sm font-semibold text-gray-800">
       {value ?? '–'}
     </td>
   );
@@ -24,15 +24,15 @@ function PTStatsTable({ stats, loading }) {
   };
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900 overflow-hidden">
-      <div className="px-5 pt-5 pb-3 border-b border-gray-800">
-        <h2 className="font-semibold text-white">Session Counts</h2>
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="px-5 pt-5 pb-3 border-b border-gray-200">
+        <h2 className="font-semibold text-gray-900">Session Counts</h2>
         <p className="text-xs text-gray-500 mt-0.5">Total PT &amp; Semi-Private sessions across time periods</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-800">
+            <tr className="border-b border-gray-200">
               <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 w-1/3" />
               <th className="px-4 py-2.5 text-center text-xs font-medium text-gray-500">This Week</th>
               <th className="px-4 py-2.5 text-center text-xs font-medium text-gray-500">Last Week</th>
@@ -45,7 +45,7 @@ function PTStatsTable({ stats, loading }) {
               <td className="px-4 py-4">
                 <span className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  <span className="text-sm font-semibold text-gray-200">Total Sessions</span>
+                  <span className="text-sm font-semibold text-gray-800">Total Sessions</span>
                 </span>
               </td>
               <StatCell value={loading ? null : total.thisWeek}  loading={loading} />
@@ -64,8 +64,8 @@ function PTStatsTable({ stats, loading }) {
 export default function PersonalTrainingTab({ data, loading, error, contactLog }) {
   if (error && !data) {
     return (
-      <div className="rounded-xl border border-gray-800 bg-gray-900 p-8 text-center">
-        <p className="text-sm text-red-400">Could not load PT data: {error}</p>
+      <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
+        <p className="text-sm text-red-600">Could not load PT data: {error}</p>
         {error.includes('sample types') || (
           <p className="text-xs text-gray-500 mt-2">
             Check Netlify function logs — if session types show as empty, your PT sessions

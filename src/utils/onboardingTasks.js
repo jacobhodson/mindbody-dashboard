@@ -2,7 +2,12 @@
  * Onboarding task definitions — 18 tasks across 4 weeks.
  * Each task has an id, week, label, description, and script.
  * Scripts use [Name] as a placeholder for the client's first name.
+ *
+ * The scripts, bingo card criteria, and reward below reflect one gym's
+ * onboarding process — edit freely to match your own program.
  */
+
+const BUSINESS_NAME = import.meta.env.VITE_BUSINESS_NAME || 'Your Gym';
 
 export const ONBOARDING_TASKS = [
   // ─── Week 1 ──────────────────────────────────────────────────────────────
@@ -11,7 +16,7 @@ export const ONBOARDING_TASKS = [
     week: 1,
     label: 'Pre-session text',
     description: 'Send a warm welcome text before their very first session. Set expectations, build excitement, and let them know you\'re personally looking out for them.',
-    script: `Hey [Name]! 👋 So stoked to welcome you to Newstrength. Just wanted to reach out before your first session — wear comfy workout clothes, bring a water bottle, and most importantly, just show up and have fun. We\'ll take care of everything else. See you soon! 💪`,
+    script: `Hey [Name]! 👋 So stoked to welcome you to ${BUSINESS_NAME}. Just wanted to reach out before your first session — wear comfy workout clothes, bring a water bottle, and most importantly, just show up and have fun. We\'ll take care of everything else. See you soon! 💪`,
   },
   {
     id: 'w1-post-session',
@@ -46,7 +51,7 @@ export const ONBOARDING_TASKS = [
     week: 1,
     label: 'End-of-week voice memo',
     description: 'Record and send a personal voice message at the end of Week 1. This personal touch goes a long way in making clients feel seen.',
-    script: `Record a 30–45 second voice note:\n"Hey [Name], it\'s [Your Name] from Newstrength! Just wanted to reach out at the end of your first week and say — you actually did it. You showed up. Week 1 is done and I honestly couldn\'t be more proud. [Mention something specific — a session they crushed, a moment of effort]. Week 2 is where things start to click, and I\'m so excited for you. See you soon!"`,
+    script: `Record a 30–45 second voice note:\n"Hey [Name], it\'s [Your Name] from ${BUSINESS_NAME}! Just wanted to reach out at the end of your first week and say — you actually did it. You showed up. Week 1 is done and I honestly couldn\'t be more proud. [Mention something specific — a session they crushed, a moment of effort]. Week 2 is where things start to click, and I\'m so excited for you. See you soon!"`,
   },
 
   // ─── Week 2 ──────────────────────────────────────────────────────────────
@@ -122,21 +127,21 @@ export const ONBOARDING_TASKS = [
     week: 4,
     label: 'Selfie video message',
     description: 'Record a short, personal selfie video to celebrate Week 4 and their near-completion of the program. This is high-impact, personal, and memorable.',
-    script: `Record a 30–60 second selfie video (send via phone):\n"Hey [Name]! It\'s [Your Name]. I cannot believe we\'re already in Week 4 — where has the time gone?! I just wanted to take a moment to tell you how genuinely proud I am of you. You turned up when it was hard. You pushed through [specific moment or win]. The community at Newstrength is honestly lucky to have you, and I\'m so excited about what comes next. Let\'s make Week 4 the best one yet. I\'ll see you in the gym!"`,
+    script: `Record a 30–60 second selfie video (send via phone):\n"Hey [Name]! It\'s [Your Name]. I cannot believe we\'re already in Week 4 — where has the time gone?! I just wanted to take a moment to tell you how genuinely proud I am of you. You turned up when it was hard. You pushed through [specific moment or win]. The community at ${BUSINESS_NAME} is honestly lucky to have you, and I\'m so excited about what comes next. Let\'s make Week 4 the best one yet. I\'ll see you in the gym!"`,
   },
   {
     id: 'w4-bingo-card',
     week: 4,
     label: 'Bingo card presentation',
-    description: 'Review the Newstrength Bingo Card with the client. Completing all 5 criteria earns them the Newstrength shirt. Review each item, celebrate completed ones, and motivate them to finish the remaining ones.',
-    script: `Bingo Card — Newstrength Shirt (all 5 required):\n✅ 12 sessions completed in 28 days\n✅ Bring a friend to a Saturday session\n✅ Read the nutrition guide\n✅ Leave a Google review\n✅ Book a strategy session\n\nReview each item with the client:\n- Celebrate any already completed\n- For incomplete items: "This one is totally within reach before the end of Week 4 — here\'s how..."\n- Build excitement: "The shirt is yours when you hit all 5 — and you\'re [X] away!"`,
+    description: `Review the ${BUSINESS_NAME} Bingo Card with the client. Completing all 5 criteria earns them the ${BUSINESS_NAME} shirt. Review each item, celebrate completed ones, and motivate them to finish the remaining ones.`,
+    script: `Bingo Card — ${BUSINESS_NAME} Shirt (all 5 required):\n✅ 12 sessions completed in 28 days\n✅ Bring a friend to a Saturday session\n✅ Read the nutrition guide\n✅ Leave a Google review\n✅ Book a strategy session\n\nReview each item with the client:\n- Celebrate any already completed\n- For incomplete items: "This one is totally within reach before the end of Week 4 — here\'s how..."\n- Build excitement: "The shirt is yours when you hit all 5 — and you\'re [X] away!"`,
   },
   {
     id: 'w4-google-review',
     week: 4,
     label: 'Google review nudge',
     description: 'Ask for a Google review at the end of Week 4 when they\'re at peak satisfaction. This is also a bingo card item — frame it as a win for them.',
-    script: `Hey [Name]! You have absolutely been smashing it these past 4 weeks and we\'re so grateful you chose Newstrength 🙏\n\nIf you\'ve had a great experience, would you mind leaving us a quick Google review? It genuinely means the world to us — it helps other people like you find us and keeps our small community growing.\n\n⭐ Leave a review here: [Google Review Link]\n\nAnd yes — it also ticks off your Google review bingo card item 😄 No pressure at all, but we\'d love to hear your story!`,
+    script: `Hey [Name]! You have absolutely been smashing it these past 4 weeks and we\'re so grateful you chose ${BUSINESS_NAME} 🙏\n\nIf you\'ve had a great experience, would you mind leaving us a quick Google review? It genuinely means the world to us — it helps other people like you find us and keeps our small community growing.\n\n⭐ Leave a review here: [Google Review Link]\n\nAnd yes — it also ticks off your Google review bingo card item 😄 No pressure at all, but we\'d love to hear your story!`,
   },
 ];
 

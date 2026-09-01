@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@netlify/blobs": "^10.7.9",
+    "@supabase/supabase-js": "^2.45.0",
     "date-fns": "^3.6.0",
     "lucide-react": "^0.400.0",
     "react": "^18.3.1",

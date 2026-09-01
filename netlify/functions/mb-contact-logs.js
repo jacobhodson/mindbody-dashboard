@@ -14,7 +14,7 @@
 import { ok, err, CORS } from './utils/mb-auth.js';
 
 const NOTION_BASE    = 'https://api.notion.com/v1';
-const CONTACT_LOG_DB = process.env.NOTION_CONTACT_LOG_DB || '15e93dca2d9b41ccbd0008f177e8a14b';
+const CONTACT_LOG_DB = process.env.NOTION_CONTACT_LOG_DB;
 const DAYS_7         = 7 * 24 * 60 * 60 * 1000;
 
 async function notionReq(method, path, body) {

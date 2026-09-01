@@ -8,7 +8,7 @@ import { getStore } from '@netlify/blobs';
 import { ok, err, CORS } from './utils/mb-auth.js';
 
 const STORE_KEY = 'dashboard-snapshot';
-const BASE_URL  = process.env.URL || 'https://newstrength-ops-dashboard.netlify.app';
+const BASE_URL  = process.env.URL || 'http://localhost:8888';
 
 async function fetchAll() {
   const [att, ana, pay, rev] = await Promise.allSettled([

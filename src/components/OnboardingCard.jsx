@@ -1,26 +1,25 @@
 import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { AlertTriangle, BookOpen, MessageSquare, CheckCircle, X, RotateCcw, UserMinus } from 'lucide-react';
-import { TASKS_BY_WEEK } from '../utils/onboardingTasks.js';
 import ContactModal from './ContactModal.jsx';
 
 // Short-program products that get removed from pipeline on no-rollover
 const SHORT_PRODUCTS = new Set(['3-Session', '14-Day']);
 
 const PRODUCT_COLORS = {
-  'Strong Dad': 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-  'Strong Mum': 'bg-pink-500/15 text-pink-400 border-pink-500/30',
-  '4-Week':     'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-  '14-Day':     'bg-violet-500/15 text-violet-400 border-violet-500/30',
-  '3-Session':  'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  'Strong Dad': 'bg-blue-500/15 text-blue-600 border-blue-500/30',
+  'Strong Mum': 'bg-pink-500/15 text-pink-600 border-pink-500/30',
+  '4-Week':     'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
+  '14-Day':     'bg-violet-500/15 text-violet-600 border-violet-500/30',
+  '3-Session':  'bg-amber-500/15 text-amber-600 border-amber-500/30',
 };
 
 function productColor(short = '') {
-  return PRODUCT_COLORS[short] || 'bg-gray-500/15 text-gray-400 border-gray-500/30';
+  return PRODUCT_COLORS[short] || 'bg-gray-500/15 text-gray-600 border-gray-500/30';
 }
 
 function SessionPips({ weekSessions, currentWeek }) {
-  const WEEK_COLORS = ['text-blue-400', 'text-amber-400', 'text-violet-400', 'text-emerald-400'];
+  const WEEK_COLORS = ['text-blue-600', 'text-amber-600', 'text-violet-600', 'text-emerald-600'];
   return (
     <div className="flex items-center gap-2.5 flex-wrap">
       {weekSessions.map((count, i) => {
@@ -30,10 +29,10 @@ function SessionPips({ weekSessions, currentWeek }) {
         return (
           <span
             key={w}
-            className={`inline-flex items-center gap-0.5 text-xs tabular-nums ${isCurrent ? `${color} font-semibold` : 'text-gray-700'}`}
+            className={`inline-flex items-center gap-0.5 text-xs tabular-nums ${isCurrent ? `${color} font-semibold` : 'text-gray-300'}`}
           >
-            <span className={`text-[10px] font-medium ${isCurrent ? color : 'text-gray-700'}`}>W{w}</span>
-            <span className={isCurrent ? color : 'text-gray-600'}>{count}</span>
+            <span className={`text-[10px] font-medium ${isCurrent ? color : 'text-gray-300'}`}>W{w}</span>
+            <span className={isCurrent ? color : 'text-gray-400'}>{count}</span>
           </span>
         );
       })}
@@ -49,10 +48,11 @@ export default function OnboardingCard({
   contactLog,
   getDecision,
   setDecision,
+  tasksByWeek,
 }) {
   const [showContact, setShowContact] = useState(false);
 
-  const weekTasks  = TASKS_BY_WEEK[client.week] || [];
+  const weekTasks  = tasksByWeek?.[client.week] || [];
   const startDate  = parseISO(client.startDate);
   const doneTasks  = weekTasks.filter((t) => isComplete(client.id, t.id)).length;
   const allDone    = doneTasks === weekTasks.length && weekTasks.length > 0;
@@ -70,24 +70,24 @@ export default function OnboardingCard({
       ? 'border-red-500/30 bg-red-950/10'
       : allDone
         ? 'border-emerald-500/20 bg-emerald-950/5'
-        : 'border-gray-800';
+        : 'border-gray-200';
 
   return (
-    <div className={`rounded-lg border bg-gray-900 p-3.5 space-y-3 transition-colors ${cardClass}`}>
+    <div className={`rounded-lg border bg-white p-3.5 space-y-3 transition-colors ${cardClass}`}>
 
       {/* ── Row 1: name + badges + contact button ── */}
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <p className="text-sm font-semibold text-gray-100 truncate">{client.name || 'Unknown'}</p>
+            <p className="text-sm font-semibold text-gray-900 truncate">{client.name || 'Unknown'}</p>
             {client.isAtRisk && !isRollover && (
-              <span className="shrink-0 flex items-center gap-0.5 rounded-full border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">
+              <span className="shrink-0 flex items-center gap-0.5 rounded-full border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
                 <AlertTriangle className="h-2.5 w-2.5" />
                 No sessions
               </span>
             )}
             {isRollover && (
-              <span className="shrink-0 flex items-center gap-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+              <span className="shrink-0 flex items-center gap-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600">
                 <CheckCircle className="h-2.5 w-2.5" />
                 Rolling over
               </span>
@@ -97,13 +97,13 @@ export default function OnboardingCard({
           {/* Contact details */}
           <div className="mt-0.5 space-y-px">
             {client.email && (
-              <p className="text-[11px] text-gray-600 truncate">{client.email}</p>
+              <p className="text-[11px] text-gray-400 truncate">{client.email}</p>
             )}
             {client.phone && (
               <p className="text-[11px] text-gray-500 font-medium">{client.phone}</p>
             )}
             {!client.email && !client.phone && (
-              <p className="text-[11px] text-gray-700">No contact details</p>
+              <p className="text-[11px] text-gray-300">No contact details</p>
             )}
           </div>
         </div>
@@ -115,8 +115,8 @@ export default function OnboardingCard({
             title="Notes & contact log"
             className={`rounded-lg border p-1.5 transition-colors ${
               wasContacted
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-                : 'border-gray-700 bg-gray-800/60 text-gray-600 hover:text-gray-300 hover:bg-gray-700'
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20'
+                : 'border-gray-300 bg-gray-200/60 text-gray-400 hover:text-gray-700 hover:bg-gray-300'
             }`}
           >
             <MessageSquare className="h-3.5 w-3.5" />
@@ -124,7 +124,7 @@ export default function OnboardingCard({
           <button
             onClick={() => setDecision(client.id, 'removed')}
             title="Not really an onboarding client — remove from pipeline"
-            className="rounded-lg border border-gray-700 bg-gray-800/60 p-1.5 text-gray-600 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/10 transition-colors"
+            className="rounded-lg border border-gray-300 bg-gray-200/60 p-1.5 text-gray-400 hover:text-red-600 hover:border-red-500/30 hover:bg-red-500/10 transition-colors"
           >
             <UserMinus className="h-3.5 w-3.5" />
           </button>
@@ -136,7 +136,7 @@ export default function OnboardingCard({
         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${productColor(client.shortProduct)}`}>
           {client.shortProduct || client.product}
         </span>
-        <span className="text-[11px] text-gray-600">
+        <span className="text-[11px] text-gray-400">
           Started {format(startDate, 'd MMM')}
         </span>
       </div>
@@ -144,15 +144,15 @@ export default function OnboardingCard({
       {/* ── Row 3: session counts per week ── */}
       <div className="flex items-center justify-between">
         <SessionPips weekSessions={client.weekSessions} currentWeek={client.week} />
-        <span className="text-[11px] text-gray-600 tabular-nums shrink-0 ml-2">
+        <span className="text-[11px] text-gray-400 tabular-nums shrink-0 ml-2">
           {client.totalSessions} total
         </span>
       </div>
 
       {/* ── Task checklist for current week ── */}
       {weekTasks.length > 0 && (
-        <div className="border-t border-gray-800/60 pt-2.5 space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-2">
+        <div className="border-t border-gray-200/60 pt-2.5 space-y-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
             Week {client.week} tasks · {doneTasks}/{weekTasks.length}
           </p>
           {weekTasks.map((task) => {
@@ -165,7 +165,7 @@ export default function OnboardingCard({
                   className={`h-4 w-4 shrink-0 rounded border flex items-center justify-center transition-colors ${
                     done
                       ? 'border-emerald-500 bg-emerald-500 text-white'
-                      : 'border-gray-700 bg-gray-800 hover:border-gray-500'
+                      : 'border-gray-300 bg-gray-200 hover:border-gray-500'
                   }`}
                 >
                   {done && (
@@ -176,7 +176,7 @@ export default function OnboardingCard({
                 </button>
 
                 {/* Task label */}
-                <span className={`flex-1 text-xs leading-snug truncate ${done ? 'line-through text-gray-600' : 'text-gray-300'}`}>
+                <span className={`flex-1 text-xs leading-snug truncate ${done ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                   {task.label}
                 </span>
 
@@ -184,7 +184,7 @@ export default function OnboardingCard({
                 <button
                   onClick={() => onOpenTask(task)}
                   title="View script"
-                  className="shrink-0 p-1 rounded text-gray-700 hover:text-gray-400 hover:bg-gray-800 transition-colors opacity-0 group-hover:opacity-100"
+                  className="shrink-0 p-1 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-200 transition-colors opacity-0 group-hover:opacity-100"
                 >
                   <BookOpen className="h-3 w-3" />
                 </button>
@@ -195,11 +195,11 @@ export default function OnboardingCard({
       )}
 
       {/* ── Rollover decision ── */}
-      <div className="border-t border-gray-800/60 pt-2.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-2">
+      <div className="border-t border-gray-200/60 pt-2.5">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
           Membership rollover
           {isShort && !decision && (
-            <span className="ml-1.5 font-normal normal-case text-gray-700">— no decision removes from pipeline</span>
+            <span className="ml-1.5 font-normal normal-case text-gray-300">— no decision removes from pipeline</span>
           )}
         </p>
 
@@ -208,13 +208,13 @@ export default function OnboardingCard({
           <div className="flex gap-1.5">
             <button
               onClick={() => setDecision(client.id, 'rollover')}
-              className="flex-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 py-1.5 text-[11px] font-medium text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+              className="flex-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 py-1.5 text-[11px] font-medium text-emerald-600 hover:bg-emerald-500/20 transition-colors"
             >
               ✓ Rolling over
             </button>
             <button
               onClick={() => setDecision(client.id, 'no-rollover')}
-              className="flex-1 rounded-lg border border-gray-700 bg-gray-800 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-700 hover:text-gray-300 transition-colors"
+              className="flex-1 rounded-lg border border-gray-300 bg-gray-200 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-300 hover:text-gray-700 transition-colors"
             >
               ✗ Not rolling
             </button>
@@ -222,7 +222,7 @@ export default function OnboardingCard({
         ) : (
           /* Decision made — show status + undo */
           <div className="flex items-center justify-between">
-            <span className={`flex items-center gap-1.5 text-xs font-medium ${isRollover ? 'text-emerald-400' : 'text-gray-500'}`}>
+            <span className={`flex items-center gap-1.5 text-xs font-medium ${isRollover ? 'text-emerald-600' : 'text-gray-500'}`}>
               {isRollover ? (
                 <><CheckCircle className="h-3.5 w-3.5" /> Rolling over to membership</>
               ) : (
@@ -232,7 +232,7 @@ export default function OnboardingCard({
             <button
               onClick={() => setDecision(client.id, null)}
               title="Undo decision"
-              className="flex items-center gap-0.5 text-[10px] text-gray-600 hover:text-gray-400 transition-colors ml-2 shrink-0"
+              className="flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-gray-600 transition-colors ml-2 shrink-0"
             >
               <RotateCcw className="h-2.5 w-2.5" />
               Undo

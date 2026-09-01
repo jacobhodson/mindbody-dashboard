@@ -3,10 +3,10 @@ import OnboardingCard      from './OnboardingCard.jsx';
 import OnboardingTaskModal from './OnboardingTaskModal.jsx';
 
 const WEEK_META = [
-  { week: 1, label: 'Week 1', sub: 'Days 1–7',   color: 'text-blue-400',   border: 'border-blue-500/20',   bg: 'bg-blue-500/5'    },
-  { week: 2, label: 'Week 2', sub: 'Days 8–14',  color: 'text-amber-400',  border: 'border-amber-500/20',  bg: 'bg-amber-500/5'   },
-  { week: 3, label: 'Week 3', sub: 'Days 15–21', color: 'text-violet-400', border: 'border-violet-500/20', bg: 'bg-violet-500/5'  },
-  { week: 4, label: 'Week 4', sub: 'Days 22–28', color: 'text-emerald-400',border: 'border-emerald-500/20',bg: 'bg-emerald-500/5' },
+  { week: 1, label: 'Week 1', sub: 'Days 1–7',   color: 'text-blue-600',   border: 'border-blue-500/20',   bg: 'bg-blue-500/5'    },
+  { week: 2, label: 'Week 2', sub: 'Days 8–14',  color: 'text-amber-600',  border: 'border-amber-500/20',  bg: 'bg-amber-500/5'   },
+  { week: 3, label: 'Week 3', sub: 'Days 15–21', color: 'text-violet-600', border: 'border-violet-500/20', bg: 'bg-violet-500/5'  },
+  { week: 4, label: 'Week 4', sub: 'Days 22–28', color: 'text-emerald-600',border: 'border-emerald-500/20',bg: 'bg-emerald-500/5' },
 ];
 
 export default function OnboardingBoard({
@@ -16,6 +16,7 @@ export default function OnboardingBoard({
   contactLog,
   getDecision,
   setDecision,
+  tasksByWeek,
 }) {
   const [activeTask, setActiveTask] = useState(null);
 
@@ -40,7 +41,7 @@ export default function OnboardingBoard({
               <div className={`flex items-center justify-between px-4 py-3 border-b ${border}`}>
                 <div>
                   <p className={`text-sm font-semibold ${color}`}>{label}</p>
-                  <p className="text-[11px] text-gray-600">{sub}</p>
+                  <p className="text-[11px] text-gray-400">{sub}</p>
                 </div>
                 <span className={`rounded-full border ${border} px-2 py-0.5 text-xs font-bold ${color}`}>
                   {cols.length}
@@ -50,7 +51,7 @@ export default function OnboardingBoard({
               {/* Cards */}
               <div className="flex flex-col gap-2.5 p-3 overflow-y-auto max-h-[70vh]">
                 {cols.length === 0 ? (
-                  <p className="py-8 text-center text-xs text-gray-700">No clients this week</p>
+                  <p className="py-8 text-center text-xs text-gray-300">No clients this week</p>
                 ) : (
                   cols.map((client) => (
                     <OnboardingCard
@@ -62,6 +63,7 @@ export default function OnboardingBoard({
                       contactLog={contactLog}
                       getDecision={getDecision}
                       setDecision={setDecision}
+                      tasksByWeek={tasksByWeek}
                     />
                   ))
                 )}

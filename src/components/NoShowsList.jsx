@@ -4,14 +4,14 @@ export default function NoShowsList({ data, loading, error }) {
   const clients = data?.noShows || [];
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900 flex flex-col">
+    <div className="rounded-xl border border-gray-200 bg-white flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-800">
+      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-200">
         <div className="flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-amber-400" />
-          <h2 className="font-semibold text-white">No-Shows</h2>
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <h2 className="font-semibold text-gray-900">No-Shows</h2>
           {!loading && (
-            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 border border-amber-500/20">
+            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 border border-amber-500/20">
               {clients.length}
             </span>
           )}
@@ -24,13 +24,13 @@ export default function NoShowsList({ data, loading, error }) {
         {loading && (
           <div className="space-y-2 p-5">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-14 animate-pulse rounded-lg bg-gray-800" />
+              <div key={i} className="h-14 animate-pulse rounded-lg bg-gray-200" />
             ))}
           </div>
         )}
 
         {error && !loading && (
-          <p className="p-5 text-sm text-red-400">Could not load: {error}</p>
+          <p className="p-5 text-sm text-red-600">Could not load: {error}</p>
         )}
 
         {!loading && !error && clients.length === 0 && (
@@ -41,30 +41,30 @@ export default function NoShowsList({ data, loading, error }) {
         )}
 
         {!loading && !error && clients.map((client) => (
-          <div key={client.id} className="border-b border-gray-800/50 last:border-0">
+          <div key={client.id} className="border-b border-gray-200/50 last:border-0">
             {/* Client row */}
             <div className="flex items-center justify-between px-5 py-2.5">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-gray-200 truncate">{client.name || 'Unknown'}</p>
+                <p className="text-sm font-medium text-gray-800 truncate">{client.name || 'Unknown'}</p>
                 <p className="text-xs text-gray-500 truncate">
                   {client.email || client.phone || 'No contact details'}
                 </p>
               </div>
-              <span className="ml-3 shrink-0 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 tabular-nums">
+              <span className="ml-3 shrink-0 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 tabular-nums">
                 {client.noShowCount} {client.noShowCount === 1 ? 'no-show' : 'no-shows'}
               </span>
             </div>
 
             {/* Session details */}
             {(client.sessions || []).map((s, i) => (
-              <div key={i} className="flex items-center gap-3 px-5 py-1.5 bg-gray-800/30 border-t border-gray-800/40">
-                <Clock className="h-3 w-3 text-gray-600 shrink-0" />
-                <span className="text-xs text-amber-300/80 font-medium">{s.className}</span>
+              <div key={i} className="flex items-center gap-3 px-5 py-1.5 bg-gray-200/30 border-t border-gray-200/40">
+                <Clock className="h-3 w-3 text-gray-400 shrink-0" />
+                <span className="text-xs text-amber-700/80 font-medium">{s.className}</span>
                 <span className="text-xs text-gray-500">{s.day} · {s.time}</span>
                 {s.staffName && (
                   <>
-                    <User className="h-3 w-3 text-gray-600 shrink-0 ml-auto" />
-                    <span className="text-xs text-gray-400">{s.staffName}</span>
+                    <User className="h-3 w-3 text-gray-400 shrink-0 ml-auto" />
+                    <span className="text-xs text-gray-600">{s.staffName}</span>
                   </>
                 )}
               </div>

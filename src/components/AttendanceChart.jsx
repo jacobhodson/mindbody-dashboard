@@ -16,9 +16,9 @@ const FILTERS = [
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 shadow-xl">
-      <p className="text-xs text-gray-400 mb-1">{label}</p>
-      <p className="text-sm font-semibold text-emerald-400">{payload[0].value} visits</p>
+    <div className="rounded-lg border border-gray-300 bg-gray-200 px-3 py-2 shadow-xl">
+      <p className="text-xs text-gray-600 mb-1">{label}</p>
+      <p className="text-sm font-semibold text-emerald-600">{payload[0].value} visits</p>
     </div>
   );
 };
@@ -49,13 +49,13 @@ export default function AttendanceChart() {
   const tickInterval = daily.length > 14 ? Math.ceil(daily.length / 14) - 1 : 0;
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
+    <div className="rounded-xl border border-gray-200 bg-white p-5">
       {/* Header row */}
       <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
         <div className="flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-gray-500" />
           <div>
-            <h2 className="font-semibold text-white">Attendance</h2>
+            <h2 className="font-semibold text-gray-900">Attendance</h2>
             {data?.stats?.dateRange && (
               <p className="text-xs text-gray-500 mt-0.5">{data.stats.dateRange}</p>
             )}
@@ -71,7 +71,7 @@ export default function AttendanceChart() {
               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                 period === f.key
                   ? 'bg-emerald-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                  : 'bg-gray-200 text-gray-600 hover:bg-gray-300 hover:text-gray-800'
               }`}
             >
               {f.label}
@@ -90,7 +90,7 @@ export default function AttendanceChart() {
 
       {/* Error */}
       {error && !loading && (
-        <p className="text-sm text-red-400 py-10 text-center">Could not load: {error}</p>
+        <p className="text-sm text-red-600 py-10 text-center">Could not load: {error}</p>
       )}
 
       {/* Content */}
@@ -106,7 +106,7 @@ export default function AttendanceChart() {
             ].map(({ label, value }) => (
               <div key={label}>
                 <p className="text-xs text-gray-500">{label}</p>
-                <p className="text-xl font-bold text-white tabular-nums">{value ?? '–'}</p>
+                <p className="text-xl font-bold text-gray-900 tabular-nums">{value ?? '–'}</p>
               </div>
             ))}
           </div>

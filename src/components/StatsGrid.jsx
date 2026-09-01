@@ -7,18 +7,18 @@ function fmt(n) {
 
 function Card({ icon: Icon, label, value, sub, color, loading }) {
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
+    <div className="rounded-xl border border-gray-200 bg-white p-5">
       <div className="flex items-start justify-between">
-        <p className="text-sm text-gray-400">{label}</p>
+        <p className="text-sm text-gray-600">{label}</p>
         <span className={`rounded-lg p-2 ${color}`}>
           <Icon className="h-4 w-4" />
         </span>
       </div>
       <div className="mt-3">
         {loading ? (
-          <div className="h-8 w-24 animate-pulse rounded-md bg-gray-800" />
+          <div className="h-8 w-24 animate-pulse rounded-md bg-gray-200" />
         ) : (
-          <p className="text-3xl font-bold tabular-nums text-white">{value}</p>
+          <p className="text-3xl font-bold tabular-nums text-gray-900">{value}</p>
         )}
         {sub && !loading && <p className="mt-1 text-xs text-gray-500">{sub}</p>}
       </div>
@@ -40,7 +40,7 @@ export default function StatsGrid({ attendance, clientAnalytics, loading }) {
         label="Visits this week"
         value={fmt(visitTotal)}
         sub={avgDaily !== undefined ? `avg ${fmt(avgDaily)}/day` : undefined}
-        color="bg-emerald-500/10 text-emerald-400"
+        color="bg-emerald-500/10 text-emerald-600"
         loading={loading.attendance}
       />
       <Card
@@ -48,7 +48,7 @@ export default function StatsGrid({ attendance, clientAnalytics, loading }) {
         label="Red's List"
         value={fmt(redsCount)}
         sub="active recently · missed this week"
-        color={redsCount > 0 ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}
+        color={redsCount > 0 ? 'bg-red-500/10 text-red-600' : 'bg-emerald-500/10 text-emerald-600'}
         loading={loading.clientAnalytics}
       />
       <Card
@@ -56,7 +56,7 @@ export default function StatsGrid({ attendance, clientAnalytics, loading }) {
         label="No-shows"
         value={fmt(noShowCount)}
         sub="booked but didn't sign in"
-        color={noShowCount > 0 ? 'bg-amber-500/10 text-amber-400' : 'bg-gray-700/40 text-gray-400'}
+        color={noShowCount > 0 ? 'bg-amber-500/10 text-amber-600' : 'bg-gray-300/40 text-gray-600'}
         loading={loading.clientAnalytics}
       />
       <Card
@@ -64,7 +64,7 @@ export default function StatsGrid({ attendance, clientAnalytics, loading }) {
         label="On suspension"
         value={fmt(suspensionCount)}
         sub="active hold or non-active status"
-        color={suspensionCount > 0 ? 'bg-orange-500/10 text-orange-400' : 'bg-gray-700/40 text-gray-400'}
+        color={suspensionCount > 0 ? 'bg-orange-500/10 text-orange-600' : 'bg-gray-300/40 text-gray-600'}
         loading={loading.clientAnalytics}
       />
     </div>

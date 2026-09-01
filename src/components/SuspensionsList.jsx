@@ -3,9 +3,9 @@ import { PauseCircle, CheckCircle, Calendar } from 'lucide-react';
 
 function statusColor(status) {
   const s = (status || '').toLowerCase();
-  if (s.includes('suspend')) return 'text-orange-400 bg-orange-500/10 border-orange-500/20';
-  if (s.includes('inactive') || s.includes('declined')) return 'text-red-400 bg-red-500/10 border-red-500/20';
-  return 'text-gray-400 bg-gray-700/30 border-gray-700/50';
+  if (s.includes('suspend')) return 'text-orange-600 bg-orange-500/10 border-orange-500/20';
+  if (s.includes('inactive') || s.includes('declined')) return 'text-red-600 bg-red-500/10 border-red-500/20';
+  return 'text-gray-600 bg-gray-300/30 border-gray-300/50';
 }
 
 function resumeLabel(isoDate) {
@@ -54,14 +54,14 @@ export default function SuspensionsList({ data, loading, error }) {
   }, [clients]);
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900 flex flex-col">
+    <div className="rounded-xl border border-gray-200 bg-white flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-800">
+      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-200">
         <div className="flex items-center gap-2">
-          <PauseCircle className="h-4 w-4 text-orange-400" />
-          <h2 className="font-semibold text-white">On Suspension</h2>
+          <PauseCircle className="h-4 w-4 text-orange-600" />
+          <h2 className="font-semibold text-gray-900">On Suspension</h2>
           {!loading && (
-            <span className="rounded-full bg-orange-500/10 px-2 py-0.5 text-xs font-medium text-orange-400 border border-orange-500/20">
+            <span className="rounded-full bg-orange-500/10 px-2 py-0.5 text-xs font-medium text-orange-600 border border-orange-500/20">
               {clients.length}
             </span>
           )}
@@ -74,13 +74,13 @@ export default function SuspensionsList({ data, loading, error }) {
         {loading && (
           <div className="space-y-2 p-5">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-800" />
+              <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-200" />
             ))}
           </div>
         )}
 
         {error && !loading && (
-          <p className="p-5 text-sm text-red-400">Could not load: {error}</p>
+          <p className="p-5 text-sm text-red-600">Could not load: {error}</p>
         )}
 
         {!loading && !error && clients.length === 0 && (
@@ -99,25 +99,25 @@ export default function SuspensionsList({ data, loading, error }) {
           return (
             <div
               key={client.id}
-              className="px-5 py-3 border-b border-gray-800/50 last:border-0 hover:bg-gray-800/30 transition-colors"
+              className="px-5 py-3 border-b border-gray-200/50 last:border-0 hover:bg-gray-200/30 transition-colors"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-200 truncate">{client.name || 'Unknown'}</p>
+                  <p className="text-sm font-medium text-gray-800 truncate">{client.name || 'Unknown'}</p>
 
                   {/* Resume date — prominent orange line */}
                   {lbl ? (
-                    <p className="flex items-center gap-1.5 mt-1 text-xs font-medium text-orange-400">
+                    <p className="flex items-center gap-1.5 mt-1 text-xs font-medium text-orange-600">
                       <Calendar className="h-3 w-3 shrink-0" />
                       {lbl}
                     </p>
                   ) : (
-                    <p className="mt-1 text-xs text-gray-700">No end date set</p>
+                    <p className="mt-1 text-xs text-gray-300">No end date set</p>
                   )}
 
                   {/* Reason + start date secondary row */}
                   {(reason || startLbl) && (
-                    <p className="mt-0.5 text-xs text-gray-600 truncate">
+                    <p className="mt-0.5 text-xs text-gray-400 truncate">
                       {[reason, startLbl].filter(Boolean).join(' · ')}
                     </p>
                   )}

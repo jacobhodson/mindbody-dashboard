@@ -93,7 +93,7 @@ async function fetchRevenue(token) {
   };
 }
 
-const BASE_URL = process.env.URL || 'https://newstrength-ops-dashboard.netlify.app';
+const BASE_URL = process.env.URL || 'http://localhost:8888';
 
 // ─── Handler ────────────────────────────────────────────────────────────────
 

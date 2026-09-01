@@ -9,15 +9,15 @@
  */
 
 const STATUS_META = {
-  red:      { label: "Red's List", pill: 'text-red-400 bg-red-500/10 border-red-500/20' },
-  moderate: { label: 'Moderate',   pill: 'text-orange-400 bg-orange-500/10 border-orange-500/20' },
-  engaged:  { label: 'Engaged',    pill: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
+  red:      { label: "Red's List", pill: 'text-red-600 bg-red-500/10 border-red-500/20' },
+  moderate: { label: 'Moderate',   pill: 'text-orange-600 bg-orange-500/10 border-orange-500/20' },
+  engaged:  { label: 'Engaged',    pill: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/20' },
 };
 
 function sessionColor(count) {
-  if (count === 0)  return { cell: 'bg-red-500/15 border-red-500/20',     text: 'text-red-400' };
-  if (count <= 2)   return { cell: 'bg-amber-500/15 border-amber-500/20', text: 'text-amber-400' };
-  return              { cell: 'bg-emerald-500/15 border-emerald-500/20',  text: 'text-emerald-400' };
+  if (count === 0)  return { cell: 'bg-red-500/15 border-red-500/20',     text: 'text-red-600' };
+  if (count <= 2)   return { cell: 'bg-amber-500/15 border-amber-500/20', text: 'text-amber-600' };
+  return              { cell: 'bg-emerald-500/15 border-emerald-500/20',  text: 'text-emerald-600' };
 }
 
 export default function WeeklyAttendancePanel({ client, status }) {
@@ -33,7 +33,7 @@ export default function WeeklyAttendancePanel({ client, status }) {
   ];
 
   return (
-    <div className="px-5 pt-3 pb-4 bg-gray-800/20 border-t border-gray-800/50">
+    <div className="px-5 pt-3 pb-4 bg-gray-200/20 border-t border-gray-200/50">
       {/* Status badge */}
       <div className="flex items-center gap-2 mb-3">
         <span className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">Status</span>

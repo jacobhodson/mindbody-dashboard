@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import Dashboard from './components/Dashboard.jsx';
+import LoginForm from './components/LoginForm.jsx';
 import { useContactLog } from './utils/useContactLog.js';
+import { useAuth } from './utils/useAuth.js';
+import { useStaff } from './utils/useStaff.js';
 
 // Initial load reads from the Netlify Blobs cache via GET /api/mb-snapshot.
 // The Refresh button POSTs to /api/mb-snapshot to force a live pull + cache update.
@@ -23,6 +26,8 @@ async function safeFetch(url, options) {
 }
 
 export default function App() {
+  const { user, loading: authLoading, signIn, signOut } = useAuth();
+  const { staff, isManager } = useStaff(user);
   const [data, setData]               = useState({ attendance: null, clientAnalytics: null, payments: null, revenue: null, onboarding: null, pt: null, celebrations: null });
   const [loading, setLoading]         = useState(LOADING_ALL);
   const [errors, setErrors]           = useState({});
@@ -69,7 +74,20 @@ export default function App() {
     ]).then(() => setLastRefresh(new Date()));
   }, []);
 
-  useEffect(() => { refresh(false); }, [refresh]);
+  // Don't touch the Mindbody API at all until someone's actually signed in.
+  useEffect(() => { if (user) refresh(false); }, [user, refresh]);
+
+  if (authLoading) {
+    return <div className="min-h-screen bg-gray-50" />;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center px-4">
+        <LoginForm onSignIn={signIn} />
+      </div>
+    );
+  }
 
   return (
     <Dashboard
@@ -79,6 +97,10 @@ export default function App() {
       lastRefresh={lastRefresh}
       onRefresh={() => refresh(true)}
       contactLog={contactLog}
+      user={user}
+      staff={staff}
+      isManager={isManager}
+      onSignOut={signOut}
     />
   );
 }

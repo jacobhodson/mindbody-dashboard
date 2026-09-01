@@ -6,7 +6,7 @@
 import { ok, err, CORS } from './utils/mb-auth.js';
 
 const NOTION_BASE      = 'https://api.notion.com/v1';
-const RESOLUTIONS_DB   = process.env.NOTION_PAYMENT_RESOLUTIONS_DB || '3911eae4c6d580938488c0bb7713d624';
+const RESOLUTIONS_DB   = process.env.NOTION_PAYMENT_RESOLUTIONS_DB;
 
 async function notionReq(method, path, body) {
   const token = process.env.NOTION_TOKEN;

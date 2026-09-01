@@ -1,57 +1,78 @@
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabaseClient.js';
 
 /**
  * Hook for managing onboarding task completion state.
- * Persists via Netlify Blobs through /api/mb-onboarding-tasks.
+ * Persists via Supabase (`onboarding_task_completions`), replacing the old
+ * single-key Netlify Blobs store — gives real per-completion history and
+ * staff attribution instead of just "currently checked or not".
  *
- * Returns:
+ * `templates` is the flat list from useOnboardingTaskTemplates() — each
+ * template's `id` is its `key` string (e.g. 'w1-pre-session') and `dbId` is
+ * the real uuid used as the FK. Return shape is unchanged from the old
+ * Blobs-backed version so OnboardingCard.jsx doesn't need to change:
+ *
  *   isComplete(clientId, taskId)   → boolean
  *   toggleTask(clientId, taskId)   → Promise<void>
  *   completions                    → { [clientId]: taskId[] }
  *   loading                        → boolean
  */
-export function useOnboardingTasks() {
-  const [completions, setCompletions] = useState({});
-  const [loading, setLoading]         = useState(true);
+export function useOnboardingTasks(staff, templates) {
+  const [rows, setRows]       = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/mb-onboarding-tasks')
-      .then((r) => (r.ok ? r.json() : { completions: {} }))
-      .then((d) => setCompletions(d.completions || {}))
-      .catch(() => {})
+    if (!staff || !templates.length) return;
+    supabase.from('onboarding_task_completions').select('*')
+      .then(({ data, error }) => {
+        if (!error) setRows(data || []);
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [staff, templates.length]);
+
+  const byDbId = useCallback(
+    (dbId) => templates.find((t) => t.dbId === dbId),
+    [templates]
+  );
+  const byKey = useCallback(
+    (key) => templates.find((t) => t.id === key),
+    [templates]
+  );
+
+  // Derive the same { [clientId]: taskId[] } shape the old Blobs store returned.
+  const completions = rows.reduce((acc, r) => {
+    const tpl = byDbId(r.template_id);
+    if (!tpl) return acc;
+    if (!acc[r.client_id]) acc[r.client_id] = [];
+    acc[r.client_id].push(tpl.id);
+    return acc;
+  }, {});
 
   const isComplete = useCallback(
-    (clientId, taskId) =>
-      (completions[String(clientId)] || []).includes(taskId),
+    (clientId, taskId) => (completions[String(clientId)] || []).includes(taskId),
     [completions]
   );
 
   const toggleTask = useCallback(async (clientId, taskId) => {
-    const id      = String(clientId);
-    const current = completions[id] || [];
-    const updated = current.includes(taskId)
-      ? current.filter((t) => t !== taskId)
-      : [...current, taskId];
+    if (!staff) return;
+    const tpl = byKey(taskId);
+    if (!tpl) return;
+    const id = String(clientId);
 
-    // Optimistic update
-    setCompletions((prev) => ({ ...prev, [id]: updated }));
-
-    try {
-      const res = await fetch('/api/mb-onboarding-tasks', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ clientId: id, taskId }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.completions) setCompletions(data.completions);
-      }
-    } catch {
-      // Keep the optimistic update even on network error
+    const existing = rows.find((r) => r.template_id === tpl.dbId && r.client_id === id);
+    if (existing) {
+      setRows((prev) => prev.filter((r) => r.id !== existing.id)); // optimistic
+      const { error } = await supabase.from('onboarding_task_completions').delete().eq('id', existing.id);
+      if (error) setRows((prev) => [...prev, existing]); // revert on failure
+      return;
     }
-  }, [completions]);
+
+    const { data, error } = await supabase
+      .from('onboarding_task_completions')
+      .insert({ template_id: tpl.dbId, client_id: id, completed_by: staff.id })
+      .select().single();
+    if (!error) setRows((prev) => [...prev, data]);
+  }, [staff, rows, byKey]);
 
   return { completions, isComplete, toggleTask, loading };
 }

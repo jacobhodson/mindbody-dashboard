@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Activity, DollarSign, Users2, Dumbbell } from 'lucide-react';
+import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Dumbbell, LogOut } from 'lucide-react';
+import logo from '../assets/newstrength-logo.svg';
+import Sidebar             from './Sidebar.jsx';
+import Home                from './Home.jsx';
 import StatsGrid          from './StatsGrid.jsx';
 import AttendanceChart    from './AttendanceChart.jsx';
 import NoShowsList        from './NoShowsList.jsx';
@@ -16,6 +19,7 @@ import CelebrationsPanel   from './CelebrationsPanel.jsx';
 import { useOnboardingRollover } from '../utils/useOnboardingRollover.js';
 
 const TABS = [
+  { key: 'home',               label: 'Home',              Icon: HomeIcon  },
   { key: 'operations',        label: 'Operations',        Icon: Activity  },
   { key: 'finances',          label: 'Finances',          Icon: DollarSign },
   { key: 'onboarding',        label: 'Onboarding',        Icon: Users2    },
@@ -25,8 +29,8 @@ const TABS = [
 // Short-program products: removed from pipeline on no-rollover
 const SHORT_PRODUCTS = new Set(['3-Session', '14-Day']);
 
-export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh, contactLog }) {
-  const [tab, setTab] = useState('operations');
+export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh, contactLog, user, staff, isManager, onSignOut }) {
+  const [tab, setTab] = useState('home');
   const anyLoading    = Object.values(loading).some(Boolean);
 
   const { decisions, getDecision, setDecision } = useOnboardingRollover();
@@ -59,13 +63,16 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
   }, [data.onboarding, decisions]);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
+    <div className="min-h-screen bg-gray-50 text-gray-900">
       {/* ── Header ── */}
-      <header className="sticky top-0 z-30 border-b border-gray-800 bg-gray-900/90 backdrop-blur px-6 py-4">
+      <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/90 backdrop-blur px-6 py-4">
         <div className="mx-auto max-w-7xl flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight text-white">Operations Dashboard</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Newstrength</p>
+          <div className="flex items-center gap-3">
+            <img src={logo} alt="Newstrength" className="h-8 w-auto" />
+            <div className="hidden sm:block border-l border-gray-200 pl-3">
+              <h1 className="text-lg font-semibold tracking-tight text-gray-900">Operations Dashboard</h1>
+              <p className="text-xs text-gray-500 mt-0.5">{import.meta.env.VITE_BUSINESS_NAME || 'Your Gym'}</p>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             {lastRefresh && (
@@ -76,45 +83,33 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             <button
               onClick={onRefresh}
               disabled={anyLoading}
-              className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 rounded-lg bg-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-300 hover:text-gray-900 disabled:opacity-50 transition-colors"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${anyLoading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
+            {user && (
+              <button
+                onClick={onSignOut}
+                title={user.email}
+                className="flex items-center gap-1.5 rounded-lg bg-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-300 hover:text-gray-900 transition-colors"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Sign out</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      {/* ── Tab nav ── */}
-      <div className="sticky top-[65px] z-20 border-b border-gray-800 bg-gray-950">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <nav className="flex gap-1 pt-1">
-            {TABS.map(({ key, label, Icon }) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                  tab === key
-                    ? 'border-emerald-500 text-emerald-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-                {/* Red badge for at-risk onboarding clients */}
-                {key === 'onboarding' && atRiskCount > 0 && (
-                  <span className="rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-400 border border-red-500/30">
-                    {atRiskCount}
-                  </span>
-                )}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </div>
+      <div className="flex">
+        <Sidebar tabs={TABS} activeTab={tab} onSelect={setTab} atRiskCount={atRiskCount} />
 
-      {/* ── Tab content ── */}
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8">
+        {/* ── Tab content ── */}
+        <main className="flex-1 min-w-0 mx-auto max-w-6xl px-4 sm:px-6 py-8 space-y-8">
+
+        {/* ─ Home ─ */}
+        {tab === 'home' && <Home user={user} staff={staff} isManager={isManager} />}
 
         {/* ─ Operations ─ */}
         {tab === 'operations' && (
@@ -187,6 +182,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             decisions={decisions}
             getDecision={getDecision}
             setDecision={setDecision}
+            staff={staff}
           />
         )}
 
@@ -199,7 +195,8 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             contactLog={contactLog}
           />
         )}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

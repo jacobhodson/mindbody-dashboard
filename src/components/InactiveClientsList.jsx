@@ -24,14 +24,14 @@ export default function InactiveClientsList({ data, loading, error }) {
   }
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900 flex flex-col">
+    <div className="rounded-xl border border-gray-200 bg-white flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-800">
+      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-200">
         <div className="flex items-center gap-2">
-          <UserX className="h-4 w-4 text-amber-400" />
-          <h2 className="font-semibold text-white">Inactive Clients</h2>
+          <UserX className="h-4 w-4 text-amber-600" />
+          <h2 className="font-semibold text-gray-900">Inactive Clients</h2>
           {!loading && (
-            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600">
               {clients.length}
             </span>
           )}
@@ -40,7 +40,7 @@ export default function InactiveClientsList({ data, loading, error }) {
       </div>
 
       {/* Search */}
-      <div className="px-5 py-3 border-b border-gray-800">
+      <div className="px-5 py-3 border-b border-gray-200">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500" />
           <input
@@ -48,7 +48,7 @@ export default function InactiveClientsList({ data, loading, error }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name, email or phone…"
-            className="w-full rounded-lg border border-gray-700 bg-gray-800 pl-8 pr-3 py-1.5 text-sm text-gray-100 placeholder-gray-600 focus:border-emerald-500 focus:outline-none"
+            className="w-full rounded-lg border border-gray-300 bg-gray-200 pl-8 pr-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:outline-none"
           />
         </div>
       </div>
@@ -58,13 +58,13 @@ export default function InactiveClientsList({ data, loading, error }) {
         {loading && (
           <div className="space-y-2 p-5">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-800" />
+              <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-200" />
             ))}
           </div>
         )}
 
         {error && !loading && (
-          <p className="p-5 text-sm text-red-400">Could not load: {error}</p>
+          <p className="p-5 text-sm text-red-600">Could not load: {error}</p>
         )}
 
         {!loading && !error && filtered.length === 0 && (
@@ -81,11 +81,11 @@ export default function InactiveClientsList({ data, loading, error }) {
           return (
             <div
               key={client.id}
-              className={`flex items-center justify-between px-5 py-3 border-b border-gray-800/60 last:border-0 hover:bg-gray-800/40 transition-colors ${isContacted ? 'opacity-50' : ''}`}
+              className={`flex items-center justify-between px-5 py-3 border-b border-gray-200/60 last:border-0 hover:bg-gray-200/40 transition-colors ${isContacted ? 'opacity-50' : ''}`}
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-gray-200 truncate">{client.name || 'Unknown'}</p>
+                  <p className="text-sm font-medium text-gray-800 truncate">{client.name || 'Unknown'}</p>
                   {isContacted && (
                     <span className="shrink-0 flex items-center gap-1 text-xs text-emerald-500">
                       <CheckCircle className="h-3 w-3" /> Contacted
@@ -99,7 +99,7 @@ export default function InactiveClientsList({ data, loading, error }) {
               <button
                 onClick={() => setSelected(client)}
                 disabled={isContacted}
-                className="ml-4 shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-400 hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="ml-4 shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-600 hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Contact
               </button>
@@ -109,8 +109,8 @@ export default function InactiveClientsList({ data, loading, error }) {
       </div>
 
       {!loading && clients.length > 0 && (
-        <div className="px-5 py-3 border-t border-gray-800">
-          <p className="text-xs text-gray-600">
+        <div className="px-5 py-3 border-t border-gray-200">
+          <p className="text-xs text-gray-400">
             Showing {filtered.length} of {clients.length} · {contacted.size} contacted this session
           </p>
         </div>

@@ -14,8 +14,8 @@
 import { ok, err, CORS } from './utils/mb-auth.js';
 
 const NOTION_BASE      = 'https://api.notion.com/v1';
-const CONTACT_LOG_DB   = process.env.NOTION_CONTACT_LOG_DB || '15e93dca2d9b41ccbd0008f177e8a14b';
-const CLIENTS_DB       = process.env.NOTION_CLIENTS_DB     || '1b21eae4c6d5807abaa0c78467e82aed';
+const CONTACT_LOG_DB   = process.env.NOTION_CONTACT_LOG_DB;
+const CLIENTS_DB       = process.env.NOTION_CLIENTS_DB;
 
 async function notionReq(method, path, body) {
   const token = process.env.NOTION_TOKEN;
