@@ -32,7 +32,7 @@ export default function App() {
   const [loading, setLoading]         = useState(LOADING_ALL);
   const [errors, setErrors]           = useState({});
   const [lastRefresh, setLastRefresh] = useState(null);
-  const contactLog = useContactLog();
+  const contactLog = useContactLog(staff);
 
   const refresh = useCallback((forceRefresh = false) => {
     setLoading(LOADING_ALL);

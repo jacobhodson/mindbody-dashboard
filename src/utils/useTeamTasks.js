@@ -108,24 +108,27 @@ export function useTeamTasks(user, staff) {
     return data;
   }, [staff, completionFor, markDone]);
 
-  // Managers create shared team templates (owner_staff_id null); everyone
-  // else can only create personal ones (RLS enforces this server-side too).
+  // Managers create shared team templates (owner_staff_id null) or assign a
+  // task to a specific person (assignedStaffId); everyone else can only
+  // create personal ones (RLS enforces all of this server-side too).
   const createTask = useCallback(async ({
-    label, description, cadence, scope, target_type, target_value, unit, task_type, isManager,
+    label, description, cadence, scope, target_type, target_value, unit, task_type, isManager, assignedStaffId,
   }) => {
     if (!staff) return null;
-    const personal = !isManager || scope !== 'team';
+    const assigned = isManager && assignedStaffId;
+    const personal = !assigned && (!isManager || scope !== 'team');
     const row = {
-      key:            `personal-${staff.id}-${Date.now()}`,
+      key:               `personal-${staff.id}-${Date.now()}`,
       label,
-      description:    description || null,
-      scope:          personal ? 'individual' : 'team',
+      description:       description || null,
+      scope:             assigned || personal ? 'individual' : 'team',
       cadence,
-      target_type:    target_type || 'boolean',
-      target_value:   target_value ?? 1,
-      unit:           unit || null,
-      task_type:      task_type || 'checkbox',
-      owner_staff_id: personal ? staff.id : null,
+      target_type:       target_type || 'boolean',
+      target_value:      target_value ?? 1,
+      unit:              unit || null,
+      task_type:         task_type || 'checkbox',
+      owner_staff_id:    assigned ? staff.id : (personal ? staff.id : null),
+      assigned_staff_id: assigned ? assignedStaffId : null,
     };
     const { data, error: insErr } = await supabase.from('task_templates').insert(row).select().single();
     if (insErr) { setError(insErr.message); return null; }

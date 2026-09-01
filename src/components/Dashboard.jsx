@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Dumbbell, LogOut } from 'lucide-react';
+import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Dumbbell, LogOut, BarChart3 } from 'lucide-react';
 import logo from '../assets/newstrength-logo.svg';
 import Sidebar             from './Sidebar.jsx';
 import Home                from './Home.jsx';
+import Scorecard           from './Scorecard.jsx';
 import StatsGrid          from './StatsGrid.jsx';
 import AttendanceChart    from './AttendanceChart.jsx';
 import NoShowsList        from './NoShowsList.jsx';
@@ -24,6 +25,7 @@ const TABS = [
   { key: 'finances',          label: 'Finances',          Icon: DollarSign },
   { key: 'onboarding',        label: 'Onboarding',        Icon: Users2    },
   { key: 'personalTraining',  label: 'Personal Training', Icon: Dumbbell  },
+  { key: 'scorecard',         label: 'Scorecard',         Icon: BarChart3 },
 ];
 
 // Short-program products: removed from pipeline on no-rollover
@@ -195,6 +197,9 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             contactLog={contactLog}
           />
         )}
+
+        {/* ─ Scorecard ─ */}
+        {tab === 'scorecard' && <Scorecard />}
         </main>
       </div>
     </div>

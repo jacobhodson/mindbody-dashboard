@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Check, User, Users, Plus, X } from 'lucide-react';
+import { Check, User, Users, Plus, X, ArrowRight } from 'lucide-react';
 import { useTeamTasks } from '../utils/useTeamTasks.js';
+import { useAllStaff } from '../utils/useAllStaff.js';
 
 const CADENCE_LABEL = { daily: 'Today', weekly: 'This week', monthly: 'This month' };
 const CADENCE_ORDER = ['daily', 'weekly', 'monthly'];
@@ -57,7 +58,7 @@ function ContactLogForm({ onSubmit, onCancel }) {
   );
 }
 
-function TaskRow({ template, completion, onToggle, onLogContact }) {
+function TaskRow({ template, completion, onToggle, onLogContact, assignedName }) {
   const done = Boolean(completion);
   const [logging, setLogging] = useState(false);
 
@@ -106,6 +107,11 @@ function TaskRow({ template, completion, onToggle, onLogContact }) {
             {template.task_type === 'contact_log' && (
               <span className="text-[10px] text-gray-500">client contact</span>
             )}
+            {assignedName && (
+              <span className="flex items-center gap-0.5 text-[10px] font-medium text-emerald-700">
+                <ArrowRight className="h-3 w-3" /> {assignedName}
+              </span>
+            )}
           </div>
           {template.description && (
             <p className="text-xs text-gray-500 mt-0.5">{template.description}</p>
@@ -122,25 +128,29 @@ function TaskRow({ template, completion, onToggle, onLogContact }) {
   );
 }
 
-function CreateTaskForm({ isManager, onCreate, onClose }) {
+function CreateTaskForm({ isManager, staff, onCreate, onClose }) {
   const [label, setLabel]           = useState('');
   const [description, setDescription] = useState('');
   const [cadence, setCadence]       = useState('daily');
   const [taskType, setTaskType]     = useState('checkbox');
-  const [teamWide, setTeamWide]     = useState(false);
+  const [assignMode, setAssignMode] = useState('personal'); // personal | team | assigned
+  const [assignee, setAssignee]     = useState('');
   const [busy, setBusy]             = useState(false);
+  const { staffList } = useAllStaff();
 
   const submit = async (e) => {
     e.preventDefault();
     if (!label.trim()) return;
+    if (assignMode === 'assigned' && !assignee) return;
     setBusy(true);
     await onCreate({
       label: label.trim(),
       description: description.trim(),
       cadence,
       task_type: taskType,
-      scope: isManager && teamWide ? 'team' : 'individual',
+      scope: isManager && assignMode === 'team' ? 'team' : 'individual',
       isManager,
+      assignedStaffId: assignMode === 'assigned' ? assignee : null,
     });
     setBusy(false);
     onClose();
@@ -180,10 +190,19 @@ function CreateTaskForm({ isManager, onCreate, onClose }) {
           <option value="contact_log">Client contact log</option>
         </select>
         {isManager && (
-          <label className="flex items-center gap-1.5 text-gray-700">
-            <input type="checkbox" checked={teamWide} onChange={(e) => setTeamWide(e.target.checked)} />
-            Team task (shared)
-          </label>
+          <select value={assignMode} onChange={(e) => setAssignMode(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900">
+            <option value="personal">Just for me</option>
+            <option value="team">Team task (shared)</option>
+            <option value="assigned">Assign to…</option>
+          </select>
+        )}
+        {isManager && assignMode === 'assigned' && (
+          <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900">
+            <option value="">Choose a person…</option>
+            {staffList.filter((s) => s.id !== staff?.id).map((s) => (
+              <option key={s.id} value={s.id}>{s.full_name}</option>
+            ))}
+          </select>
         )}
       </div>
       <button
@@ -200,6 +219,13 @@ function CreateTaskForm({ isManager, onCreate, onClose }) {
 export default function TaskChecklist({ user, staff, isManager }) {
   const { templates, loading, error, toggle, completionFor, logContactTask, createTask } = useTeamTasks(user, staff);
   const [showCreate, setShowCreate] = useState(false);
+  const { staffList } = useAllStaff();
+
+  const staffNameById = useMemo(() => {
+    const m = {};
+    for (const s of staffList) m[s.id] = s.full_name;
+    return m;
+  }, [staffList]);
 
   const grouped = useMemo(() => {
     const g = { daily: [], weekly: [], monthly: [] };
@@ -238,7 +264,7 @@ export default function TaskChecklist({ user, staff, isManager }) {
       </div>
 
       {showCreate && (
-        <CreateTaskForm isManager={isManager} onCreate={createTask} onClose={() => setShowCreate(false)} />
+        <CreateTaskForm isManager={isManager} staff={staff} onCreate={createTask} onClose={() => setShowCreate(false)} />
       )}
 
       {error && <p className="text-xs text-red-600">{error}</p>}
@@ -259,6 +285,11 @@ export default function TaskChecklist({ user, staff, isManager }) {
                   completion={completionFor(template)}
                   onToggle={toggle}
                   onLogContact={logContactTask}
+                  assignedName={
+                    isManager && template.assigned_staff_id && template.assigned_staff_id !== staff?.id
+                      ? staffNameById[template.assigned_staff_id]
+                      : null
+                  }
                 />
               ))}
             </ul>

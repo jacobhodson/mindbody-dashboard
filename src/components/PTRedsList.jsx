@@ -106,6 +106,16 @@ export default function PTRedsList({ data, loading, error, contactLog }) {
           );
         })}
       </div>
+
+      {selected && (
+        <ContactModal
+          client={selected}
+          onClose={() => setSelected(null)}
+          onContacted={() => {}}
+          logContact={logContact}
+          getClientLogs={getClientLogs}
+        />
+      )}
     </div>
   );
 }
