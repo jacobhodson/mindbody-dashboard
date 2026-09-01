@@ -24,7 +24,7 @@ export default function Scorecard() {
 
   const {
     loading, error, teamTemplates, individualTemplates,
-    teamDoneCount, individualCompletions, targets, completionFor,
+    teamDoneCount, individualCompletions, targets, completionFor, actualFor,
   } = useScorecard(cadence, periodStart);
 
   const changeCadence = (c) => { setCadence(c); setOffset(0); };
@@ -49,9 +49,9 @@ export default function Scorecard() {
       <div>
         <h1 className="text-lg font-semibold text-gray-900">Scorecard</h1>
         <p className="text-sm text-gray-500">
-          Task completion history. Business-metric targets (revenue, new members, etc.)
-          will show real tracked numbers once the Mindbody sync is built — for now this
-          reflects what's been logged by hand.
+          Task completion history, plus targets for the period. Attendance and revenue
+          targets show real Mindbody-tracked actuals; other targets show their configured
+          value only until they're synced too.
         </p>
       </div>
 
@@ -140,12 +140,22 @@ export default function Scorecard() {
               <p className="text-xs text-gray-500">No targets were active this period.</p>
             ) : (
               <ul className="space-y-1.5">
-                {targets.map((t) => (
-                  <li key={t.id} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-800">{t.label || t.metric_key}</span>
-                    <span className="text-gray-500 tabular-nums">{t.target_value}</span>
-                  </li>
-                ))}
+                {targets.map((t) => {
+                  const actual = actualFor(t);
+                  const hit    = actual != null && actual >= t.target_value;
+                  return (
+                    <li key={t.id} className="flex items-center justify-between text-sm">
+                      <span className="text-gray-800">{t.label || t.metric_key}</span>
+                      {actual == null ? (
+                        <span className="text-gray-500 tabular-nums">target: {t.target_value.toLocaleString()}</span>
+                      ) : (
+                        <span className={`tabular-nums font-medium ${hit ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {actual.toLocaleString()} <span className="text-gray-400 font-normal">/ {t.target_value.toLocaleString()}</span>
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

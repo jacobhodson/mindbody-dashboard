@@ -4,15 +4,17 @@ import { periodEndFor } from './periods.js';
 
 /**
  * Task-completion history for one period (day/week/month), plus whatever
- * targets were active during it. Deliberately does NOT compare targets
- * against an "actual" — that needs the Mindbody→metric_actuals sync job,
- * which is a separate, not-yet-built piece. This only reports what staff
- * logged themselves: task completion counts.
+ * targets were active during it, alongside real Mindbody-sourced actuals
+ * from metric_actuals where available (currently attendance_visits and
+ * revenue — see scheduled-daily-refresh.js). Targets with no matching
+ * metric_key just show their configured value with no actual, same as
+ * before that sync existed.
  */
 export function useScorecard(cadence, periodStart) {
   const [templates, setTemplates]     = useState([]);
   const [completions, setCompletions] = useState([]);
   const [targets, setTargets]         = useState([]);
+  const [actuals, setActuals]         = useState([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
 
@@ -32,19 +34,33 @@ export function useScorecard(cadence, periodStart) {
       supabase.from('targets').select('*').eq('cadence', cadence)
         .lte('effective_from', periodEnd)
         .or(`effective_to.is.null,effective_to.gte.${periodStart}`),
-    ]).then(([tpl, comp, tgt]) => {
+      supabase.from('metric_actuals').select('*')
+        .gte('metric_date', periodStart).lte('metric_date', periodEnd),
+    ]).then(([tpl, comp, tgt, act]) => {
       if (cancelled) return;
-      if (tpl.error || comp.error || tgt.error) {
-        setError((tpl.error || comp.error || tgt.error).message);
+      if (tpl.error || comp.error || tgt.error || act.error) {
+        setError((tpl.error || comp.error || tgt.error || act.error).message);
         return;
       }
       setTemplates(tpl.data || []);
       setCompletions(comp.data || []);
       setTargets(tgt.data || []);
+      setActuals(act.data || []);
     }).finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
   }, [cadence, periodStart]);
+
+  // Sum of this period's daily metric_actuals rows for a target's metric_key
+  // — correct for both attendance and revenue, which are naturally additive
+  // across a week/month. Returns null (not 0) when there's no synced data
+  // at all for that metric_key, so the UI can tell "no data yet" apart from
+  // "genuinely zero".
+  const actualFor = (target) => {
+    const rows = actuals.filter((a) => a.metric_key === target.metric_key);
+    if (!rows.length) return null;
+    return rows.reduce((sum, r) => sum + Number(r.value), 0);
+  };
 
   const completionFor = (template) => completions.find((c) =>
     c.template_id === template.id &&
@@ -61,8 +77,8 @@ export function useScorecard(cadence, periodStart) {
   const individualCompletions = completions.filter((c) => c.staff_id !== null);
 
   return {
-    templates, completions, targets, loading, error,
+    templates, completions, targets, actuals, loading, error,
     teamTemplates, individualTemplates, teamDoneCount, individualCompletions,
-    completionFor,
+    completionFor, actualFor,
   };
 }
