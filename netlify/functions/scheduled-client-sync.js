@@ -292,7 +292,13 @@ export const handler = async (event) => {
   try {
     const token = await getStaffToken();
 
-    const rosterCount = await syncClientRoster(token);
+    // The roster sync hits Mindbody's rate limit fast if repeated on every
+    // call of a backfill loop (each one paginates the full /client/clients
+    // roster) — and a backfill run doesn't need a fresh roster per day, just
+    // the mindbody_id→uuid map already sitting in Supabase from whichever
+    // normal/first run synced it. Only the normal cron path (no backfill
+    // param) re-syncs the roster; skip it on every backfill call.
+    const rosterCount = backfillLedgerDate ? null : await syncClientRoster(token);
     const idMap = await fetchClientIdMap();
 
     const dateStr = backfillLedgerDate || format(subDays(new Date(), 1), 'yyyy-MM-dd');
