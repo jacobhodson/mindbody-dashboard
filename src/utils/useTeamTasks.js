@@ -2,6 +2,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient.js';
 import { periodStartFor } from './periods.js';
 
+// Shared by createTask and TaskChecklist's edit form — turns "personal /
+// team / assigned to X" + who's asking into the actual scope/owner/assignee
+// columns. Non-managers always end up personal regardless of what they pass,
+// matching what RLS enforces server-side anyway.
+export function resolveAssignmentFields({ isManager, assignMode, assignee, staffId }) {
+  const assigned = isManager && assignMode === 'assigned' && assignee;
+  const personal = !assigned && (!isManager || assignMode !== 'team');
+  return {
+    scope:             assigned || personal ? 'individual' : 'team',
+    owner_staff_id:    assigned ? staffId : (personal ? staffId : null),
+    assigned_staff_id: assigned ? assignee : null,
+  };
+}
+
 /**
  * Loads active task templates (RLS already scopes personal-vs-team
  * visibility) and this period's completions for the given staff member;
@@ -108,27 +122,23 @@ export function useTeamTasks(user, staff) {
     return data;
   }, [staff, completionFor, markDone]);
 
-  // Managers create shared team templates (owner_staff_id null) or assign a
-  // task to a specific person (assignedStaffId); everyone else can only
-  // create personal ones (RLS enforces all of this server-side too).
+  // Managers create shared team templates or assign a task to a specific
+  // person; everyone else can only create personal ones (RLS enforces all
+  // of this server-side too). assignMode is 'personal' | 'team' | 'assigned'.
   const createTask = useCallback(async ({
-    label, description, cadence, scope, target_type, target_value, unit, task_type, isManager, assignedStaffId,
+    label, description, cadence, target_type, target_value, unit, task_type, isManager, assignMode, assignee,
   }) => {
     if (!staff) return null;
-    const assigned = isManager && assignedStaffId;
-    const personal = !assigned && (!isManager || scope !== 'team');
     const row = {
-      key:               `personal-${staff.id}-${Date.now()}`,
+      key:            `personal-${staff.id}-${Date.now()}`,
       label,
-      description:       description || null,
-      scope:             assigned || personal ? 'individual' : 'team',
+      description:    description || null,
       cadence,
-      target_type:       target_type || 'boolean',
-      target_value:      target_value ?? 1,
-      unit:              unit || null,
-      task_type:         task_type || 'checkbox',
-      owner_staff_id:    assigned ? staff.id : (personal ? staff.id : null),
-      assigned_staff_id: assigned ? assignedStaffId : null,
+      target_type:    target_type || 'boolean',
+      target_value:   target_value ?? 1,
+      unit:           unit || null,
+      task_type:      task_type || 'checkbox',
+      ...resolveAssignmentFields({ isManager, assignMode, assignee, staffId: staff.id }),
     };
     const { data, error: insErr } = await supabase.from('task_templates').insert(row).select().single();
     if (insErr) { setError(insErr.message); return null; }
@@ -136,5 +146,17 @@ export function useTeamTasks(user, staff) {
     return data;
   }, [staff]);
 
-  return { templates, loading, error, toggle, completionFor, logContactTask, createTask, reload: load };
+  // Edit an existing template's own fields (label/description/cadence/etc)
+  // and/or its assignment. RLS already restricts who can actually update a
+  // given row (managers, or the personal task's own owner) — this just does
+  // the write; the edit UI decides whether to show itself based on the same
+  // rule client-side.
+  const updateTask = useCallback(async (id, patch) => {
+    const { data, error: updErr } = await supabase.from('task_templates').update(patch).eq('id', id).select().single();
+    if (updErr) { setError(updErr.message); return null; }
+    setTemplates((prev) => prev.map((t) => (t.id === id ? data : t)).sort((a, b) => a.sort_order - b.sort_order));
+    return data;
+  }, []);
+
+  return { templates, loading, error, toggle, completionFor, logContactTask, createTask, updateTask, reload: load };
 }
