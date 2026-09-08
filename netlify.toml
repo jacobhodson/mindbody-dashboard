@@ -21,6 +21,9 @@
 [functions."scheduled-daily-refresh"]
   timeout = 26
 
+[functions."scheduled-client-sync"]
+  timeout = 26
+
 [dev]
   command = "vite"
   port = 8888

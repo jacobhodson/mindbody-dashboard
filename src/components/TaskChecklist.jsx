@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Check, User, Users, Plus, X, ArrowRight, Pencil, Trash2, CalendarDays } from 'lucide-react';
 import { useTeamTasks, resolveAssignmentFields } from '../utils/useTeamTasks.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
+import { useAllClients } from '../utils/useAllClients.js';
 import { renderFormatted } from '../utils/richText.js';
 import { dueDateFor } from '../utils/periods.js';
 import { format, parseISO } from 'date-fns';
@@ -11,16 +12,35 @@ const CADENCE_LABEL = { daily: 'Today', weekly: 'This week', monthly: 'This mont
 const CADENCE_ORDER = ['daily', 'weekly', 'monthly', 'once'];
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+// A client's full name, resolved against a typed name via useAllClients — used
+// by both ContactLogForm and TaskForm's <datalist>-backed client pickers so a
+// typed name (matched against Mindbody's roster mirror) resolves to a real
+// clients.id for linkage, while still degrading gracefully to a free-text
+// name if nothing matches (existing contact-log behaviour, unchanged).
+function useClientNameLookup() {
+  const { clientsList } = useAllClients();
+  const byName = useMemo(() => {
+    const m = {};
+    for (const c of clientsList) {
+      const name = `${c.first_name || ''} ${c.last_name || ''}`.trim();
+      if (name) m[name] = c.id;
+    }
+    return m;
+  }, [clientsList]);
+  return { clientsList, resolve: (name) => byName[name] || null };
+}
+
 function ContactLogForm({ onSubmit, onCancel }) {
   const [clientName, setClientName] = useState('');
   const [note, setNote]             = useState('');
   const [busy, setBusy]              = useState(false);
+  const { clientsList, resolve }     = useClientNameLookup();
 
   const submit = async (e) => {
     e.preventDefault();
     if (!clientName.trim()) return;
     setBusy(true);
-    await onSubmit({ clientName: clientName.trim(), note: note.trim() });
+    await onSubmit({ clientName: clientName.trim(), note: note.trim(), clientId: resolve(clientName.trim()) });
     setBusy(false);
     setClientName('');
     setNote('');
@@ -31,11 +51,17 @@ function ContactLogForm({ onSubmit, onCancel }) {
       <input
         type="text"
         required
+        list="client-name-options"
         placeholder="Client name"
         value={clientName}
         onChange={(e) => setClientName(e.target.value)}
         className="flex-1 rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
       />
+      <datalist id="client-name-options">
+        {clientsList.map((c) => (
+          <option key={c.id} value={`${c.first_name || ''} ${c.last_name || ''}`.trim()} />
+        ))}
+      </datalist>
       <input
         type="text"
         placeholder="Note (optional)"
@@ -81,8 +107,10 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
   const [assignee, setAssignee]       = useState(initial?.assignee || '');
   const [dueDate, setDueDate]         = useState(initial?.due_date || '');
   const [dueDay, setDueDay]           = useState(initial?.due_day || '');
+  const [clientName, setClientName]   = useState(initial?.clientName || '');
   const [busy, setBusy]               = useState(false);
   const { staffList } = useAllStaff();
+  const { clientsList, resolve: resolveClientId } = useClientNameLookup();
 
   const submit = async (e) => {
     e.preventDefault();
@@ -100,6 +128,7 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
       assignee: assignMode === 'assigned' ? assignee : null,
       due_date: cadence === 'once' ? dueDate : null,
       due_day: (cadence === 'weekly' || cadence === 'monthly') && dueDay ? Number(dueDay) : null,
+      client_id: clientName.trim() ? resolveClientId(clientName.trim()) : null,
     });
     setBusy(false);
     onClose();
@@ -169,6 +198,19 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
             ))}
           </select>
         )}
+        <input
+          type="text"
+          list="task-form-client-options"
+          placeholder="Link to client (optional)"
+          value={clientName}
+          onChange={(e) => setClientName(e.target.value)}
+          className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900 placeholder-gray-400"
+        />
+        <datalist id="task-form-client-options">
+          {clientsList.map((c) => (
+            <option key={c.id} value={`${c.first_name || ''} ${c.last_name || ''}`.trim()} />
+          ))}
+        </datalist>
       </div>
       <button
         type="submit"
@@ -181,7 +223,7 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
   );
 }
 
-function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDelete, assignedName, isManager, staff, canEdit }) {
+function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDelete, assignedName, isManager, staff, canEdit, linkedClientName }) {
   const done = Boolean(completion);
   const [logging, setLogging] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -197,6 +239,7 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDel
             task_type: template.task_type,
             due_date: template.due_date || '',
             due_day: template.due_day || '',
+            clientName: linkedClientName || '',
             ...assignStateFor(template),
           }}
           isManager={isManager}
@@ -248,6 +291,11 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDel
                 <ArrowRight className="h-3 w-3" /> {assignedName}
               </span>
             )}
+            {linkedClientName && (
+              <span className="flex items-center gap-0.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">
+                {linkedClientName}
+              </span>
+            )}
             {dueDate && (
               <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
                 <CalendarDays className="h-3 w-3" /> Due {format(parseISO(dueDate), 'EEE d MMM')}
@@ -288,12 +336,19 @@ export default function TaskChecklist({ user, staff, isManager }) {
   const { templates, loading, error, toggle, completionFor, logContactTask, createTask, updateTask, deleteTask } = useTeamTasks(user, staff);
   const [showCreate, setShowCreate] = useState(false);
   const { staffList } = useAllStaff();
+  const { clientsList } = useAllClients();
 
   const staffNameById = useMemo(() => {
     const m = {};
     for (const s of staffList) m[s.id] = s.full_name;
     return m;
   }, [staffList]);
+
+  const clientNameById = useMemo(() => {
+    const m = {};
+    for (const c of clientsList) m[c.id] = `${c.first_name || ''} ${c.last_name || ''}`.trim();
+    return m;
+  }, [clientsList]);
 
   const grouped = useMemo(() => {
     const g = { daily: [], weekly: [], monthly: [], once: [] };
@@ -310,6 +365,7 @@ export default function TaskChecklist({ user, staff, isManager }) {
       task_type: fields.task_type,
       due_date: fields.cadence === 'once' ? fields.due_date : null,
       due_day: (fields.cadence === 'weekly' || fields.cadence === 'monthly') ? fields.due_day : null,
+      client_id: fields.client_id || null,
       ...resolveAssignmentFields({ isManager, assignMode: fields.assignMode, assignee: fields.assignee, staffId: staff.id }),
     });
   };
@@ -378,6 +434,7 @@ export default function TaskChecklist({ user, staff, isManager }) {
                       ? staffNameById[template.assigned_staff_id]
                       : null
                   }
+                  linkedClientName={template.client_id ? clientNameById[template.client_id] : null}
                 />
               ))}
             </ul>

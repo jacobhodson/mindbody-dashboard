@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { TrendingDown, Search, CheckCircle, ArrowUp, ArrowDown, ArrowRight, Sparkles, ChevronDown, AlertTriangle, BadgeCheck } from 'lucide-react';
+import { TrendingDown, Search, CheckCircle, ArrowUp, ArrowDown, ArrowRight, Sparkles, ChevronDown, AlertTriangle, BadgeCheck, Contact } from 'lucide-react';
 import { formatDistanceToNow, parseISO, format, differenceInDays } from 'date-fns';
 import ContactModal          from './ContactModal.jsx';
 import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
@@ -28,7 +28,7 @@ function TrendBadge({ trend }) {
   );
 }
 
-export default function RedsList({ data: propData, loading: propLoading, error: propError, contactLog, onboardingIds = new Set() }) {
+export default function RedsList({ data: propData, loading: propLoading, error: propError, contactLog, onboardingIds = new Set(), onViewClient }) {
   const [search, setSearch]         = useState('');
   const [selected, setSelected]     = useState(null);
   const [expandedId, setExpandedId] = useState(null);
@@ -252,6 +252,15 @@ export default function RedsList({ data: propData, loading: propLoading, error: 
                 </div>
 
                 <div className="flex items-center gap-2 ml-4 shrink-0">
+                  {onViewClient && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onViewClient(client.id); }}
+                      title="View client profile"
+                      className="rounded-lg border border-gray-300 bg-gray-100 p-1.5 text-gray-500 hover:bg-gray-200 hover:text-gray-800 transition-colors"
+                    >
+                      <Contact className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); setSelected(client); }}
                     className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${

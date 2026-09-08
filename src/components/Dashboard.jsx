@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Dumbbell, LogOut, BarChart3, Menu } from 'lucide-react';
+import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Dumbbell, LogOut, BarChart3, Menu, Contact } from 'lucide-react';
 import logo from '../assets/newstrength-logo.svg';
 import Sidebar             from './Sidebar.jsx';
 import Home                from './Home.jsx';
@@ -17,6 +17,8 @@ import DeclinedList       from './DeclinedList.jsx';
 import OnboardingTab          from './OnboardingTab.jsx';
 import PersonalTrainingTab    from './PersonalTrainingTab.jsx';
 import CelebrationsPanel   from './CelebrationsPanel.jsx';
+import ClientsList         from './ClientsList.jsx';
+import ClientDetail        from './ClientDetail.jsx';
 import { useOnboardingRollover } from '../utils/useOnboardingRollover.js';
 
 const TABS = [
@@ -25,6 +27,7 @@ const TABS = [
   { key: 'finances',          label: 'Finances',          Icon: DollarSign },
   { key: 'onboarding',        label: 'Onboarding',        Icon: Users2    },
   { key: 'personalTraining',  label: 'Personal Training', Icon: Dumbbell  },
+  { key: 'clients',           label: 'Clients',           Icon: Contact    },
   { key: 'scorecard',         label: 'Scorecard',         Icon: BarChart3 },
 ];
 
@@ -34,7 +37,13 @@ const SHORT_PRODUCTS = new Set(['3-Session', '14-Day']);
 export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh, contactLog, user, staff, isManager, onSignOut }) {
   const [tab, setTab] = useState('home');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [selectedClientMindbodyId, setSelectedClientMindbodyId] = useState(null);
   const anyLoading    = Object.values(loading).some(Boolean);
+
+  // Deep-link into a client's profile from anywhere in the app (Red's List,
+  // Fringe Clients, PT Red's List) — the app has no router, so this is just
+  // lifted tab-state, same pattern as every other tab switch here.
+  const onViewClient = (mindbodyId) => { setSelectedClientMindbodyId(mindbodyId); setTab('clients'); };
 
   const { decisions, getDecision, setDecision } = useOnboardingRollover();
 
@@ -155,10 +164,12 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               error={errors.clientAnalytics}
               contactLog={contactLog}
               onboardingIds={onboardingIds}
+              onViewClient={onViewClient}
             />
             <FringeClientsTable
               contactLog={contactLog}
               onboardingIds={onboardingIds}
+              onViewClient={onViewClient}
             />
             <CelebrationsPanel
               data={data.celebrations}
@@ -210,7 +221,22 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             loading={loading.pt}
             error={errors.pt}
             contactLog={contactLog}
+            onViewClient={onViewClient}
           />
+        )}
+
+        {/* ─ Clients ─ */}
+        {tab === 'clients' && (
+          selectedClientMindbodyId ? (
+            <ClientDetail
+              mindbodyId={selectedClientMindbodyId}
+              isManager={isManager}
+              staff={staff}
+              onBack={() => setSelectedClientMindbodyId(null)}
+            />
+          ) : (
+            <ClientsList onSelect={setSelectedClientMindbodyId} />
+          )
         )}
 
         {/* ─ Scorecard ─ */}

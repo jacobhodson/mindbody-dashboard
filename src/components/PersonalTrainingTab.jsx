@@ -61,7 +61,7 @@ function PTStatsTable({ stats, loading }) {
 }
 
 // ── Main tab ───────────────────────────────────────────────────────────────
-export default function PersonalTrainingTab({ data, loading, error, contactLog }) {
+export default function PersonalTrainingTab({ data, loading, error, contactLog, onViewClient }) {
   if (error && !data) {
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
@@ -82,7 +82,7 @@ export default function PersonalTrainingTab({ data, loading, error, contactLog }
       <PTStatsTable stats={data?.stats} loading={loading} />
 
       {/* PT Reds */}
-      <PTRedsList data={data} loading={loading} error={error} contactLog={contactLog} />
+      <PTRedsList data={data} loading={loading} error={error} contactLog={contactLog} onViewClient={onViewClient} />
 
       {/* Open Gym + Unchecked side by side */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

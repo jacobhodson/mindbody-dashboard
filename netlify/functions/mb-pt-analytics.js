@@ -13,6 +13,7 @@
  * Client names are fetched in bulk via /client/clients.
  */
 import { getStaffToken, mbGet, ok, err, CORS, formatPhone } from './utils/mb-auth.js';
+import { classifySession as classify } from './utils/session-classify.js';
 import {
   subDays, format, parseISO,
   startOfMonth, endOfMonth, endOfDay, subMonths,
@@ -21,17 +22,6 @@ import {
 const SKIP_STATUS  = new Set(['NoShow', 'LateCancelled', 'Cancelled']);
 const CREDIT_BATCH = 10;
 const CLIENT_BATCH = 20; // Mindbody caps ClientIds at 20 per request
-
-// ─── Session-type classifier ─────────────────────────────────────────────────
-// SP check must come BEFORE PT — "Semi Private Personal Training" contains
-// "personal train" so would wrongly match pt first.
-function classify(name = '') {
-  const s = name.toLowerCase();
-  if (/semi.?private/.test(s) || /\bsp\b/.test(s) || /\bsp\d/.test(s) || /small.?private/.test(s) || /partner.?train/.test(s) || /2:1/.test(s) || /3:1/.test(s)) return 'sp';
-  if (/personal\s*train/.test(s) || /\bpt\b/.test(s) || /\bpt\d/.test(s) || /1[:\s]1/.test(s) || /1on1/.test(s) || /individual\s*(coach|program)/.test(s)) return 'pt';
-  if (/open.?gym/.test(s) || /open.?train/.test(s) || /gym.?access/.test(s) || s === 'open gym') return 'gym';
-  return 'other';
-}
 
 // ─── Session type map: SessionTypeId → name ───────────────────────────────────
 async function fetchSessionTypeMap(token) {

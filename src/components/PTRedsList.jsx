@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { TrendingDown, CheckCircle, ChevronDown } from 'lucide-react';
+import { TrendingDown, CheckCircle, ChevronDown, Contact } from 'lucide-react';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import ContactModal          from './ContactModal.jsx';
 import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
 
-export default function PTRedsList({ data, loading, error, contactLog }) {
+export default function PTRedsList({ data, loading, error, contactLog, onViewClient }) {
   const [selected, setSelected]     = useState(null);
   const [expandedId, setExpandedId] = useState(null);
 
@@ -87,6 +87,15 @@ export default function PTRedsList({ data, loading, error, contactLog }) {
                 </div>
 
                 <div className="flex items-center gap-2 ml-4 shrink-0">
+                  {onViewClient && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onViewClient(client.id); }}
+                      title="View client profile"
+                      className="rounded-lg border border-gray-300 bg-gray-100 p-1.5 text-gray-500 hover:bg-gray-200 hover:text-gray-800 transition-colors"
+                    >
+                      <Contact className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); setSelected(client); }}
                     className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${

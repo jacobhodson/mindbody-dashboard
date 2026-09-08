@@ -103,18 +103,26 @@ export function useTeamTasks(user, staff) {
 
   // For task_type === 'contact_log' templates: logs the contact entry, and
   // (if not already done this period) marks the task completed too, linking
-  // the two rows together via task_contact_log.completion_id.
-  const logContactTask = useCallback(async (template, { clientName, note }) => {
+  // the two rows together via contact_log.completion_id. `clientId` (a
+  // clients.id uuid, optional) links the entry to a specific client so it
+  // shows up on that client's profile — see ClientDetail.jsx/useClientDetail.js.
+  //
+  // Note: this previously wrote to a table named `task_contact_log`, which
+  // was renamed to `contact_log` back in
+  // 20260901000003_task_assignment_and_contact_log.sql — that made every
+  // contact-log entry logged via a task silently fail. Fixed here.
+  const logContactTask = useCallback(async (template, { clientName, note, clientId }) => {
     if (!staff) return;
     let completion = completionFor(template);
     if (!completion) completion = await markDone(template);
 
     const { data, error: logErr } = await supabase
-      .from('task_contact_log')
+      .from('contact_log')
       .insert({
         staff_id:      staff.id,
         completion_id: completion?.id ?? null,
         client_name:   clientName,
+        client_id:     clientId || null,
         note:          note || null,
       })
       .select().single();
@@ -126,7 +134,7 @@ export function useTeamTasks(user, staff) {
   // person; everyone else can only create personal ones (RLS enforces all
   // of this server-side too). assignMode is 'personal' | 'team' | 'assigned'.
   const createTask = useCallback(async ({
-    label, description, cadence, target_type, target_value, unit, task_type, isManager, assignMode, assignee, due_date, due_day,
+    label, description, cadence, target_type, target_value, unit, task_type, isManager, assignMode, assignee, due_date, due_day, client_id,
   }) => {
     if (!staff) return null;
     const row = {
@@ -140,6 +148,7 @@ export function useTeamTasks(user, staff) {
       task_type:      task_type || 'checkbox',
       due_date:       cadence === 'once' ? due_date : null,
       due_day:        cadence === 'weekly' || cadence === 'monthly' ? (due_day || null) : null,
+      client_id:      client_id || null,
       ...resolveAssignmentFields({ isManager, assignMode, assignee, staffId: staff.id }),
     };
     const { data, error: insErr } = await supabase.from('task_templates').insert(row).select().single();

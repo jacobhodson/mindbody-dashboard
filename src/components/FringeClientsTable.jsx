@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, ArrowUp, ArrowDown, ArrowRight, Sparkles, RefreshCw, CheckCircle, ChevronDown } from 'lucide-react';
+import { Users, ArrowUp, ArrowDown, ArrowRight, Sparkles, RefreshCw, CheckCircle, ChevronDown, Contact } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import ContactModal          from './ContactModal.jsx';
 import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
@@ -51,7 +51,7 @@ function TrendIndicator({ trend }) {
   );
 }
 
-export default function FringeClientsTable({ contactLog, onboardingIds = new Set() }) {
+export default function FringeClientsTable({ contactLog, onboardingIds = new Set(), onViewClient }) {
   const [period, setPeriod]       = useState('7days');
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(true);
@@ -220,6 +220,17 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
                 }`}>
                   {client.sessionsThisWeek} {client.sessionsThisWeek === 1 ? 'session' : 'sessions'}
                 </span>
+
+                {/* View profile */}
+                {onViewClient && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onViewClient(client.id); }}
+                    title="View client profile"
+                    className="shrink-0 rounded-lg border border-gray-300 bg-gray-100 p-1.5 text-gray-500 hover:bg-gray-200 hover:text-gray-800 transition-colors"
+                  >
+                    <Contact className="h-3.5 w-3.5" />
+                  </button>
+                )}
 
                 {/* Contact button */}
                 <button
