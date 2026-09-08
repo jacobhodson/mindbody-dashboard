@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Dumbbell, LogOut, BarChart3 } from 'lucide-react';
+import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Dumbbell, LogOut, BarChart3, Menu } from 'lucide-react';
 import logo from '../assets/newstrength-logo.svg';
 import Sidebar             from './Sidebar.jsx';
 import Home                from './Home.jsx';
@@ -33,6 +33,7 @@ const SHORT_PRODUCTS = new Set(['3-Session', '14-Day']);
 
 export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh, contactLog, user, staff, isManager, onSignOut }) {
   const [tab, setTab] = useState('home');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const anyLoading    = Object.values(loading).some(Boolean);
 
   const { decisions, getDecision, setDecision } = useOnboardingRollover();
@@ -70,13 +71,20 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
       <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/90 backdrop-blur px-6 py-4">
         <div className="mx-auto max-w-7xl flex items-center justify-between">
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileNavOpen(true)}
+              className="-ml-1 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900 md:hidden"
+              aria-label="Open menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
             <img src={logo} alt="Newstrength" className="h-8 w-auto" />
             <div className="hidden sm:block border-l border-gray-200 pl-3">
               <h1 className="text-lg font-semibold tracking-tight text-gray-900">Operations Dashboard</h1>
               <p className="text-xs text-gray-500 mt-0.5">{import.meta.env.VITE_BUSINESS_NAME || 'Your Gym'}</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             {lastRefresh && (
               <span className="hidden sm:block text-xs text-gray-500">
                 Data from {isToday(lastRefresh) ? format(lastRefresh, 'h:mm a') : format(lastRefresh, 'EEE d MMM, h:mm a')}
@@ -88,7 +96,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               className="flex items-center gap-1.5 rounded-lg bg-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-300 hover:text-gray-900 disabled:opacity-50 transition-colors"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${anyLoading ? 'animate-spin' : ''}`} />
-              Refresh
+              <span className="hidden sm:inline">Refresh</span>
             </button>
             {user && (
               <button
@@ -104,8 +112,15 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         </div>
       </header>
 
-      <div className="flex">
-        <Sidebar tabs={TABS} activeTab={tab} onSelect={setTab} atRiskCount={atRiskCount} />
+      <div className="flex items-start">
+        <Sidebar
+          tabs={TABS}
+          activeTab={tab}
+          onSelect={setTab}
+          atRiskCount={atRiskCount}
+          mobileOpen={mobileNavOpen}
+          onCloseMobile={() => setMobileNavOpen(false)}
+        />
 
         {/* ── Tab content ── */}
         <main className="flex-1 min-w-0 mx-auto max-w-6xl px-4 sm:px-6 py-8 space-y-8">
