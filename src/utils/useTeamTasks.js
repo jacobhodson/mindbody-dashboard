@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient.js';
-import { periodStartFor } from './periods.js';
+import { periodStartForTemplate } from './periods.js';
 
 // Shared by createTask and TaskChecklist's edit form — turns "personal /
 // team / assigned to X" + who's asking into the actual scope/owner/assignee
@@ -45,7 +45,7 @@ export function useTeamTasks(user, staff) {
       if (tplErr) throw tplErr;
       setTemplates(tpls || []);
 
-      const periodStarts = [...new Set((tpls || []).map((t) => periodStartFor(t.cadence)))];
+      const periodStarts = [...new Set((tpls || []).map((t) => periodStartForTemplate(t)).filter(Boolean))];
       if (periodStarts.length) {
         const { data: comps, error: compErr } = await supabase
           .from('task_completions').select('*').in('period_start', periodStarts);
@@ -64,7 +64,7 @@ export function useTeamTasks(user, staff) {
   useEffect(() => { load(); }, [load]);
 
   const completionFor = useCallback((template) => {
-    const periodStart = periodStartFor(template.cadence);
+    const periodStart = periodStartForTemplate(template);
     return completions.find((c) =>
       c.template_id === template.id &&
       c.period_start === periodStart &&
@@ -77,7 +77,7 @@ export function useTeamTasks(user, staff) {
       template_id:  template.id,
       staff_id:     template.scope === 'team' ? null : staff.id,
       completed_by: staff.id,
-      period_start: periodStartFor(template.cadence),
+      period_start: periodStartForTemplate(template),
       period_type:  template.cadence,
       value:        value ?? template.target_value ?? 1,
     };
@@ -126,7 +126,7 @@ export function useTeamTasks(user, staff) {
   // person; everyone else can only create personal ones (RLS enforces all
   // of this server-side too). assignMode is 'personal' | 'team' | 'assigned'.
   const createTask = useCallback(async ({
-    label, description, cadence, target_type, target_value, unit, task_type, isManager, assignMode, assignee,
+    label, description, cadence, target_type, target_value, unit, task_type, isManager, assignMode, assignee, due_date, due_day,
   }) => {
     if (!staff) return null;
     const row = {
@@ -138,6 +138,8 @@ export function useTeamTasks(user, staff) {
       target_value:   target_value ?? 1,
       unit:           unit || null,
       task_type:      task_type || 'checkbox',
+      due_date:       cadence === 'once' ? due_date : null,
+      due_day:        cadence === 'weekly' || cadence === 'monthly' ? (due_day || null) : null,
       ...resolveAssignmentFields({ isManager, assignMode, assignee, staffId: staff.id }),
     };
     const { data, error: insErr } = await supabase.from('task_templates').insert(row).select().single();
@@ -158,5 +160,14 @@ export function useTeamTasks(user, staff) {
     return data;
   }, []);
 
-  return { templates, loading, error, toggle, completionFor, logContactTask, createTask, updateTask, reload: load };
+  // RLS restricts this the same way as updateTask (managers, or the
+  // personal task's own owner) — no schema change needed for this feature.
+  const deleteTask = useCallback(async (id) => {
+    const { error: delErr } = await supabase.from('task_templates').delete().eq('id', id);
+    if (delErr) { setError(delErr.message); return false; }
+    setTemplates((prev) => prev.filter((t) => t.id !== id));
+    return true;
+  }, []);
+
+  return { templates, loading, error, toggle, completionFor, logContactTask, createTask, updateTask, deleteTask, reload: load };
 }

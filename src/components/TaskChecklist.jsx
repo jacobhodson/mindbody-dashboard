@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react';
-import { Check, User, Users, Plus, X, ArrowRight, Pencil } from 'lucide-react';
+import { Check, User, Users, Plus, X, ArrowRight, Pencil, Trash2, CalendarDays } from 'lucide-react';
 import { useTeamTasks, resolveAssignmentFields } from '../utils/useTeamTasks.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { renderFormatted } from '../utils/richText.js';
+import { dueDateFor } from '../utils/periods.js';
+import { format, parseISO } from 'date-fns';
 import RichTextField from './RichTextField.jsx';
 
-const CADENCE_LABEL = { daily: 'Today', weekly: 'This week', monthly: 'This month' };
-const CADENCE_ORDER = ['daily', 'weekly', 'monthly'];
+const CADENCE_LABEL = { daily: 'Today', weekly: 'This week', monthly: 'This month', once: 'One-off tasks' };
+const CADENCE_ORDER = ['daily', 'weekly', 'monthly', 'once'];
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function ContactLogForm({ onSubmit, onCancel }) {
   const [clientName, setClientName] = useState('');
@@ -76,6 +79,8 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
   const [taskType, setTaskType]       = useState(initial?.task_type || 'checkbox');
   const [assignMode, setAssignMode]   = useState(initial?.assignMode || 'personal');
   const [assignee, setAssignee]       = useState(initial?.assignee || '');
+  const [dueDate, setDueDate]         = useState(initial?.due_date || '');
+  const [dueDay, setDueDay]           = useState(initial?.due_day || '');
   const [busy, setBusy]               = useState(false);
   const { staffList } = useAllStaff();
 
@@ -83,6 +88,7 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
     e.preventDefault();
     if (!label.trim()) return;
     if (assignMode === 'assigned' && !assignee) return;
+    if (cadence === 'once' && !dueDate) return;
     setBusy(true);
     await onSubmit({
       label: label.trim(),
@@ -92,6 +98,8 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
       isManager,
       assignMode,
       assignee: assignMode === 'assigned' ? assignee : null,
+      due_date: cadence === 'once' ? dueDate : null,
+      due_day: (cadence === 'weekly' || cadence === 'monthly') && dueDay ? Number(dueDay) : null,
     });
     setBusy(false);
     onClose();
@@ -115,11 +123,33 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
       />
       <RichTextField value={description} onChange={setDescription} placeholder="Notes (optional)" multiline />
       <div className="flex flex-wrap gap-3 text-sm">
-        <select value={cadence} onChange={(e) => setCadence(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900">
+        <select value={cadence} onChange={(e) => { setCadence(e.target.value); setDueDay(''); }} className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900">
           <option value="daily">Daily</option>
           <option value="weekly">Weekly</option>
           <option value="monthly">Monthly</option>
+          <option value="once">Once-off</option>
         </select>
+        {cadence === 'once' && (
+          <input
+            type="date"
+            required
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900"
+          />
+        )}
+        {cadence === 'weekly' && (
+          <select value={dueDay} onChange={(e) => setDueDay(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900">
+            <option value="">Due end of week</option>
+            {WEEKDAYS.map((d, i) => <option key={d} value={i + 1}>Due {d}</option>)}
+          </select>
+        )}
+        {cadence === 'monthly' && (
+          <select value={dueDay} onChange={(e) => setDueDay(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900">
+            <option value="">Due end of month</option>
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>Due day {d}</option>)}
+          </select>
+        )}
         <select value={taskType} onChange={(e) => setTaskType(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900">
           <option value="checkbox">Checkbox</option>
           <option value="contact_log">Client contact log</option>
@@ -151,7 +181,7 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
   );
 }
 
-function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, assignedName, isManager, staff, canEdit }) {
+function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDelete, assignedName, isManager, staff, canEdit }) {
   const done = Boolean(completion);
   const [logging, setLogging] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -165,6 +195,8 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, assig
             description: template.description || '',
             cadence: template.cadence,
             task_type: template.task_type,
+            due_date: template.due_date || '',
+            due_day: template.due_day || '',
             ...assignStateFor(template),
           }}
           isManager={isManager}
@@ -176,6 +208,8 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, assig
       </li>
     );
   }
+
+  const dueDate = dueDateFor(template);
 
   return (
     <li className="py-3">
@@ -214,6 +248,11 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, assig
                 <ArrowRight className="h-3 w-3" /> {assignedName}
               </span>
             )}
+            {dueDate && (
+              <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
+                <CalendarDays className="h-3 w-3" /> Due {format(parseISO(dueDate), 'EEE d MMM')}
+              </span>
+            )}
           </div>
           {template.description && (
             <p className="text-xs text-gray-500 mt-0.5">{renderFormatted(template.description)}</p>
@@ -225,18 +264,28 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, assig
             />
           )}
         </div>
-        {canEdit && (
-          <button onClick={() => setEditing(true)} className="shrink-0 text-gray-400 hover:text-gray-700">
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {canEdit && (
+            <button onClick={() => setEditing(true)} className="text-gray-400 hover:text-gray-700">
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {isManager && (
+            <button
+              onClick={() => { if (window.confirm(`Delete "${template.label}"? This can't be undone.`)) onDelete(template); }}
+              className="text-gray-400 hover:text-red-600"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
     </li>
   );
 }
 
 export default function TaskChecklist({ user, staff, isManager }) {
-  const { templates, loading, error, toggle, completionFor, logContactTask, createTask, updateTask } = useTeamTasks(user, staff);
+  const { templates, loading, error, toggle, completionFor, logContactTask, createTask, updateTask, deleteTask } = useTeamTasks(user, staff);
   const [showCreate, setShowCreate] = useState(false);
   const { staffList } = useAllStaff();
 
@@ -247,8 +296,9 @@ export default function TaskChecklist({ user, staff, isManager }) {
   }, [staffList]);
 
   const grouped = useMemo(() => {
-    const g = { daily: [], weekly: [], monthly: [] };
+    const g = { daily: [], weekly: [], monthly: [], once: [] };
     for (const t of templates) g[t.cadence]?.push(t);
+    g.once.sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
     return g;
   }, [templates]);
 
@@ -258,9 +308,13 @@ export default function TaskChecklist({ user, staff, isManager }) {
       description: fields.description || null,
       cadence: fields.cadence,
       task_type: fields.task_type,
+      due_date: fields.cadence === 'once' ? fields.due_date : null,
+      due_day: (fields.cadence === 'weekly' || fields.cadence === 'monthly') ? fields.due_day : null,
       ...resolveAssignmentFields({ isManager, assignMode: fields.assignMode, assignee: fields.assignee, staffId: staff.id }),
     });
   };
+
+  const handleDelete = async (template) => { await deleteTask(template.id); };
 
   if (loading) {
     return <p className="text-sm text-gray-500">Loading your tasks…</p>;
@@ -315,6 +369,7 @@ export default function TaskChecklist({ user, staff, isManager }) {
                   onToggle={toggle}
                   onLogContact={logContactTask}
                   onUpdate={handleUpdate}
+                  onDelete={handleDelete}
                   isManager={isManager}
                   staff={staff}
                   canEdit={isManager || template.owner_staff_id === staff?.id}

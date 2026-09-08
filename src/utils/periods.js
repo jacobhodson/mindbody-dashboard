@@ -1,7 +1,7 @@
 import {
   format, startOfWeek, startOfMonth,
   addDays, addWeeks, addMonths,
-  endOfWeek, endOfMonth,
+  endOfWeek, endOfMonth, setDate, getDaysInMonth,
 } from 'date-fns';
 
 /**
@@ -40,4 +40,39 @@ export function periodLabel(cadence, periodStart) {
   if (cadence === 'weekly')  return `Week of ${format(start, 'd MMM')}`;
   if (cadence === 'monthly') return format(start, 'MMMM yyyy');
   return format(start, 'EEE d MMM');
+}
+
+/**
+ * The period_start to use for a given template's *current* occurrence —
+ * 'once' tasks aren't derived from "now" at all, they're pinned to their own
+ * due_date, so this is the one place that needs the template, not just the
+ * cadence, to compute the right bucket.
+ */
+export function periodStartForTemplate(template, now = new Date()) {
+  if (template.cadence === 'once') return template.due_date;
+  return periodStartFor(template.cadence, now);
+}
+
+/**
+ * The display due date for a template's current period — yyyy-MM-dd.
+ * Defaults to the end of the period (Sunday / last day of month) unless
+ * `due_day` overrides it (1-7 Mon..Sun for weekly, 1-31 for monthly, clamped
+ * to however many days that particular month actually has).
+ */
+export function dueDateFor(template, now = new Date()) {
+  if (template.cadence === 'once') return template.due_date;
+
+  const periodStart = periodStartFor(template.cadence, now);
+  if (template.cadence === 'daily') return periodStart;
+
+  if (template.cadence === 'weekly') {
+    if (!template.due_day) return periodEndFor('weekly', periodStart);
+    return format(addDays(new Date(`${periodStart}T00:00:00`), template.due_day - 1), 'yyyy-MM-dd');
+  }
+
+  // monthly
+  if (!template.due_day) return periodEndFor('monthly', periodStart);
+  const start = new Date(`${periodStart}T00:00:00`);
+  const day = Math.min(template.due_day, getDaysInMonth(start));
+  return format(setDate(start, day), 'yyyy-MM-dd');
 }
