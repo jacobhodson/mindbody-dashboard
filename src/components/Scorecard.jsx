@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Check, X as XIcon, Target } from 'lucide-rea
 import { useScorecard } from '../utils/useScorecard.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { periodStartForOffset, periodLabel } from '../utils/periods.js';
+import { renderFormatted } from '../utils/richText.js';
 
 const CADENCES = [
   { key: 'daily',   label: 'Daily' },
@@ -145,7 +146,7 @@ export default function Scorecard() {
                   const hit    = actual != null && actual >= t.target_value;
                   return (
                     <li key={t.id} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-800">{t.label || t.metric_key}</span>
+                      <span className="text-gray-800">{renderFormatted(t.label || t.metric_key)}</span>
                       {actual == null ? (
                         <span className="text-gray-500 tabular-nums">target: {t.target_value.toLocaleString()}</span>
                       ) : (

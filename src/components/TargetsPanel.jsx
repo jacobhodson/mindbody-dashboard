@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Target, Plus, Pencil, Check, X } from 'lucide-react';
 import { useTargets } from '../utils/useTargets.js';
+import { renderFormatted } from '../utils/richText.js';
+import RichTextField from './RichTextField.jsx';
 
 const CADENCE_LABEL = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
 
@@ -16,7 +18,7 @@ function TargetRow({ target, isManager, onSave }) {
   return (
     <li className="flex items-center justify-between py-2.5 text-sm">
       <div className="min-w-0">
-        <p className="font-medium text-gray-900 truncate">{target.label || target.metric_key}</p>
+        <p className="font-medium text-gray-900 truncate">{renderFormatted(target.label || target.metric_key)}</p>
         <p className="text-[11px] text-gray-500">
           {CADENCE_LABEL[target.cadence]} · {target.scope === 'team' ? 'Team' : 'Individual'}
         </p>
@@ -75,10 +77,8 @@ function NewTargetForm({ onCreate, onClose }) {
         <input type="text" required placeholder="Metric key (e.g. new_members)" value={metricKey}
           onChange={(e) => setMetricKey(e.target.value)}
           className="flex-1 rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-        <input type="text" placeholder="Label" value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          className="flex-1 rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
       </div>
+      <RichTextField value={label} onChange={setLabel} placeholder="Label" className="text-xs py-1.5" />
       <div className="flex flex-wrap gap-2 text-xs">
         <select value={cadence} onChange={(e) => setCadence(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-2 py-1.5 text-gray-900">
           <option value="daily">Daily</option>
