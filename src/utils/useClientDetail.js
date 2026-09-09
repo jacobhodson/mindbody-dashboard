@@ -1,18 +1,42 @@
 import { useState, useEffect, useCallback } from 'react';
+import { startOfWeek, subWeeks, addDays } from 'date-fns';
 import { supabase } from '../lib/supabaseClient.js';
 
+// Buckets signed-in class visits into 4 Monday-start weeks — w1 = current
+// week to date, w4 = 3 weeks ago — same rolling-window convention as
+// mb-client-analytics.js and periods.js's periodStartFor('weekly'). Used for
+// the client health scorecard (reuses WeeklyAttendancePanel.jsx's colouring).
+function weeklyAttendanceFrom(classRows) {
+  const thisWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const weekStarts = [0, 1, 2, 3].map((i) => subWeeks(thisWeekStart, i));
+  const counts = [0, 0, 0, 0];
+  for (const row of classRows) {
+    if (!row.signed_in || !row.class_date) continue;
+    const d = new Date(`${row.class_date}T00:00:00`);
+    for (let i = 0; i < 4; i++) {
+      const start = weekStarts[i];
+      if (d >= start && d < addDays(start, 7)) { counts[i]++; break; }
+    }
+  }
+  const [w1, w2, w3, w4] = counts;
+  return { weeklyAttendance: { w1, w2, w3, w4 }, avgWeekly: Math.round(((w1 + w2 + w3 + w4) / 4) * 10) / 10 };
+}
+
 /**
- * Loads one client (by Mindbody id) plus their merged visit-ledger timeline
- * and notes, and exposes the writes a manager/staff member can make from the
- * client profile: caseload assignment, next-programme-due date, and adding a
- * note. RLS already restricts who can actually do each of these (managers
- * only for the clients-row update; any signed-in staff for their own note) —
- * this hook just performs the write, same division of labour as
- * useTeamTasks.js.
+ * Loads one client (by Mindbody id) plus their merged visit-ledger timeline,
+ * a 4-week attendance breakdown, and notes, and exposes the writes a
+ * manager/staff member can make from the client profile: caseload
+ * assignment (a specific staff member, "Group Program", or unassigned),
+ * package, next-programme-due date, and adding a note. RLS already
+ * restricts who can actually do each of these (managers only for the
+ * clients-row update; any signed-in staff for their own note) — this hook
+ * just performs the write, same division of labour as useTeamTasks.js.
  */
 export function useClientDetail(mindbodyId) {
   const [client, setClient]           = useState(null);
   const [visits, setVisits]           = useState([]); // merged class + appointment visits, desc by date
+  const [weeklyAttendance, setWeeklyAttendance] = useState({ w1: 0, w2: 0, w3: 0, w4: 0 });
+  const [avgWeekly, setAvgWeekly]     = useState(0);
   const [notes, setNotes]             = useState([]);
   const [contactLogs, setContactLogs] = useState([]);
   const [linkedTasks, setLinkedTasks] = useState([]);
@@ -29,7 +53,11 @@ export function useClientDetail(mindbodyId) {
       if (clientErr) throw clientErr;
       setClient(clientRow || null);
 
-      if (!clientRow) { setVisits([]); setNotes([]); setContactLogs([]); setLinkedTasks([]); return; }
+      if (!clientRow) {
+        setVisits([]); setWeeklyAttendance({ w1: 0, w2: 0, w3: 0, w4: 0 }); setAvgWeekly(0);
+        setNotes([]); setContactLogs([]); setLinkedTasks([]);
+        return;
+      }
 
       const [classRes, apptRes, notesRes, contactRes, tasksRes] = await Promise.all([
         supabase.from('client_class_visits').select('*').eq('client_id', clientRow.id).order('class_date', { ascending: false }),
@@ -56,6 +84,9 @@ export function useClientDetail(mindbodyId) {
       ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
       setVisits(merged);
+      const { weeklyAttendance: wa, avgWeekly: avg } = weeklyAttendanceFrom(classRes.data || []);
+      setWeeklyAttendance(wa);
+      setAvgWeekly(avg);
       setNotes(notesRes.data || []);
       setContactLogs(contactRes.data || []);
       setLinkedTasks(tasksRes.data || []);
@@ -68,10 +99,27 @@ export function useClientDetail(mindbodyId) {
 
   useEffect(() => { load(); }, [load]);
 
-  const updateCaseload = useCallback(async (assignedStaffId) => {
+  // { staffId } for a specific staff member, { group: true } for "Group
+  // Program", or {} for unassigned — writes assigned_staff_id/assigned_group
+  // together so they can never both be set.
+  const updateCaseload = useCallback(async ({ staffId, group } = {}) => {
     if (!client) return null;
     const { data, error: updErr } = await supabase
-      .from('clients').update({ assigned_staff_id: assignedStaffId || null, updated_at: new Date().toISOString() })
+      .from('clients').update({
+        assigned_staff_id: group ? null : (staffId || null),
+        assigned_group:    !!group,
+        updated_at:        new Date().toISOString(),
+      })
+      .eq('id', client.id).select().single();
+    if (updErr) { setError(updErr.message); return null; }
+    setClient(data);
+    return data;
+  }, [client]);
+
+  const updatePackage = useCallback(async (packageId) => {
+    if (!client) return null;
+    const { data, error: updErr } = await supabase
+      .from('clients').update({ package_id: packageId || null, updated_at: new Date().toISOString() })
       .eq('id', client.id).select().single();
     if (updErr) { setError(updErr.message); return null; }
     setClient(data);
@@ -105,5 +153,8 @@ export function useClientDetail(mindbodyId) {
     return true;
   }, []);
 
-  return { client, visits, notes, contactLogs, linkedTasks, loading, error, updateCaseload, updateNextProgramDue, addNote, deleteNote, reload: load };
+  return {
+    client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, loading, error,
+    updateCaseload, updatePackage, updateNextProgramDue, addNote, deleteNote, reload: load,
+  };
 }
