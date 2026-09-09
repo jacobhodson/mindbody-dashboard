@@ -52,9 +52,15 @@ export function useContactLog(staff) {
 
   const logContact = useCallback(async (clientId, clientName, note) => {
     if (!staff) throw new Error('Not signed in');
+    // Resolve the internal clients.id too (not just the legacy
+    // client_mindbody_id) so this entry shows up on the client's profile
+    // page (ClientDetail.jsx's Contact log section queries by client_id).
+    const { data: clientRow } = await supabase
+      .from('clients').select('id').eq('mindbody_id', String(clientId)).maybeSingle();
     const { error } = await supabase.from('contact_log').insert({
       staff_id:           staff.id,
       client_mindbody_id: String(clientId),
+      client_id:          clientRow?.id || null,
       client_name:        clientName,
       note:               note || null,
     });

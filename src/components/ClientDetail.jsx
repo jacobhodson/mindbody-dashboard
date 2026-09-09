@@ -55,6 +55,7 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
   const [addingPackage, setAddingPackage] = useState(false);
   const [newPackageName, setNewPackageName] = useState('');
   const [visitsExpanded, setVisitsExpanded] = useState(false);
+  const [contactLogsExpanded, setContactLogsExpanded] = useState(false);
 
   const staffNameById = useMemo(() => {
     const m = {};
@@ -114,6 +115,7 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
   const caseloadDisplay = client.assigned_group ? 'Group Program' : (staffNameById[client.assigned_staff_id] || 'Unassigned');
   const scorecardStatus = scorecardStatusFor(avgWeekly);
   const visibleVisits = visitsExpanded ? visits : visits.slice(0, 10);
+  const visibleContactLogs = contactLogsExpanded ? contactLogs : contactLogs.slice(0, 3);
   const status = effectiveStatus(client);
   const overridden = hasStatusOverride(client);
 
@@ -336,7 +338,7 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
             <MessageSquare className="h-4 w-4 text-gray-400" /> Contact log
           </h3>
           <ul className="divide-y divide-gray-200">
-            {contactLogs.map((c) => (
+            {visibleContactLogs.map((c) => (
               <li key={c.id} className="py-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-medium text-gray-700">{staffNameById[c.staff_id] || 'Staff'}</p>
@@ -346,6 +348,22 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
               </li>
             ))}
           </ul>
+          {!contactLogsExpanded && contactLogs.length > 3 && (
+            <button
+              onClick={() => setContactLogsExpanded(true)}
+              className="mt-3 text-xs font-medium text-emerald-600 hover:text-emerald-700"
+            >
+              Show all {contactLogs.length} contacts
+            </button>
+          )}
+          {contactLogsExpanded && contactLogs.length > 3 && (
+            <button
+              onClick={() => setContactLogsExpanded(false)}
+              className="mt-3 text-xs font-medium text-gray-500 hover:text-gray-700"
+            >
+              Show fewer
+            </button>
+          )}
         </div>
       )}
 
