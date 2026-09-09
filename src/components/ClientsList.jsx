@@ -4,10 +4,13 @@ import { format, parseISO, differenceInCalendarDays, endOfWeek, endOfMonth, star
 import { useAllClients } from '../utils/useAllClients.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useMembershipPackages } from '../utils/useMembershipPackages.js';
+import { GROUP_VALUE, caseloadSelectValue, caseloadPayloadFor } from '../utils/caseload.js';
+import { KNOWN_STATUSES, effectiveStatus, hasStatusOverride } from '../utils/clientStatus.js';
 
 // "Starters" = created in the last 30 days — new clients who likely still
 // need a package manually allocated.
 const STARTER_DAYS = 30;
+const ADD_PACKAGE_VALUE = '__add__';
 
 function dueBucketFor(nextProgramDue, today) {
   if (!nextProgramDue) return 'not_set';
@@ -27,21 +30,26 @@ function visitBucketFor(lastVisitDate, today) {
   return '28_plus';
 }
 
-export default function ClientsList({ onSelect, initialSearch }) {
-  const { clientsList, loading } = useAllClients();
+const selectClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500';
+
+export default function ClientsList({ onSelect, initialSearch, isManager }) {
+  const { clientsList, loading, updateCaseload, updatePackage, updateDueDate, updateStatusOverride } = useAllClients();
   const { staffList } = useAllStaff();
-  const { packages } = useMembershipPackages();
+  const { packages, createPackage } = useMembershipPackages();
   const [search, setSearch]     = useState(initialSearch || '');
   // Default 'Active' (a literal status-text match, not the Mindbody `active`
   // boolean — that flag turned out to be true for every client in this
   // account regardless of status, even Terminated, so it carries no signal
-  // here and isn't usable as a filter).
+  // here and isn't usable as a filter). Matches effective status (a
+  // manager's status_override, if set, else the Mindbody-synced status).
   const [statusFilter, setStatusFilter]     = useState('Active'); // 'Active' | 'all' | <status text>
 
   const [assignedFilter, setAssignedFilter] = useState('all');    // 'all' | 'unassigned' | 'group' | <staff id>
   const [dueFilter, setDueFilter]           = useState('all');    // 'all' | 'overdue' | 'due_week' | 'due_month' | 'not_set'
   const [visitFilter, setVisitFilter]       = useState('all');    // 'all' | 'this_week' | '1_2_weeks' | '2_4_weeks' | '28_plus' | 'never'
   const [startersOnly, setStartersOnly]     = useState(false);
+  const [addingPackageForId, setAddingPackageForId] = useState(null);
+  const [newPackageName, setNewPackageName]         = useState('');
 
   const today = useMemo(() => startOfDay(new Date()), []);
 
@@ -58,7 +66,7 @@ export default function ClientsList({ onSelect, initialSearch }) {
   }, [packages]);
 
   const statusOptions = useMemo(() => {
-    const set = new Set(clientsList.map((c) => c.status).filter(Boolean));
+    const set = new Set(clientsList.map((c) => effectiveStatus(c)).filter(Boolean));
     set.delete('Active'); // already the default option, don't list it twice
     return [...set].sort();
   }, [clientsList]);
@@ -74,7 +82,7 @@ export default function ClientsList({ onSelect, initialSearch }) {
         c.mobile_phone?.includes(q)
       )) return false;
 
-      if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+      if (statusFilter !== 'all' && effectiveStatus(c) !== statusFilter) return false;
 
       if (assignedFilter === 'unassigned' && (c.assigned_staff_id || c.assigned_group)) return false;
       if (assignedFilter === 'group' && !c.assigned_group) return false;
@@ -89,7 +97,20 @@ export default function ClientsList({ onSelect, initialSearch }) {
     });
   }, [clientsList, search, statusFilter, assignedFilter, dueFilter, visitFilter, startersOnly, today]);
 
-  const selectClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500';
+  const handlePackageChange = (clientId, value) => {
+    if (value === ADD_PACKAGE_VALUE) { setAddingPackageForId(clientId); setNewPackageName(''); return; }
+    updatePackage(clientId, value || null);
+  };
+
+  const submitNewPackage = async (e, clientId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!newPackageName.trim()) return;
+    const pkg = await createPackage(newPackageName.trim());
+    if (pkg) await updatePackage(clientId, pkg.id);
+    setNewPackageName('');
+    setAddingPackageForId(null);
+  };
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white flex flex-col">
@@ -112,20 +133,20 @@ export default function ClientsList({ onSelect, initialSearch }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={selectClass}>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={`${selectClass} py-1.5`}>
             <option value="Active">Status: Active</option>
             <option value="all">Status: All</option>
             {statusOptions.map((s) => <option key={s} value={s}>Status: {s}</option>)}
           </select>
 
-          <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)} className={selectClass}>
+          <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)} className={`${selectClass} py-1.5`}>
             <option value="all">Assigned to: All</option>
             <option value="unassigned">Assigned to: Unassigned</option>
             <option value="group">Assigned to: Group Program</option>
             {staffList.map((s) => <option key={s.id} value={s.id}>Assigned to: {s.full_name}</option>)}
           </select>
 
-          <select value={dueFilter} onChange={(e) => setDueFilter(e.target.value)} className={selectClass}>
+          <select value={dueFilter} onChange={(e) => setDueFilter(e.target.value)} className={`${selectClass} py-1.5`}>
             <option value="all">Next programme: All</option>
             <option value="overdue">Overdue</option>
             <option value="due_week">Due this week</option>
@@ -133,7 +154,7 @@ export default function ClientsList({ onSelect, initialSearch }) {
             <option value="not_set">Not set</option>
           </select>
 
-          <select value={visitFilter} onChange={(e) => setVisitFilter(e.target.value)} className={selectClass}>
+          <select value={visitFilter} onChange={(e) => setVisitFilter(e.target.value)} className={`${selectClass} py-1.5`}>
             <option value="all">Last visit: All</option>
             <option value="this_week">This week</option>
             <option value="1_2_weeks">1-2 weeks ago</option>
@@ -171,6 +192,8 @@ export default function ClientsList({ onSelect, initialSearch }) {
             )}
             {!loading && filtered.map((c) => {
               const needsPackage = isStarter(c) && !c.package_id;
+              const status = effectiveStatus(c);
+              const overridden = hasStatusOverride(c);
               return (
                 <tr
                   key={c.id}
@@ -188,14 +211,85 @@ export default function ClientsList({ onSelect, initialSearch }) {
                     </div>
                     <p className="text-xs text-gray-500">{c.email || c.mobile_phone || '—'}</p>
                   </td>
-                  <td className="px-3 py-2.5 text-gray-600">{c.status || '—'}</td>
-                  <td className="px-3 py-2.5 text-gray-600">
-                    {c.assigned_group ? 'Group Program' : (staffNameById[c.assigned_staff_id] || '—')}
+
+                  <td className="px-3 py-2.5 text-gray-600" onClick={(e) => isManager && e.stopPropagation()}>
+                    {isManager ? (
+                      <select
+                        value={c.status_override || ''}
+                        onChange={(e) => updateStatusOverride(c.id, e.target.value)}
+                        title={overridden ? `Manually set — Mindbody has this client as "${c.status}"` : undefined}
+                        className={selectClass}
+                      >
+                        <option value="">{c.status} (Mindbody)</option>
+                        {KNOWN_STATUSES.filter((s) => s !== c.status).map((s) => (
+                          <option key={s} value={s}>{s} (manual)</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span>{status}{overridden && ' •'}</span>
+                    )}
                   </td>
-                  <td className="px-3 py-2.5 text-gray-600">{packageNameById[c.package_id] || '—'}</td>
-                  <td className="px-3 py-2.5 text-gray-600">
-                    {c.next_program_due ? format(parseISO(c.next_program_due), 'd MMM yyyy') : '—'}
+
+                  <td className="px-3 py-2.5 text-gray-600" onClick={(e) => isManager && e.stopPropagation()}>
+                    {isManager ? (
+                      <select
+                        value={caseloadSelectValue(c)}
+                        onChange={(e) => updateCaseload(c.id, caseloadPayloadFor(e.target.value))}
+                        className={selectClass}
+                      >
+                        <option value="">Unassigned</option>
+                        <option value={GROUP_VALUE}>Group Program</option>
+                        {staffList.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                      </select>
+                    ) : (
+                      c.assigned_group ? 'Group Program' : (staffNameById[c.assigned_staff_id] || '—')
+                    )}
                   </td>
+
+                  <td className="px-3 py-2.5 text-gray-600" onClick={(e) => isManager && e.stopPropagation()}>
+                    {isManager ? (
+                      addingPackageForId === c.id ? (
+                        <form onSubmit={(e) => submitNewPackage(e, c.id)} className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            autoFocus
+                            placeholder="New package"
+                            value={newPackageName}
+                            onChange={(e) => setNewPackageName(e.target.value)}
+                            className="w-28 rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-xs text-gray-900"
+                          />
+                          <button type="submit" className="rounded-lg bg-emerald-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-emerald-500">Save</button>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setAddingPackageForId(null); }} className="rounded-lg bg-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-300">✕</button>
+                        </form>
+                      ) : (
+                        <select
+                          value={c.package_id || ''}
+                          onChange={(e) => handlePackageChange(c.id, e.target.value)}
+                          className={selectClass}
+                        >
+                          <option value="">Not set</option>
+                          {packages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          <option value={ADD_PACKAGE_VALUE}>+ Add new…</option>
+                        </select>
+                      )
+                    ) : (
+                      packageNameById[c.package_id] || '—'
+                    )}
+                  </td>
+
+                  <td className="px-3 py-2.5 text-gray-600" onClick={(e) => isManager && e.stopPropagation()}>
+                    {isManager ? (
+                      <input
+                        type="date"
+                        value={c.next_program_due || ''}
+                        onChange={(e) => updateDueDate(c.id, e.target.value)}
+                        className={selectClass}
+                      />
+                    ) : (
+                      c.next_program_due ? format(parseISO(c.next_program_due), 'd MMM yyyy') : '—'
+                    )}
+                  </td>
+
                   <td className="px-3 py-2.5 text-gray-600">
                     {c.last_visit_date ? format(parseISO(c.last_visit_date), 'd MMM yyyy') : '—'}
                   </td>

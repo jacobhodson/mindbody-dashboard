@@ -235,7 +235,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               onBack={() => setSelectedClientMindbodyId(null)}
             />
           ) : (
-            <ClientsList onSelect={setSelectedClientMindbodyId} />
+            <ClientsList onSelect={setSelectedClientMindbodyId} isManager={isManager} />
           )
         )}
 

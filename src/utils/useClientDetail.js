@@ -136,6 +136,17 @@ export function useClientDetail(mindbodyId) {
     return data;
   }, [client]);
 
+  // null clears the override, falling back to the Mindbody-synced `status`.
+  const updateStatusOverride = useCallback(async (value) => {
+    if (!client) return null;
+    const { data, error: updErr } = await supabase
+      .from('clients').update({ status_override: value || null, updated_at: new Date().toISOString() })
+      .eq('id', client.id).select().single();
+    if (updErr) { setError(updErr.message); return null; }
+    setClient(data);
+    return data;
+  }, [client]);
+
   const addNote = useCallback(async (staffId, note) => {
     if (!client || !note.trim()) return null;
     const { data, error: insErr } = await supabase
@@ -155,6 +166,6 @@ export function useClientDetail(mindbodyId) {
 
   return {
     client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, loading, error,
-    updateCaseload, updatePackage, updateNextProgramDue, addNote, deleteNote, reload: load,
+    updateCaseload, updatePackage, updateNextProgramDue, updateStatusOverride, addNote, deleteNote, reload: load,
   };
 }

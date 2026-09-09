@@ -8,10 +8,11 @@ import { useClientDetail } from '../utils/useClientDetail.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useMembershipPackages } from '../utils/useMembershipPackages.js';
 import { renderFormatted } from '../utils/richText.js';
+import { GROUP_VALUE, caseloadSelectValue as caseloadValueFor, caseloadPayloadFor } from '../utils/caseload.js';
+import { KNOWN_STATUSES, effectiveStatus, hasStatusOverride } from '../utils/clientStatus.js';
 import RichTextField from './RichTextField.jsx';
 import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
 
-const GROUP_VALUE = '__group__'; // sentinel option value for the caseload <select>
 const ADD_PACKAGE_VALUE = '__add__';
 
 // Same 3+/1-2/0 thresholds as WeeklyAttendancePanel.jsx's sessionColor() and
@@ -45,7 +46,7 @@ function Field({ label, value, Icon }) {
 export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
   const {
     client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, loading, error,
-    updateCaseload, updatePackage, updateNextProgramDue, addNote, deleteNote,
+    updateCaseload, updatePackage, updateNextProgramDue, updateStatusOverride, addNote, deleteNote,
   } = useClientDetail(mindbodyId);
   const { staffList } = useAllStaff();
   const { packages, createPackage } = useMembershipPackages();
@@ -91,16 +92,14 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
     setSavingNote(false);
   };
 
-  const handleCaseloadChange = (value) => {
-    if (value === GROUP_VALUE) updateCaseload({ group: true });
-    else if (value) updateCaseload({ staffId: value });
-    else updateCaseload({});
-  };
+  const handleCaseloadChange = (value) => updateCaseload(caseloadPayloadFor(value));
 
   const handlePackageChange = async (value) => {
     if (value === ADD_PACKAGE_VALUE) { setAddingPackage(true); return; }
     updatePackage(value || null);
   };
+
+  const handleStatusChange = (value) => updateStatusOverride(value || null);
 
   const submitNewPackage = async (e) => {
     e.preventDefault();
@@ -111,10 +110,12 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
     setAddingPackage(false);
   };
 
-  const caseloadSelectValue = client.assigned_group ? GROUP_VALUE : (client.assigned_staff_id || '');
+  const caseloadSelectValue = caseloadValueFor(client);
   const caseloadDisplay = client.assigned_group ? 'Group Program' : (staffNameById[client.assigned_staff_id] || 'Unassigned');
   const scorecardStatus = scorecardStatusFor(avgWeekly);
   const visibleVisits = visitsExpanded ? visits : visits.slice(0, 10);
+  const status = effectiveStatus(client);
+  const overridden = hasStatusOverride(client);
 
   return (
     <div className="space-y-6">
@@ -128,8 +129,13 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-lg font-semibold text-gray-900">{fullName}</h2>
-              {client.status && (
-                <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-600">{client.status}</span>
+              {status && (
+                <span
+                  title={overridden ? `Manually set — Mindbody has this client as "${client.status}"` : undefined}
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${overridden ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' : 'bg-gray-200 text-gray-600'}`}
+                >
+                  {status}{overridden && ' •'}
+                </span>
               )}
               {client.red_alert && (
                 <span className="flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 border border-red-500/20">
@@ -235,6 +241,23 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
               />
             ) : (
               <p className="text-sm text-gray-800">{fmtDate(client.next_program_due)}</p>
+            )}
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Status</p>
+            {isManager ? (
+              <select
+                value={client.status_override || ''}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
+              >
+                <option value="">{client.status} (Mindbody)</option>
+                {KNOWN_STATUSES.filter((s) => s !== client.status).map((s) => (
+                  <option key={s} value={s}>{s} (manual)</option>
+                ))}
+              </select>
+            ) : (
+              <p className="text-sm text-gray-800">{status}</p>
             )}
           </div>
         </div>
