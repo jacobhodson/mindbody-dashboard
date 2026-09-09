@@ -240,7 +240,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         )}
 
         {/* ─ Scorecard ─ */}
-        {tab === 'scorecard' && <Scorecard />}
+        {tab === 'scorecard' && <Scorecard staff={staff} isManager={isManager} />}
         </main>
       </div>
     </div>

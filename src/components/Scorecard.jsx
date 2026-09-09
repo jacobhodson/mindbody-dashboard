@@ -4,6 +4,7 @@ import { useScorecard } from '../utils/useScorecard.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { periodStartForOffset, periodLabel } from '../utils/periods.js';
 import { renderFormatted } from '../utils/richText.js';
+import WinTheWeek from './WinTheWeek.jsx';
 
 const CADENCES = [
   { key: 'daily',   label: 'Daily' },
@@ -11,7 +12,7 @@ const CADENCES = [
   { key: 'monthly', label: 'Monthly' },
 ];
 
-export default function Scorecard() {
+export default function Scorecard({ staff, isManager }) {
   const [cadence, setCadence] = useState('weekly');
   const [offset, setOffset]   = useState(0);
   const periodStart = periodStartForOffset(cadence, offset);
@@ -27,6 +28,11 @@ export default function Scorecard() {
     loading, error, teamTemplates, individualTemplates,
     teamDoneCount, individualCompletions, targets, completionFor, actualFor,
   } = useScorecard(cadence, periodStart);
+
+  // Win the Week owns the display for department-tagged targets (its own
+  // card grid, always current-week) — exclude them here so a weekly WTW
+  // target doesn't also show up in this plain list when cadence='weekly'.
+  const mindbodyTargets = useMemo(() => targets.filter((t) => !t.department), [targets]);
 
   const changeCadence = (c) => { setCadence(c); setOffset(0); };
 
@@ -50,9 +56,9 @@ export default function Scorecard() {
       <div>
         <h1 className="text-lg font-semibold text-gray-900">Scorecard</h1>
         <p className="text-sm text-gray-500">
-          Task completion history, plus targets for the period. Attendance and revenue
-          targets show real Mindbody-tracked actuals; other targets show their configured
-          value only until they're synced too.
+          Task completion history, Mindbody-tracked attendance/revenue targets, and
+          this week's Win the Week scoreboard — linked tasks add to a target's progress
+          automatically as they're completed.
         </p>
       </div>
 
@@ -135,13 +141,13 @@ export default function Scorecard() {
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <div className="flex items-center gap-2 mb-3">
               <Target className="h-4 w-4 text-emerald-600" />
-              <h3 className="text-sm font-semibold text-gray-900">Targets for this period</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Mindbody-tracked targets</h3>
             </div>
-            {targets.length === 0 ? (
+            {mindbodyTargets.length === 0 ? (
               <p className="text-xs text-gray-500">No targets were active this period.</p>
             ) : (
               <ul className="space-y-1.5">
-                {targets.map((t) => {
+                {mindbodyTargets.map((t) => {
                   const actual = actualFor(t);
                   const hit    = actual != null && actual >= t.target_value;
                   return (
@@ -160,6 +166,8 @@ export default function Scorecard() {
               </ul>
             )}
           </div>
+
+          <WinTheWeek staff={staff} isManager={isManager} />
         </>
       )}
     </div>

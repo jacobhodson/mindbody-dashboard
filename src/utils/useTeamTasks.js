@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient.js';
 import { periodStartForTemplate } from './periods.js';
+import { addMetricProgress } from './metricActuals.js';
 
 // Shared by createTask and TaskChecklist's edit form — turns "personal /
 // team / assigned to X" + who's asking into the actual scope/owner/assignee
@@ -84,6 +85,11 @@ export function useTeamTasks(user, staff) {
     const { data, error: insErr } = await supabase.from('task_completions').insert(row).select().single();
     if (insErr) { setError(insErr.message); return null; }
     setCompletions((prev) => [...prev, data]);
+    // Win the Week: a task linked to a target adds its completion value to
+    // that target's progress for today — see metricActuals.js.
+    if (template.linked_metric_key) {
+      addMetricProgress(template.linked_metric_key, data.value, 'task').catch((e) => setError(e.message));
+    }
     return data;
   }, [staff]);
 
@@ -95,6 +101,10 @@ export function useTeamTasks(user, staff) {
       const { error: delErr } = await supabase.from('task_completions').delete().eq('id', existing.id);
       if (delErr) { setError(delErr.message); return; }
       setCompletions((prev) => prev.filter((c) => c.id !== existing.id));
+      // Back out whatever this completion had added to a linked target.
+      if (template.linked_metric_key) {
+        addMetricProgress(template.linked_metric_key, -existing.value, 'task').catch((e) => setError(e.message));
+      }
       return;
     }
 
@@ -135,20 +145,23 @@ export function useTeamTasks(user, staff) {
   // of this server-side too). assignMode is 'personal' | 'team' | 'assigned'.
   const createTask = useCallback(async ({
     label, description, cadence, target_type, target_value, unit, task_type, isManager, assignMode, assignee, due_date, due_day, client_id,
+    linked_target_id, linked_metric_key,
   }) => {
     if (!staff) return null;
     const row = {
-      key:            `personal-${staff.id}-${Date.now()}`,
+      key:                `personal-${staff.id}-${Date.now()}`,
       label,
-      description:    description || null,
+      description:        description || null,
       cadence,
-      target_type:    target_type || 'boolean',
-      target_value:   target_value ?? 1,
-      unit:           unit || null,
-      task_type:      task_type || 'checkbox',
-      due_date:       cadence === 'once' ? due_date : null,
-      due_day:        cadence === 'weekly' || cadence === 'monthly' ? (due_day || null) : null,
-      client_id:      client_id || null,
+      target_type:        target_type || 'boolean',
+      target_value:       target_value ?? 1,
+      unit:               unit || null,
+      task_type:          task_type || 'checkbox',
+      due_date:           cadence === 'once' ? due_date : null,
+      due_day:            cadence === 'weekly' || cadence === 'monthly' ? (due_day || null) : null,
+      client_id:          client_id || null,
+      linked_target_id:   linked_target_id || null,
+      linked_metric_key:  linked_metric_key || null,
       ...resolveAssignmentFields({ isManager, assignMode, assignee, staffId: staff.id }),
     };
     const { data, error: insErr } = await supabase.from('task_templates').insert(row).select().single();

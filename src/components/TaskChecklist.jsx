@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Check, User, Users, Plus, X, ArrowRight, Pencil, Trash2, CalendarDays } from 'lucide-react';
+import { Check, User, Users, Plus, X, ArrowRight, Pencil, Trash2, CalendarDays, Target } from 'lucide-react';
 import { useTeamTasks, resolveAssignmentFields } from '../utils/useTeamTasks.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useAllClients } from '../utils/useAllClients.js';
+import { useTargets } from '../utils/useTargets.js';
 import { renderFormatted } from '../utils/richText.js';
 import { dueDateFor } from '../utils/periods.js';
 import { format, parseISO } from 'date-fns';
@@ -108,9 +109,12 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
   const [dueDate, setDueDate]         = useState(initial?.due_date || '');
   const [dueDay, setDueDay]           = useState(initial?.due_day || '');
   const [clientName, setClientName]   = useState(initial?.clientName || '');
+  const [linkedTargetId, setLinkedTargetId] = useState(initial?.linked_target_id || '');
   const [busy, setBusy]               = useState(false);
   const { staffList } = useAllStaff();
   const { clientsList, resolve: resolveClientId } = useClientNameLookup();
+  const { targets } = useTargets(staff);
+  const winTheWeekTargets = targets.filter((t) => t.department);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -118,6 +122,7 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
     if (assignMode === 'assigned' && !assignee) return;
     if (cadence === 'once' && !dueDate) return;
     setBusy(true);
+    const linkedTarget = winTheWeekTargets.find((t) => t.id === linkedTargetId);
     await onSubmit({
       label: label.trim(),
       description: description.trim(),
@@ -129,6 +134,8 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
       due_date: cadence === 'once' ? dueDate : null,
       due_day: (cadence === 'weekly' || cadence === 'monthly') && dueDay ? Number(dueDay) : null,
       client_id: clientName.trim() ? resolveClientId(clientName.trim()) : null,
+      linked_target_id: linkedTarget?.id || null,
+      linked_metric_key: linkedTarget?.metric_key || null,
     });
     setBusy(false);
     onClose();
@@ -211,6 +218,18 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
             <option key={c.id} value={`${c.first_name || ''} ${c.last_name || ''}`.trim()} />
           ))}
         </datalist>
+        {isManager && (
+          <select
+            value={linkedTargetId}
+            onChange={(e) => setLinkedTargetId(e.target.value)}
+            className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900"
+          >
+            <option value="">Count toward target… (optional)</option>
+            {winTheWeekTargets.map((t) => (
+              <option key={t.id} value={t.id}>{t.label || t.metric_key}</option>
+            ))}
+          </select>
+        )}
       </div>
       <button
         type="submit"
@@ -223,7 +242,7 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
   );
 }
 
-function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDelete, assignedName, isManager, staff, canEdit, linkedClientName }) {
+function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDelete, assignedName, isManager, staff, canEdit, linkedClientName, linkedTargetLabel }) {
   const done = Boolean(completion);
   const [logging, setLogging] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -240,6 +259,7 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDel
             due_date: template.due_date || '',
             due_day: template.due_day || '',
             clientName: linkedClientName || '',
+            linked_target_id: template.linked_target_id || '',
             ...assignStateFor(template),
           }}
           isManager={isManager}
@@ -296,6 +316,11 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDel
                 {linkedClientName}
               </span>
             )}
+            {linkedTargetLabel && (
+              <span className="flex items-center gap-0.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700" title="Completing this adds to the linked Win the Week target">
+                <Target className="h-2.5 w-2.5" /> {linkedTargetLabel}
+              </span>
+            )}
             {dueDate && (
               <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
                 <CalendarDays className="h-3 w-3" /> Due {format(parseISO(dueDate), 'EEE d MMM')}
@@ -337,6 +362,7 @@ export default function TaskChecklist({ user, staff, isManager }) {
   const [showCreate, setShowCreate] = useState(false);
   const { staffList } = useAllStaff();
   const { clientsList } = useAllClients();
+  const { targets } = useTargets(staff);
 
   const staffNameById = useMemo(() => {
     const m = {};
@@ -349,6 +375,12 @@ export default function TaskChecklist({ user, staff, isManager }) {
     for (const c of clientsList) m[c.id] = `${c.first_name || ''} ${c.last_name || ''}`.trim();
     return m;
   }, [clientsList]);
+
+  const targetLabelById = useMemo(() => {
+    const m = {};
+    for (const t of targets) m[t.id] = t.label || t.metric_key;
+    return m;
+  }, [targets]);
 
   const grouped = useMemo(() => {
     const g = { daily: [], weekly: [], monthly: [], once: [] };
@@ -366,6 +398,8 @@ export default function TaskChecklist({ user, staff, isManager }) {
       due_date: fields.cadence === 'once' ? fields.due_date : null,
       due_day: (fields.cadence === 'weekly' || fields.cadence === 'monthly') ? fields.due_day : null,
       client_id: fields.client_id || null,
+      linked_target_id: fields.linked_target_id || null,
+      linked_metric_key: fields.linked_metric_key || null,
       ...resolveAssignmentFields({ isManager, assignMode: fields.assignMode, assignee: fields.assignee, staffId: staff.id }),
     });
   };
@@ -435,6 +469,7 @@ export default function TaskChecklist({ user, staff, isManager }) {
                       : null
                   }
                   linkedClientName={template.client_id ? clientNameById[template.client_id] : null}
+                  linkedTargetLabel={template.linked_target_id ? targetLabelById[template.linked_target_id] : null}
                 />
               ))}
             </ul>
