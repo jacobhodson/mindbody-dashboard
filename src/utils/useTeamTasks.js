@@ -111,6 +111,28 @@ export function useTeamTasks(user, staff) {
     await markDone(template);
   }, [staff, completionFor, markDone]);
 
+  // For target_type === 'count' templates (e.g. "Sales Dials", target 100):
+  // logging ADDS to the period's running value rather than finishing the
+  // task in one click — log 50, then 30 more, shows 80/100. Creates the
+  // completion on first log (via markDone, which already forwards the
+  // value into a linked target), or tops up an existing one and forwards
+  // just the delta so the linked target moves by the right amount either way.
+  const logCount = useCallback(async (template, delta) => {
+    if (!staff || !delta) return null;
+    const existing = completionFor(template);
+
+    if (!existing) return markDone(template, delta);
+
+    const { data, error: updErr } = await supabase
+      .from('task_completions').update({ value: Number(existing.value) + delta }).eq('id', existing.id).select().single();
+    if (updErr) { setError(updErr.message); return null; }
+    setCompletions((prev) => prev.map((c) => (c.id === existing.id ? data : c)));
+    if (template.linked_metric_key) {
+      addMetricProgress(template.linked_metric_key, delta, 'task').catch((e) => setError(e.message));
+    }
+    return data;
+  }, [staff, completionFor, markDone]);
+
   // For task_type === 'contact_log' templates: logs the contact entry, and
   // (if not already done this period) marks the task completed too, linking
   // the two rows together via contact_log.completion_id. `clientId` (a
@@ -191,5 +213,5 @@ export function useTeamTasks(user, staff) {
     return true;
   }, []);
 
-  return { templates, loading, error, toggle, completionFor, logContactTask, createTask, updateTask, deleteTask, reload: load };
+  return { templates, loading, error, toggle, completionFor, logCount, logContactTask, createTask, updateTask, deleteTask, reload: load };
 }

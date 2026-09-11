@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Check, X as XIcon, Target } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, X as XIcon } from 'lucide-react';
 import { useScorecard } from '../utils/useScorecard.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { periodStartForOffset, periodLabel } from '../utils/periods.js';
-import { renderFormatted } from '../utils/richText.js';
 import WinTheWeek from './WinTheWeek.jsx';
+import Scoreboard from './Scoreboard.jsx';
 
 const CADENCES = [
   { key: 'daily',   label: 'Daily' },
@@ -26,13 +26,8 @@ export default function Scorecard({ staff, isManager }) {
 
   const {
     loading, error, teamTemplates, individualTemplates,
-    teamDoneCount, individualCompletions, targets, completionFor, actualFor,
+    teamDoneCount, individualCompletions, completionFor,
   } = useScorecard(cadence, periodStart);
-
-  // Win the Week owns the display for department-tagged targets (its own
-  // card grid, always current-week) — exclude them here so a weekly WTW
-  // target doesn't also show up in this plain list when cadence='weekly'.
-  const mindbodyTargets = useMemo(() => targets.filter((t) => !t.department), [targets]);
 
   const changeCadence = (c) => { setCadence(c); setOffset(0); };
 
@@ -56,9 +51,10 @@ export default function Scorecard({ staff, isManager }) {
       <div>
         <h1 className="text-lg font-semibold text-gray-900">Scorecard</h1>
         <p className="text-sm text-gray-500">
-          Task completion history, Mindbody-tracked attendance/revenue targets, and
-          this week's Win the Week scoreboard — linked tasks add to a target's progress
-          automatically as they're completed.
+          Task completion history, the company Scoreboard (attendance/revenue from
+          Mindbody, plus Leads/Sales/Rollovers/Churn logged by the team), and this
+          week's Win the Week — linked tasks add to a target's progress automatically
+          as they're completed.
         </p>
       </div>
 
@@ -138,34 +134,7 @@ export default function Scorecard({ staff, isManager }) {
             )}
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Target className="h-4 w-4 text-emerald-600" />
-              <h3 className="text-sm font-semibold text-gray-900">Mindbody-tracked targets</h3>
-            </div>
-            {mindbodyTargets.length === 0 ? (
-              <p className="text-xs text-gray-500">No targets were active this period.</p>
-            ) : (
-              <ul className="space-y-1.5">
-                {mindbodyTargets.map((t) => {
-                  const actual = actualFor(t);
-                  const hit    = actual != null && actual >= t.target_value;
-                  return (
-                    <li key={t.id} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-800">{renderFormatted(t.label || t.metric_key)}</span>
-                      {actual == null ? (
-                        <span className="text-gray-500 tabular-nums">target: {t.target_value.toLocaleString()}</span>
-                      ) : (
-                        <span className={`tabular-nums font-medium ${hit ? 'text-emerald-600' : 'text-amber-600'}`}>
-                          {actual.toLocaleString()} <span className="text-gray-400 font-normal">/ {t.target_value.toLocaleString()}</span>
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
+          <Scoreboard staff={staff} isManager={isManager} />
 
           <WinTheWeek staff={staff} isManager={isManager} />
         </>

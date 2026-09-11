@@ -3,11 +3,12 @@ import { Check, User, Users, Plus, X, ArrowRight, Pencil, Trash2, CalendarDays, 
 import { useTeamTasks, resolveAssignmentFields } from '../utils/useTeamTasks.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useAllClients } from '../utils/useAllClients.js';
-import { useTargets } from '../utils/useTargets.js';
+import { useTargets, groupTargetsByMetric } from '../utils/useTargets.js';
 import { renderFormatted } from '../utils/richText.js';
 import { dueDateFor } from '../utils/periods.js';
 import { format, parseISO } from 'date-fns';
 import RichTextField from './RichTextField.jsx';
+import AddProgress from './AddProgress.jsx';
 
 const CADENCE_LABEL = { daily: 'Today', weekly: 'This week', monthly: 'This month', once: 'One-off tasks' };
 const CADENCE_ORDER = ['daily', 'weekly', 'monthly', 'once'];
@@ -110,24 +111,38 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
   const [dueDay, setDueDay]           = useState(initial?.due_day || '');
   const [clientName, setClientName]   = useState(initial?.clientName || '');
   const [linkedTargetId, setLinkedTargetId] = useState(initial?.linked_target_id || '');
+  const [targetType, setTargetType]   = useState(initial?.target_type || 'boolean');
+  const [targetValue, setTargetValue] = useState(initial?.target_type === 'count' ? initial.target_value : '');
+  const [unit, setUnit]               = useState(initial?.unit || '');
   const [busy, setBusy]               = useState(false);
   const { staffList } = useAllStaff();
   const { clientsList, resolve: resolveClientId } = useClientNameLookup();
   const { targets } = useTargets(staff);
-  const winTheWeekTargets = targets.filter((t) => t.department);
+  // One option per metric (not per weekly/monthly row) — covers both Win
+  // the Week and Scoreboard metrics, since completing a task should count
+  // toward whichever cadence(s) that metric currently tracks.
+  const linkableMetrics = groupTargetsByMetric(targets).map((m) => ({
+    id: (m.weeklyTarget || m.monthlyTarget).id,
+    label: m.label,
+    metric_key: m.metricKey,
+  }));
 
   const submit = async (e) => {
     e.preventDefault();
     if (!label.trim()) return;
     if (assignMode === 'assigned' && !assignee) return;
     if (cadence === 'once' && !dueDate) return;
+    if (targetType === 'count' && !targetValue) return;
     setBusy(true);
-    const linkedTarget = winTheWeekTargets.find((t) => t.id === linkedTargetId);
+    const linkedTarget = linkableMetrics.find((t) => t.id === linkedTargetId);
     await onSubmit({
       label: label.trim(),
       description: description.trim(),
       cadence,
       task_type: taskType,
+      target_type: targetType,
+      target_value: targetType === 'count' ? Number(targetValue) : 1,
+      unit: targetType === 'count' ? (unit.trim() || null) : null,
       isManager,
       assignMode,
       assignee: assignMode === 'assigned' ? assignee : null,
@@ -190,6 +205,30 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
           <option value="checkbox">Checkbox</option>
           <option value="contact_log">Client contact log</option>
         </select>
+        <select value={targetType} onChange={(e) => setTargetType(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900">
+          <option value="boolean">Done / not done</option>
+          <option value="count">Log a number (e.g. Sales Dials)</option>
+        </select>
+        {targetType === 'count' && (
+          <>
+            <input
+              type="number"
+              required
+              min="1"
+              placeholder="Target (e.g. 100)"
+              value={targetValue}
+              onChange={(e) => setTargetValue(e.target.value)}
+              className="w-32 rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900"
+            />
+            <input
+              type="text"
+              placeholder="Unit (optional, e.g. dials)"
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              className="w-40 rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900 placeholder-gray-400"
+            />
+          </>
+        )}
         {isManager && (
           <select value={assignMode} onChange={(e) => setAssignMode(e.target.value)} className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900">
             <option value="personal">Just for me</option>
@@ -225,7 +264,7 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
             className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900"
           >
             <option value="">Count toward target… (optional)</option>
-            {winTheWeekTargets.map((t) => (
+            {linkableMetrics.map((t) => (
               <option key={t.id} value={t.id}>{t.label || t.metric_key}</option>
             ))}
           </select>
@@ -242,8 +281,10 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
   );
 }
 
-function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDelete, assignedName, isManager, staff, canEdit, linkedClientName, linkedTargetLabel }) {
-  const done = Boolean(completion);
+function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onUpdate, onDelete, assignedName, isManager, staff, canEdit, linkedClientName, linkedTargetLabel }) {
+  const isCount = template.target_type === 'count';
+  const countValue = completion?.value ?? 0;
+  const done = isCount ? countValue >= template.target_value : Boolean(completion);
   const [logging, setLogging] = useState(false);
   const [editing, setEditing] = useState(false);
 
@@ -260,6 +301,9 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDel
             due_day: template.due_day || '',
             clientName: linkedClientName || '',
             linked_target_id: template.linked_target_id || '',
+            target_type: template.target_type,
+            target_value: template.target_value,
+            unit: template.unit || '',
             ...assignStateFor(template),
           }}
           isManager={isManager}
@@ -277,17 +321,28 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDel
   return (
     <li className="py-3">
       <div className="flex items-start gap-3">
-        <button
-          onClick={() => (template.task_type === 'contact_log' ? setLogging((v) => !v) : onToggle(template))}
-          aria-pressed={done}
-          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
-            done
-              ? 'border-emerald-500 bg-emerald-500/20 text-emerald-600'
-              : 'border-gray-400 text-transparent hover:border-gray-600'
-          }`}
-        >
-          <Check className="h-3.5 w-3.5" strokeWidth={3} />
-        </button>
+        {isCount ? (
+          <div
+            aria-hidden="true"
+            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+              done ? 'border-emerald-500 bg-emerald-500/20 text-emerald-600' : 'border-gray-400 text-transparent'
+            }`}
+          >
+            <Check className="h-3.5 w-3.5" strokeWidth={3} />
+          </div>
+        ) : (
+          <button
+            onClick={() => (template.task_type === 'contact_log' ? setLogging((v) => !v) : onToggle(template))}
+            aria-pressed={done}
+            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
+              done
+                ? 'border-emerald-500 bg-emerald-500/20 text-emerald-600'
+                : 'border-gray-400 text-transparent hover:border-gray-600'
+            }`}
+          >
+            <Check className="h-3.5 w-3.5" strokeWidth={3} />
+          </button>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className={`text-sm font-medium ${done ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
@@ -298,9 +353,9 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDel
             ) : (
               <User className="h-3.5 w-3.5 text-gray-400" title="Individual task" />
             )}
-            {template.target_type === 'count' && (
-              <span className="text-[10px] text-gray-500">
-                target: {template.target_value} {template.unit || ''}
+            {isCount && (
+              <span className={`text-[10px] font-medium tabular-nums ${done ? 'text-emerald-600' : 'text-gray-500'}`}>
+                {countValue} / {template.target_value} {template.unit || ''}
               </span>
             )}
             {template.task_type === 'contact_log' && (
@@ -330,6 +385,19 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDel
           {template.description && (
             <p className="text-xs text-gray-500 mt-0.5">{renderFormatted(template.description)}</p>
           )}
+          {isCount && (
+            <div className="mt-1.5 max-w-xs">
+              <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-emerald-500"
+                  style={{ width: `${template.target_value > 0 ? Math.min(100, Math.round((countValue / template.target_value) * 100)) : 0}%` }}
+                />
+              </div>
+              <div className="mt-1">
+                <AddProgress label="Log progress" onAdd={(n) => onLogCount(template, n)} />
+              </div>
+            </div>
+          )}
           {template.task_type === 'contact_log' && logging && (
             <ContactLogForm
               onSubmit={async (payload) => { await onLogContact(template, payload); setLogging(false); }}
@@ -358,7 +426,7 @@ function TaskRow({ template, completion, onToggle, onLogContact, onUpdate, onDel
 }
 
 export default function TaskChecklist({ user, staff, isManager }) {
-  const { templates, loading, error, toggle, completionFor, logContactTask, createTask, updateTask, deleteTask } = useTeamTasks(user, staff);
+  const { templates, loading, error, toggle, completionFor, logCount, logContactTask, createTask, updateTask, deleteTask } = useTeamTasks(user, staff);
   const [showCreate, setShowCreate] = useState(false);
   const { staffList } = useAllStaff();
   const { clientsList } = useAllClients();
@@ -395,6 +463,9 @@ export default function TaskChecklist({ user, staff, isManager }) {
       description: fields.description || null,
       cadence: fields.cadence,
       task_type: fields.task_type,
+      target_type: fields.target_type,
+      target_value: fields.target_value,
+      unit: fields.unit || null,
       due_date: fields.cadence === 'once' ? fields.due_date : null,
       due_day: (fields.cadence === 'weekly' || fields.cadence === 'monthly') ? fields.due_day : null,
       client_id: fields.client_id || null,
@@ -457,6 +528,7 @@ export default function TaskChecklist({ user, staff, isManager }) {
                   template={template}
                   completion={completionFor(template)}
                   onToggle={toggle}
+                  onLogCount={logCount}
                   onLogContact={logContactTask}
                   onUpdate={handleUpdate}
                   onDelete={handleDelete}
