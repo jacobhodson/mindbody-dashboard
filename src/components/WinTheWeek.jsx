@@ -68,6 +68,7 @@ export default function WinTheWeek({ staff, isManager }) {
                   label={metric.label}
                   weeklyTarget={metric.weeklyTarget}
                   monthlyTarget={metric.monthlyTarget}
+                  direction={metric.direction}
                   owners={metric.owners}
                   staffList={staffList}
                   isManager={isManager}

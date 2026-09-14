@@ -29,6 +29,7 @@ export default function MetricTargetForm({ initial, department, staffList, onSub
     initial ? !(initial.weeklyTarget?.effective_to || initial.monthlyTarget?.effective_to) : true
   );
   const [ownerIds, setOwnerIds]       = useState(initial?.owners || []);
+  const [direction, setDirection]     = useState(initial?.direction || 'at_least'); // 'at_least' | 'at_most'
   const [busy, setBusy]               = useState(false);
 
   const toggleOwner = (id) => setOwnerIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -49,6 +50,7 @@ export default function MetricTargetForm({ initial, department, staffList, onSub
       recurring,
       weeklyValue,
       monthlyValue,
+      direction,
     });
     setBusy(false);
     onClose();
@@ -97,6 +99,29 @@ export default function MetricTargetForm({ initial, department, staffList, onSub
         </div>
       </div>
       <p className="text-[10px] text-gray-400">A weekly target's total rolls into the monthly one automatically — no need to log progress twice.</p>
+
+      <div>
+        <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Goal</p>
+        <div className="flex rounded-lg border border-gray-300 overflow-hidden text-xs">
+          <button
+            type="button"
+            onClick={() => setDirection('at_least')}
+            className={`flex-1 px-2.5 py-1.5 transition-colors ${direction === 'at_least' ? 'bg-emerald-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+          >
+            Hit or exceed target
+          </button>
+          <button
+            type="button"
+            onClick={() => setDirection('at_most')}
+            className={`flex-1 px-2.5 py-1.5 transition-colors border-l border-gray-300 ${direction === 'at_most' ? 'bg-red-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+          >
+            Stay under target
+          </button>
+        </div>
+        {direction === 'at_most' && (
+          <p className="text-[10px] text-gray-400 mt-1">e.g. Churn — the target is a cap, and going over it is what turns the card red.</p>
+        )}
+      </div>
 
       <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
         <input type="checkbox" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} />

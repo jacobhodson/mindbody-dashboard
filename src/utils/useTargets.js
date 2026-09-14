@@ -94,7 +94,7 @@ export function useTargets(staff) {
   // "current" once that period passes, per useTargets' load-query widening
   // above (it still shows while active, just not after).
   const saveMetricTargets = useCallback(async ({
-    existingMetricKey, label, department, owners = [], recurring, weeklyValue, monthlyValue,
+    existingMetricKey, label, department, owners = [], recurring, weeklyValue, monthlyValue, direction,
   }) => {
     const metricKey = existingMetricKey || slugify(label);
     const now = new Date();
@@ -115,9 +115,10 @@ export function useTargets(staff) {
             return { effective_from: start, effective_to: periodEndFor(cadence, start) };
           })();
 
+      const targetDirection = direction || 'at_least';
       const saved = existingRow
-        ? await updateTarget(existingRow.id, { label, target_value, department: department || null, ...window })
-        : await createTarget({ metric_key: metricKey, label, cadence, scope: 'team', target_value, department: department || null, ...window });
+        ? await updateTarget(existingRow.id, { label, target_value, department: department || null, direction: targetDirection, ...window })
+        : await createTarget({ metric_key: metricKey, label, cadence, scope: 'team', target_value, department: department || null, direction: targetDirection, ...window });
       if (saved) savedRows.push(saved);
     }
 
@@ -159,6 +160,7 @@ export function groupTargetsByMetric(targets) {
         metricKey: t.metric_key,
         label: t.label,
         department: t.department,
+        direction: t.direction || 'at_least',
         weeklyTarget: null,
         monthlyTarget: null,
         owners: (t.target_owners || []).map((o) => o.staff_id),
