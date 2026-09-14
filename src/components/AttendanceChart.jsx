@@ -23,6 +23,39 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
+// Tooltip for the "by day of week" bars — shows this period's total plus,
+// so a single Monday can be judged in context, the average for that weekday
+// (when the period spans more than one occurrence of it) and a trailing
+// 4-week average (always, so even a single-day view is comparable). Also
+// breaks down which classes made up the attendance for that weekday.
+const DowTooltip = ({ active, payload }) => {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-gray-300 bg-gray-200 px-3 py-2 shadow-xl min-w-[160px]">
+      <p className="text-xs text-gray-600 mb-1">{row.day}</p>
+      <p className="text-sm font-semibold text-emerald-600 mb-1">{row.visits} visits this period</p>
+      {row.occurrences > 1 && (
+        <p className="text-xs text-gray-600">Avg per {row.day}: <span className="font-medium text-gray-900">{row.avg}</span></p>
+      )}
+      {row.rollingAvg28 != null && (
+        <p className="text-xs text-gray-600 mb-1">4-wk avg: <span className="font-medium text-gray-900">{row.rollingAvg28}</span></p>
+      )}
+      {row.topClasses?.length > 0 && (
+        <div className="mt-1.5 pt-1.5 border-t border-gray-300">
+          <p className="text-[11px] text-gray-500 mb-0.5">Top classes</p>
+          {row.topClasses.map((c) => (
+            <p key={c.name} className="text-xs text-gray-700 flex justify-between gap-3">
+              <span className="truncate">{c.name}</span>
+              <span className="font-medium text-gray-900 tabular-nums">{c.visits}</span>
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function AttendanceChart() {
   const [period, setPeriod]   = useState('7days');
   const [data, setData]       = useState(null);
@@ -158,7 +191,7 @@ export default function AttendanceChart() {
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: '#1F2937' }} />
+                  <Tooltip content={<DowTooltip />} cursor={{ fill: '#1F2937' }} />
                   <Bar dataKey="visits" fill="#059669" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
