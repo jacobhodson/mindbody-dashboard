@@ -13,9 +13,17 @@ const STATUS_COLORS = {
   Voided:   'bg-gray-500/10 text-gray-600',
 };
 
+// On-account rows have no transaction id to key off, so dedupe/resolve by
+// client + balance — the same shape as failed payments' client+amount+card
+// key. If the balance changes (grows, or is partly paid down), that's a new
+// outstanding amount and it comes back as unresolved, same as a failed
+// payment retried for a different amount would.
+const onAccountKey = (b) => `onaccount-${b.clientId}|${Math.round((b.balance || 0) * 100)}`;
+
 export default function PaymentIssuesTable({ data, loading, error }) {
-  const [tab, setTab]               = useState('failed');
-  const [showResolved, setShowResolved] = useState(false);
+  const [tab, setTab]                             = useState('failed');
+  const [showResolved, setShowResolved]           = useState(false);
+  const [showResolvedOnAccount, setShowResolvedOnAccount] = useState(false);
   const { resolved, mark, unmark }  = usePaymentResolutions();
 
   const failed    = data?.failedPayments || [];
@@ -24,6 +32,9 @@ export default function PaymentIssuesTable({ data, loading, error }) {
 
   const activeFailures   = failed.filter(p => !resolved[p.key]);
   const resolvedFailures = failed.filter(p =>  resolved[p.key]);
+
+  const activeOnAccount   = onAccount.filter(b => !resolved[onAccountKey(b)]);
+  const resolvedOnAccount = onAccount.filter(b =>  resolved[onAccountKey(b)]);
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white">
@@ -41,7 +52,7 @@ export default function PaymentIssuesTable({ data, loading, error }) {
           )}
           {summary.onAccountCount > 0 && (
             <span className="text-orange-600 font-medium">
-              {summary.onAccountCount} on account · {fmtAUD(summary.totalOnAccountAmount)}
+              {activeOnAccount.length} on account · {fmtAUD(activeOnAccount.reduce((s, b) => s + b.balance, 0))}
             </span>
           )}
         </div>
@@ -51,7 +62,7 @@ export default function PaymentIssuesTable({ data, loading, error }) {
       <div className="flex border-b border-gray-200">
         {[
           { key: 'failed',    label: 'Failed Payments', icon: CreditCard, count: activeFailures.length },
-          { key: 'onAccount', label: 'On Account',      icon: Wallet,     count: onAccount.length },
+          { key: 'onAccount', label: 'On Account',      icon: Wallet,     count: activeOnAccount.length },
         ].map(({ key, label, icon: Icon, count }) => (
           <button
             key={key}
@@ -229,10 +240,15 @@ export default function PaymentIssuesTable({ data, loading, error }) {
         {/* ── On-account table ── */}
         {!loading && !error && tab === 'onAccount' && (
           <>
-            {onAccount.length === 0 ? (
+            {activeOnAccount.length === 0 && resolvedOnAccount.length === 0 ? (
               <div className="py-12 text-center">
                 <Wallet className="h-8 w-8 text-gray-300 mx-auto mb-2" />
                 <p className="text-sm text-gray-500">No outstanding account balances</p>
+              </div>
+            ) : activeOnAccount.length === 0 ? (
+              <div className="py-8 text-center">
+                <CheckCircle className="h-7 w-7 text-emerald-500/40 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">All account balances resolved</p>
               </div>
             ) : (
               <table className="w-full text-sm">
@@ -241,10 +257,11 @@ export default function PaymentIssuesTable({ data, loading, error }) {
                     <th className="px-5 py-3 text-left font-medium">Client</th>
                     <th className="px-5 py-3 text-left font-medium">Email / Phone</th>
                     <th className="px-5 py-3 text-right font-medium">Balance</th>
+                    <th className="px-5 py-3 text-right font-medium"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {onAccount.map((b, i) => (
+                  {activeOnAccount.map((b, i) => (
                     <tr
                       key={b.clientId || i}
                       className="border-b border-gray-200/50 last:border-0 hover:bg-gray-200/30 transition-colors"
@@ -260,10 +277,86 @@ export default function PaymentIssuesTable({ data, loading, error }) {
                       }`}>
                         {fmtAUD(b.balance)}
                       </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => mark(onAccountKey(b), 'reprocessed', { clientName: b.clientName, amount: b.balance, date: b.date })}
+                            className="flex items-center gap-1 rounded-md border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-500/20 transition-colors"
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            Reprocessed
+                          </button>
+                          <button
+                            onClick={() => mark(onAccountKey(b), 'reconciled', { clientName: b.clientName, amount: b.balance, date: b.date })}
+                            className="flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20 transition-colors"
+                          >
+                            <CheckCircle className="h-3 w-3" />
+                            Reconciled
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            )}
+
+            {/* Resolved section */}
+            {resolvedOnAccount.length > 0 && (
+              <div className="border-t border-gray-200">
+                <button
+                  onClick={() => setShowResolvedOnAccount(v => !v)}
+                  className="flex w-full items-center justify-between px-5 py-3 text-xs text-gray-500 hover:text-gray-600 transition-colors"
+                >
+                  <span>{resolvedOnAccount.length} resolved</span>
+                  {showResolvedOnAccount ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
+
+                {showResolvedOnAccount && (
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {resolvedOnAccount.map((b, i) => {
+                        const key = onAccountKey(b);
+                        const res = resolved[key];
+                        return (
+                          <tr
+                            key={b.clientId || i}
+                            className="border-t border-gray-200/40 opacity-50 hover:opacity-70 transition-opacity"
+                          >
+                            <td className="px-5 py-2.5 text-gray-600 whitespace-nowrap line-through">
+                              {b.clientName}
+                            </td>
+                            <td className="px-5 py-2.5 text-gray-500 text-xs">
+                              {b.email || b.phone || '–'}
+                            </td>
+                            <td className="px-5 py-2.5 text-right font-mono text-gray-500 whitespace-nowrap">
+                              {fmtAUD(b.balance)}
+                            </td>
+                            <td className="px-5 py-2.5">
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                res?.status === 'reprocessed'
+                                  ? 'bg-blue-500/10 text-blue-600'
+                                  : 'bg-emerald-500/10 text-emerald-600'
+                              }`}>
+                                {res?.status === 'reprocessed' ? 'Reprocessed' : 'Reconciled'}
+                              </span>
+                            </td>
+                            <td className="px-5 py-2.5 text-right">
+                              <button
+                                onClick={() => unmark(key)}
+                                className="flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:border-gray-400 transition-colors ml-auto"
+                              >
+                                <Undo2 className="h-3 w-3" />
+                                Undo
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             )}
           </>
         )}
