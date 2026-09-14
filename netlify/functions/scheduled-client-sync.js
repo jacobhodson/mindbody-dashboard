@@ -34,6 +34,15 @@ import { format, parseISO, subDays } from 'date-fns';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+// NOTE: this in-code `config.schedule` export was never actually registered
+// by Netlify — confirmed live 2026-09-16 via `netlify api searchSiteFunctions`,
+// which showed `"schedule": null` for this function despite this export
+// having been in place since it shipped (the roster sync had silently never
+// auto-run even once — every "successful sync" row in `clients.synced_at`
+// up to that point was from a manual/backfill curl during development, not
+// the cron). The real, working schedule now lives in netlify.toml's
+// [functions."scheduled-client-sync"] block — keep both in sync if this
+// ever changes, and treat netlify.toml as the source of truth.
 export const config = {
   schedule: '0 15 * * *', // 3pm UTC = 1am Sydney (AEST) — 1hr after scheduled-daily-refresh
 };

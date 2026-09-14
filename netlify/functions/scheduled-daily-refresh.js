@@ -17,6 +17,13 @@ import {
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+// NOTE: this in-code `config.schedule` export was never actually registered
+// by Netlify — confirmed live 2026-09-16 via `netlify api searchSiteFunctions`,
+// which showed `"schedule": null` for this function despite this export
+// having been in place since it shipped. The real, working schedule now
+// lives in netlify.toml's [functions."scheduled-daily-refresh"] block —
+// keep both in sync if this ever changes, and treat netlify.toml as the
+// source of truth.
 export const config = {
   schedule: '0 14 * * *',  // 2pm UTC = midnight Sydney (AEST)
 };

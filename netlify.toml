@@ -20,9 +20,11 @@
 
 [functions."scheduled-daily-refresh"]
   timeout = 26
+  schedule = "0 14 * * *"
 
 [functions."scheduled-client-sync"]
   timeout = 26
+  schedule = "0 15 * * *"
 
 [dev]
   command = "vite"
