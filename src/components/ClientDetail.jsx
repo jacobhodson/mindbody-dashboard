@@ -9,7 +9,7 @@ import { useAllStaff } from '../utils/useAllStaff.js';
 import { useMembershipPackages } from '../utils/useMembershipPackages.js';
 import { renderFormatted } from '../utils/richText.js';
 import { GROUP_VALUE, caseloadSelectValue as caseloadValueFor, caseloadPayloadFor } from '../utils/caseload.js';
-import { KNOWN_STATUSES, effectiveStatus, hasStatusOverride } from '../utils/clientStatus.js';
+import { SIMPLE_STATUSES, simplifiedStatus, hasStatusOverride } from '../utils/clientStatus.js';
 import RichTextField from './RichTextField.jsx';
 import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
 
@@ -116,8 +116,12 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
   const scorecardStatus = scorecardStatusFor(avgWeekly);
   const visibleVisits = visitsExpanded ? visits : visits.slice(0, 10);
   const visibleContactLogs = contactLogsExpanded ? contactLogs : contactLogs.slice(0, 3);
-  const status = effectiveStatus(client);
+  const status = simplifiedStatus(client);
   const overridden = hasStatusOverride(client);
+  // Controlled value for the override select: collapse any legacy
+  // non-simple override (e.g. a pre-2026-09-15 'Non-Member') down to
+  // 'Inactive' so it still matches one of the two <option>s below.
+  const overrideSelectValue = client.status_override ? status : '';
 
   return (
     <div className="space-y-6">
@@ -249,12 +253,12 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
             <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Status</p>
             {isManager ? (
               <select
-                value={client.status_override || ''}
+                value={overrideSelectValue}
                 onChange={(e) => handleStatusChange(e.target.value)}
                 className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
               >
                 <option value="">{client.status} (Mindbody)</option>
-                {KNOWN_STATUSES.filter((s) => s !== client.status).map((s) => (
+                {SIMPLE_STATUSES.filter((s) => s !== client.status).map((s) => (
                   <option key={s} value={s}>{s} (manual)</option>
                 ))}
               </select>

@@ -5,7 +5,7 @@ import { useAllClients } from '../utils/useAllClients.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useMembershipPackages } from '../utils/useMembershipPackages.js';
 import { GROUP_VALUE, caseloadSelectValue, caseloadPayloadFor } from '../utils/caseload.js';
-import { KNOWN_STATUSES, effectiveStatus, hasStatusOverride } from '../utils/clientStatus.js';
+import { SIMPLE_STATUSES, simplifiedStatus, hasStatusOverride } from '../utils/clientStatus.js';
 
 // "Starters" = created in the last 30 days — new clients who likely still
 // need a package manually allocated.
@@ -40,9 +40,10 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
   // Default 'Active' (a literal status-text match, not the Mindbody `active`
   // boolean — that flag turned out to be true for every client in this
   // account regardless of status, even Terminated, so it carries no signal
-  // here and isn't usable as a filter). Matches effective status (a
-  // manager's status_override, if set, else the Mindbody-synced status).
-  const [statusFilter, setStatusFilter]     = useState('Active'); // 'Active' | 'all' | <status text>
+  // here and isn't usable as a filter). Matches simplifiedStatus (a
+  // manager's status_override, if set, else the Mindbody-synced status,
+  // collapsed to Active/Inactive).
+  const [statusFilter, setStatusFilter]     = useState('Active'); // 'Active' | 'Inactive' | 'all'
 
   const [assignedFilter, setAssignedFilter] = useState('all');    // 'all' | 'unassigned' | 'group' | <staff id>
   const [dueFilter, setDueFilter]           = useState('all');    // 'all' | 'overdue' | 'due_week' | 'due_month' | 'not_set'
@@ -65,12 +66,6 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
     return m;
   }, [packages]);
 
-  const statusOptions = useMemo(() => {
-    const set = new Set(clientsList.map((c) => effectiveStatus(c)).filter(Boolean));
-    set.delete('Active'); // already the default option, don't list it twice
-    return [...set].sort();
-  }, [clientsList]);
-
   const isStarter = (c) => c.creation_date && differenceInCalendarDays(today, parseISO(c.creation_date)) <= STARTER_DAYS;
 
   const filtered = useMemo(() => {
@@ -82,7 +77,7 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
         c.mobile_phone?.includes(q)
       )) return false;
 
-      if (statusFilter !== 'all' && effectiveStatus(c) !== statusFilter) return false;
+      if (statusFilter !== 'all' && simplifiedStatus(c) !== statusFilter) return false;
 
       if (assignedFilter === 'unassigned' && (c.assigned_staff_id || c.assigned_group)) return false;
       if (assignedFilter === 'group' && !c.assigned_group) return false;
@@ -135,8 +130,8 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
         <div className="flex flex-wrap items-center gap-2">
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={`${selectClass} py-1.5`}>
             <option value="Active">Status: Active</option>
+            <option value="Inactive">Status: Inactive</option>
             <option value="all">Status: All</option>
-            {statusOptions.map((s) => <option key={s} value={s}>Status: {s}</option>)}
           </select>
 
           <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)} className={`${selectClass} py-1.5`}>
@@ -192,8 +187,13 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
             )}
             {!loading && filtered.map((c) => {
               const needsPackage = isStarter(c) && !c.package_id;
-              const status = effectiveStatus(c);
+              const status = simplifiedStatus(c);
               const overridden = hasStatusOverride(c);
+              // Controlled value for the override select: collapse any
+              // legacy non-simple override (e.g. a pre-2026-09-15 'Non-
+              // Member') down to 'Inactive' so it still matches one of the
+              // two <option>s below instead of leaving the select blank.
+              const overrideSelectValue = c.status_override ? status : '';
               return (
                 <tr
                   key={c.id}
@@ -215,13 +215,13 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
                   <td className="px-3 py-2.5 text-gray-600" onClick={(e) => isManager && e.stopPropagation()}>
                     {isManager ? (
                       <select
-                        value={c.status_override || ''}
+                        value={overrideSelectValue}
                         onChange={(e) => updateStatusOverride(c.id, e.target.value)}
                         title={overridden ? `Manually set — Mindbody has this client as "${c.status}"` : undefined}
                         className={selectClass}
                       >
                         <option value="">{c.status} (Mindbody)</option>
-                        {KNOWN_STATUSES.filter((s) => s !== c.status).map((s) => (
+                        {SIMPLE_STATUSES.filter((s) => s !== c.status).map((s) => (
                           <option key={s} value={s}>{s} (manual)</option>
                         ))}
                       </select>
