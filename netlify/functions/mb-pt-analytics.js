@@ -7,21 +7,80 @@
  *   openGym       – clients with 1+ open-gym sessions this week
  *   unchecked     – past PT/SP sessions still in "Booked" status
  *   sessionCredits– clients with accumulated unused PT/SP session credits
+ *   coachPerformance – signed-off (Status==='Completed') PT/SP sessions,
+ *                      hours, and $ value, overall and per coach
  *
  * Mindbody appointment objects carry only SessionTypeId (not a name), so we
  * fetch /site/sessiontypes first to build an id→name lookup for classification.
  * Client names are fetched in bulk via /client/clients.
+ *
+ * coachPerformance's $ value is a real average, not a guessed flat rate —
+ * but also not an exact per-appointment trace. Each appointment carries a
+ * ClientServiceId, which in principle links back to the specific sale that
+ * paid for it, but /sale/sales doesn't actually support filtering by client
+ * (confirmed live: ?ClientId=135 silently returned other clients' sales
+ * unfiltered) and this account sells PT/SP as pay-per-single-session rather
+ * than bulk packages, so tracing every appointment individually would mean
+ * one full-history sales fetch per client — infeasible in one invocation.
+ * Instead: average actual PT/SP sale prices over a trailing 60-day window
+ * (avgSessionRate below) and apply that to each coach's completed session
+ * count. Self-updating as real prices change; not exact for any single
+ * session, but a real, current, sales-derived rate rather than a manual
+ * guess.
  */
 import { getStaffToken, mbGet, ok, err, CORS, formatPhone } from './utils/mb-auth.js';
 import { classifySession as classify } from './utils/session-classify.js';
 import {
   subDays, format, parseISO,
   startOfMonth, endOfMonth, endOfDay, subMonths,
+  differenceInCalendarDays,
 } from 'date-fns';
 
-const SKIP_STATUS  = new Set(['NoShow', 'LateCancelled', 'Cancelled']);
+const SKIP_STATUS     = new Set(['NoShow', 'LateCancelled', 'Cancelled']);
+const SIGNED_OFF      = 'Completed'; // trainer has marked the session done — the only status that counts as "checked off" for coachPerformance
+const RATE_WINDOW_DAYS = 60;
 const CREDIT_BATCH = 10;
 const CLIENT_BATCH = 20; // Mindbody caps ClientIds at 20 per request
+
+// ─── Real average PT/SP sale price over a trailing window ─────────────────
+// Same fetch-and-sum shape as mb-revenue.js, scoped to just PT/SP line items.
+async function avgSessionRates(token, now) {
+  const start = subDays(now, RATE_WINDOW_DAYS);
+  const fetchStart = format(start, "yyyy-MM-dd'T'00:00:00");
+  const fetchEnd   = format(now,   "yyyy-MM-dd'T'23:59:59");
+
+  let allSales = [], offset = 0;
+  while (true) {
+    const data = await mbGet('/sale/sales', token, {
+      StartSaleDateTime: fetchStart,
+      EndSaleDateTime:   fetchEnd,
+      Limit: 200,
+      Offset: offset,
+    });
+    const sales = data.Sales || [];
+    allSales = allSales.concat(sales);
+    if (sales.length < 200 || offset >= 1800) break;
+    offset += 200;
+  }
+
+  const sums = { pt: 0, sp: 0 };
+  const counts = { pt: 0, sp: 0 };
+  for (const sale of allSales) {
+    for (const item of (sale.PurchasedItems || [])) {
+      if (item.Returned || !(item.TotalAmount > 0)) continue;
+      const type = classify(item.Description || '');
+      if (type !== 'pt' && type !== 'sp') continue;
+      sums[type] += item.TotalAmount;
+      counts[type]++;
+    }
+  }
+
+  return {
+    pt: counts.pt > 0 ? sums.pt / counts.pt : 0,
+    sp: counts.sp > 0 ? sums.sp / counts.sp : 0,
+    sampleSize: counts,
+  };
+}
 
 // ─── Session type map: SessionTypeId → name ───────────────────────────────────
 async function fetchSessionTypeMap(token) {
@@ -136,10 +195,11 @@ export const handler = async (event) => {
     const fetchStart = format(lastMonthStart, "yyyy-MM-dd'T'00:00:00");
     const fetchEnd   = format(yesterday,      "yyyy-MM-dd'T'23:59:59");
 
-    // ── Fetch session types + appointments in parallel ────────────────────
-    const [sessionTypeMap, raw] = await Promise.all([
+    // ── Fetch session types + appointments + PT/SP sale rates in parallel ──
+    const [sessionTypeMap, raw, rates] = await Promise.all([
       fetchSessionTypeMap(token),
       fetchAppointments(token, fetchStart, fetchEnd),
+      avgSessionRates(token, now),
     ]);
 
     // ── Classify & enrich (names placeholder — filled after client fetch) ─
@@ -201,6 +261,63 @@ export const handler = async (event) => {
         thisMonth: countIn(spAppts, thisMonthStart, thisMonthEnd),
         lastMonth: countIn(spAppts, lastMonthStart, lastMonthEnd),
       },
+    };
+
+    // ── Coach performance — signed-off (Completed) sessions only ───────────
+    // "Signed off" is deliberately narrower than the SKIP_STATUS-filtered
+    // counts above (which just exclude no-shows/cancellations) — this is
+    // specifically sessions the trainer has actually marked Completed.
+    const signedOff = ptsp.filter(a => a.Status === SIGNED_OFF);
+
+    function periodBucket(arr, start, end) {
+      const inPeriod = arr.filter(a => a._date >= start && a._date <= end);
+      const count = inPeriod.length;
+      const hours = Math.round((inPeriod.reduce((sum, a) => sum + (a.Duration || 0), 0) / 60) * 10) / 10;
+      const value = Math.round((inPeriod.reduce((sum, a) => sum + (rates[a._type] || 0), 0)) * 100) / 100;
+      return { count, hours, value };
+    }
+
+    const lastMonthWeeks = (differenceInCalendarDays(lastMonthEnd, lastMonthStart) + 1) / 7;
+    function withWeeklyAvg(buckets) {
+      return {
+        ...buckets,
+        weeklyAvg: {
+          count: Math.round((buckets.lastMonth.count / lastMonthWeeks) * 10) / 10,
+          hours: Math.round((buckets.lastMonth.hours / lastMonthWeeks) * 10) / 10,
+          value: Math.round((buckets.lastMonth.value / lastMonthWeeks) * 100) / 100,
+        },
+      };
+    }
+
+    const overallPerformance = withWeeklyAvg({
+      thisWeek:  periodBucket(signedOff, w1Start, w1End),
+      lastWeek:  periodBucket(signedOff, w2Start, w2End),
+      thisMonth: periodBucket(signedOff, thisMonthStart, thisMonthEnd),
+      lastMonth: periodBucket(signedOff, lastMonthStart, lastMonthEnd),
+    });
+
+    const staffIds = [...new Set(signedOff.map(a => String(a.StaffId ?? a.Staff?.Id ?? '')))].filter(Boolean);
+    const byCoach = staffIds
+      .map(staffId => {
+        const mine = signedOff.filter(a => String(a.StaffId ?? a.Staff?.Id ?? '') === staffId);
+        const staffName = mine[0]?._staffName || `Staff ${staffId}`;
+        return {
+          staffId,
+          staffName,
+          ...withWeeklyAvg({
+            thisWeek:  periodBucket(mine, w1Start, w1End),
+            lastWeek:  periodBucket(mine, w2Start, w2End),
+            thisMonth: periodBucket(mine, thisMonthStart, thisMonthEnd),
+            lastMonth: periodBucket(mine, lastMonthStart, lastMonthEnd),
+          }),
+        };
+      })
+      .sort((a, b) => b.lastMonth.count - a.lastMonth.count);
+
+    const coachPerformance = {
+      overall: overallPerformance,
+      byCoach,
+      rates: { pt: Math.round(rates.pt * 100) / 100, sp: Math.round(rates.sp * 100) / 100, sampleSize: rates.sampleSize, windowDays: RATE_WINDOW_DAYS },
     };
 
     // ── PT Red's List ──────────────────────────────────────────────────────
@@ -291,7 +408,7 @@ export const handler = async (event) => {
     console.log(`[mb-pt-analytics] total=${raw.length} pt=${ptAppts.length} sp=${spAppts.length} gym=${gymAppts.length}`);
 
     return ok({
-      stats, ptReds, openGym, unchecked, sessionCredits,
+      stats, ptReds, openGym, unchecked, sessionCredits, coachPerformance,
       _debug: {
         sampleTypes,
         totalRaw: raw.length,

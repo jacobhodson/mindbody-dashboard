@@ -1,4 +1,5 @@
 import { DollarSign, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { subMonths, startOfMonth, endOfMonth, differenceInCalendarDays } from 'date-fns';
 
 function fmtAUD(n) {
   if (n === undefined || n === null) return '–';
@@ -69,8 +70,16 @@ export default function RevenueCards({ data, loading }) {
   const weekPct  = weekChange(thisWeekTotal, lastWeekTotal);
   const monthPct = weekChange(thisMonthTotal, lastMonthTotal);
 
+  // Weekly average — last month's total spread over the weeks in it (a
+  // full month, unlike "this month" which is still in progress and would
+  // understate the average).
+  const lastMonthStart = startOfMonth(subMonths(new Date(), 1));
+  const lastMonthEnd   = endOfMonth(lastMonthStart);
+  const weeksInLastMonth = (differenceInCalendarDays(lastMonthEnd, lastMonthStart) + 1) / 7;
+  const weeklyAvg = lastMonthTotal !== undefined ? Math.round(lastMonthTotal / weeksInLastMonth) : undefined;
+
   return (
-    <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
       <Card
         label="This week"
         value={thisWeekTotal}
@@ -96,6 +105,13 @@ export default function RevenueCards({ data, loading }) {
         label="Last month"
         value={lastMonthTotal}
         sub={lastMonthCount !== undefined ? `${lastMonthCount} transactions` : undefined}
+        change={null}
+        loading={loading}
+      />
+      <Card
+        label="Weekly average"
+        value={weeklyAvg}
+        sub="based on last month"
         change={null}
         loading={loading}
       />
