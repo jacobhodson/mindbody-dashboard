@@ -6,10 +6,8 @@ import { useAllStaff } from '../utils/useAllStaff.js';
 import { useMembershipPackages } from '../utils/useMembershipPackages.js';
 import { GROUP_VALUE, caseloadSelectValue, caseloadPayloadFor } from '../utils/caseload.js';
 import { SIMPLE_STATUSES, simplifiedStatus, hasStatusOverride } from '../utils/clientStatus.js';
+import { isStarter } from '../utils/starters.js';
 
-// "Starters" = created in the last 30 days — new clients who likely still
-// need a package manually allocated.
-const STARTER_DAYS = 30;
 const ADD_PACKAGE_VALUE = '__add__';
 
 function dueBucketFor(nextProgramDue, today) {
@@ -66,8 +64,6 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
     return m;
   }, [packages]);
 
-  const isStarter = (c) => c.creation_date && differenceInCalendarDays(today, parseISO(c.creation_date)) <= STARTER_DAYS;
-
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return clientsList.filter((c) => {
@@ -86,7 +82,7 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
       if (dueFilter !== 'all' && dueBucketFor(c.next_program_due, today) !== dueFilter) return false;
       if (visitFilter !== 'all' && visitBucketFor(c.last_visit_date, today) !== visitFilter) return false;
 
-      if (startersOnly && !isStarter(c)) return false;
+      if (startersOnly && !isStarter(c, today)) return false;
 
       return true;
     });
@@ -186,7 +182,7 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
               <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-400">No clients match these filters</td></tr>
             )}
             {!loading && filtered.map((c) => {
-              const needsPackage = isStarter(c) && !c.package_id;
+              const needsPackage = isStarter(c, today) && !c.package_id;
               const status = simplifiedStatus(c);
               const overridden = hasStatusOverride(c);
               // Controlled value for the override select: collapse any

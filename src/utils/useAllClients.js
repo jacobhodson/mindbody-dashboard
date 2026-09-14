@@ -36,10 +36,22 @@ export function useAllClients() {
   }, [patchClient]);
 
   // { staffId } for a specific staff member, { group: true } for "Group
-  // Program", or {} for unassigned — same shape as useClientDetail.js.
-  const updateCaseload = useCallback((clientId, { staffId, group } = {}) =>
-    applyUpdate(clientId, { assigned_staff_id: group ? null : (staffId || null), assigned_group: !!group }),
-  [applyUpdate]);
+  // Program", or {} for unassigned — same shape as useClientDetail.js. Goes
+  // through the assign_client_caseload() RPC rather than a direct table
+  // update — it's the one field-group any signed-in staff can write (not
+  // just managers, see that migration), so useUnallocatedClients.js's Home
+  // panel can share this exact write path instead of a second one.
+  const updateCaseload = useCallback(async (clientId, { staffId, group } = {}) => {
+    const patch = { assigned_staff_id: group ? null : (staffId || null), assigned_group: !!group };
+    const { error } = await supabase.rpc('assign_client_caseload', {
+      p_client_id: clientId,
+      p_staff_id:  patch.assigned_staff_id,
+      p_group:     patch.assigned_group,
+    });
+    if (error) return null;
+    patchClient(clientId, patch);
+    return patch;
+  }, [patchClient]);
 
   const updatePackage = useCallback((clientId, packageId) =>
     applyUpdate(clientId, { package_id: packageId || null }),

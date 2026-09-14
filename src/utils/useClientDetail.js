@@ -101,19 +101,20 @@ export function useClientDetail(mindbodyId) {
 
   // { staffId } for a specific staff member, { group: true } for "Group
   // Program", or {} for unassigned — writes assigned_staff_id/assigned_group
-  // together so they can never both be set.
+  // together so they can never both be set. Goes through the
+  // assign_client_caseload() RPC (see useAllClients.js's updateCaseload for
+  // why) rather than a direct table update.
   const updateCaseload = useCallback(async ({ staffId, group } = {}) => {
     if (!client) return null;
-    const { data, error: updErr } = await supabase
-      .from('clients').update({
-        assigned_staff_id: group ? null : (staffId || null),
-        assigned_group:    !!group,
-        updated_at:        new Date().toISOString(),
-      })
-      .eq('id', client.id).select().single();
+    const patch = { assigned_staff_id: group ? null : (staffId || null), assigned_group: !!group };
+    const { error: updErr } = await supabase.rpc('assign_client_caseload', {
+      p_client_id: client.id,
+      p_staff_id:  patch.assigned_staff_id,
+      p_group:     patch.assigned_group,
+    });
     if (updErr) { setError(updErr.message); return null; }
-    setClient(data);
-    return data;
+    setClient((prev) => ({ ...prev, ...patch }));
+    return patch;
   }, [client]);
 
   const updatePackage = useCallback(async (packageId) => {

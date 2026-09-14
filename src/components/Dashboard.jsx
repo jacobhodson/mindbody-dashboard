@@ -135,7 +135,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         <main className="flex-1 min-w-0 mx-auto max-w-6xl px-4 sm:px-6 py-8 space-y-8">
 
         {/* ─ Home ─ */}
-        {tab === 'home' && <Home user={user} staff={staff} isManager={isManager} />}
+        {tab === 'home' && <Home user={user} staff={staff} isManager={isManager} onViewClient={onViewClient} />}
 
         {/* ─ Operations ─ */}
         {tab === 'operations' && (
