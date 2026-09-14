@@ -3,8 +3,10 @@ import { BarChart3, Plus } from 'lucide-react';
 import { useTargets, groupTargetsByMetric } from '../utils/useTargets.js';
 import { useMetricProgress } from '../utils/useMetricProgress.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
+import { useRolloverStats } from '../utils/useRolloverStats.js';
 import MetricTargetCard from './MetricTargetCard.jsx';
 import MetricTargetForm from './MetricTargetForm.jsx';
+import RolloverRateCard from './RolloverRateCard.jsx';
 
 const CADENCE_TABS = [
   { key: 'weekly',  label: 'Week' },
@@ -27,11 +29,13 @@ export default function Scoreboard({ staff, isManager }) {
   const scoreboardTargets = targets.filter((t) => !t.department);
   const { actualFor, lastUpdatedFor, logProgress } = useMetricProgress(scoreboardTargets);
   const { staffList } = useAllStaff();
+  const { statsFor: rolloverStatsFor, loading: rolloverLoading } = useRolloverStats();
   const [adding, setAdding] = useState(false);
   const [editingKey, setEditingKey] = useState(null);
   const [cadenceTab, setCadenceTab] = useState('weekly');
 
   const metrics = useMemo(() => groupTargetsByMetric(scoreboardTargets), [targets]);
+  const rolloverStats = rolloverStatsFor(cadenceTab);
 
   if (targetsLoading) return null;
 
@@ -68,6 +72,15 @@ export default function Scoreboard({ staff, isManager }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
         {metrics.length === 0 && !adding && (
           <p className="text-xs text-gray-500">No metrics tracked yet.</p>
+        )}
+
+        {!rolloverLoading && (
+          <RolloverRateCard
+            cadenceLabel={cadenceTab === 'weekly' ? 'This week' : 'This month'}
+            rollovers={rolloverStats.rollovers}
+            decided={rolloverStats.decided}
+            pct={rolloverStats.pct}
+          />
         )}
 
         {metrics.map((metric) => (

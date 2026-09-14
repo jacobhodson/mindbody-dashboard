@@ -8,9 +8,24 @@
  * Triggered by purchases of any of these products:
  *   "3 Session Pass" | "14 Day Pass" | "4 Week Kickstarter"
  *   "Strong Dad Transformation" | "Strong Mum Transformation"
+ *
+ * PLUS a third pathway that isn't a sales-product match at all:
+ * "straight-in" members who joined directly onto a full membership with no
+ * trial pass. They can't be detected the same way as the 5 products above —
+ * those are one-off purchases, but a membership is billed repeatedly, so
+ * "purchased a membership product in the last N days" would match every
+ * existing member's every billing cycle, not just new joins (confirmed live
+ * against this account's actual sales: "Newstrength Unlimited" alone had
+ * 837 line items in a 60-day window against a roster nowhere near that
+ * size). Detected instead from `clients.creation_date` (Supabase, synced
+ * nightly) — see straightInCandidates() below.
  */
+import { createClient } from '@supabase/supabase-js';
 import { getStaffToken, mbGet, ok, err, CORS, formatPhone } from './utils/mb-auth.js';
 import { subDays, format, parseISO, differenceInDays } from 'date-fns';
+
+const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const ONBOARDING_WINDOW_DAYS = 27;
 
 const BATCH = 15;
 
@@ -106,6 +121,27 @@ async function getAllClients(token) {
   return map;
 }
 
+// Clients who joined straight onto a full membership — Active (or manually
+// status_override'd Active; see clientStatus.js's effectiveStatus, mirrored
+// here in SQL) within the onboarding window, and not already claimed by the
+// trial-product sweep above (`excludeIds`). Read from Supabase rather than
+// a fresh Mindbody call — the roster sync already keeps `clients` current,
+// and creation_date/status are exactly the fields this needs.
+async function straightInCandidates(excludeIds) {
+  const cutoff = format(subDays(new Date(), ONBOARDING_WINDOW_DAYS), 'yyyy-MM-dd');
+  const { data, error } = await supabase
+    .from('clients')
+    .select('mindbody_id, creation_date, status, status_override')
+    .gte('creation_date', cutoff);
+  if (error) { console.error('[mb-onboarding] straightInCandidates query failed:', error.message); return []; }
+
+  return (data || []).filter((c) => {
+    if (excludeIds.has(c.mindbody_id)) return false;
+    const effectiveStatus = c.status_override || c.status;
+    return effectiveStatus === 'Active';
+  });
+}
+
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export const handler = async (event) => {
@@ -154,15 +190,37 @@ export const handler = async (event) => {
     }
 
     // Filter to clients currently in the 0–27 day window
-    const activeOnboarding = Object.entries(onboardingMap)
+    const tradeOnboarding = Object.entries(onboardingMap)
       .map(([clientId, info]) => {
         const daysSinceStart = differenceInDays(now, info.startDate);
         const week = Math.min(4, Math.floor(daysSinceStart / 7) + 1);
-        return { clientId, ...info, daysSinceStart, week };
+        return { clientId, ...info, daysSinceStart, week, isStraightIn: false };
       })
-      .filter((c) => c.daysSinceStart >= 0 && c.daysSinceStart <= 27);
+      .filter((c) => c.daysSinceStart >= 0 && c.daysSinceStart <= ONBOARDING_WINDOW_DAYS);
 
-    console.log(`[mb-onboarding] ${activeOnboarding.length} active onboarding clients`);
+    // Straight-in members — same board/tasks, no rollover decision (see
+    // OnboardingCard.jsx). Anchored to their actual signup (creation_date)
+    // rather than a sale, since there's no trial-purchase event to anchor to.
+    const straightIn = (await straightInCandidates(new Set(tradeOnboarding.map((c) => c.clientId))))
+      .map((c) => {
+        const startDate = parseISO(c.creation_date);
+        const daysSinceStart = differenceInDays(now, startDate);
+        const week = Math.min(4, Math.floor(daysSinceStart / 7) + 1);
+        return {
+          clientId: c.mindbody_id,
+          startDate,
+          product: 'Straight-in membership',
+          shortProduct: 'Straight-In',
+          daysSinceStart,
+          week,
+          isStraightIn: true,
+        };
+      })
+      .filter((c) => c.daysSinceStart >= 0 && c.daysSinceStart <= ONBOARDING_WINDOW_DAYS);
+
+    const activeOnboarding = [...tradeOnboarding, ...straightIn];
+
+    console.log(`[mb-onboarding] ${activeOnboarding.length} active onboarding clients (${straightIn.length} straight-in)`);
 
     if (activeOnboarding.length === 0) {
       return ok({
@@ -227,6 +285,7 @@ export const handler = async (event) => {
         phone:              client.phone,
         product:            c.product,
         shortProduct:       c.shortProduct,
+        isStraightIn:       c.isStraightIn,
         startDate:          format(c.startDate, 'yyyy-MM-dd'),
         daysSinceStart:     c.daysSinceStart,
         week:               c.week,

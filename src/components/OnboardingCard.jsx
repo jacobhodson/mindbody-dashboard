@@ -7,11 +7,12 @@ import ContactModal from './ContactModal.jsx';
 const SHORT_PRODUCTS = new Set(['3-Session', '14-Day']);
 
 const PRODUCT_COLORS = {
-  'Strong Dad': 'bg-blue-500/15 text-blue-600 border-blue-500/30',
-  'Strong Mum': 'bg-pink-500/15 text-pink-600 border-pink-500/30',
-  '4-Week':     'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
-  '14-Day':     'bg-violet-500/15 text-violet-600 border-violet-500/30',
-  '3-Session':  'bg-amber-500/15 text-amber-600 border-amber-500/30',
+  'Strong Dad':  'bg-blue-500/15 text-blue-600 border-blue-500/30',
+  'Strong Mum':  'bg-pink-500/15 text-pink-600 border-pink-500/30',
+  '4-Week':      'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
+  '14-Day':      'bg-violet-500/15 text-violet-600 border-violet-500/30',
+  '3-Session':   'bg-amber-500/15 text-amber-600 border-amber-500/30',
+  'Straight-In': 'bg-indigo-500/15 text-indigo-600 border-indigo-500/30',
 };
 
 function productColor(short = '') {
@@ -57,9 +58,11 @@ export default function OnboardingCard({
   const doneTasks  = weekTasks.filter((t) => isComplete(client.id, t.id)).length;
   const allDone    = doneTasks === weekTasks.length && weekTasks.length > 0;
 
-  const decision   = getDecision(client.id);
-  const isRollover = decision === 'rollover';
-  const isShort    = SHORT_PRODUCTS.has(client.shortProduct);
+  const decision      = getDecision(client.id);
+  const isRollover    = decision === 'rollover';
+  const isShort       = SHORT_PRODUCTS.has(client.shortProduct);
+  const isStraightIn  = !!client.isStraightIn;
+  const decisionMeta  = { shortProduct: client.shortProduct, isStraightIn, product: client.product };
 
   const wasContacted   = contactLog?.isContacted(client.id) ?? false;
 
@@ -122,7 +125,7 @@ export default function OnboardingCard({
             <MessageSquare className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={() => setDecision(client.id, 'removed')}
+            onClick={() => setDecision(client.id, 'removed', decisionMeta)}
             title="Not really an onboarding client — remove from pipeline"
             className="rounded-lg border border-gray-300 bg-gray-200/60 p-1.5 text-gray-400 hover:text-red-600 hover:border-red-500/30 hover:bg-red-500/10 transition-colors"
           >
@@ -194,50 +197,58 @@ export default function OnboardingCard({
         </div>
       )}
 
-      {/* ── Rollover decision ── */}
+      {/* ── Rollover decision — straight-in members joined on a full ── */}
+      {/* membership from day one, so there's no trial-to-membership call  */}
+      {/* to make; they're excluded from rollover reporting entirely.     */}
       <div className="border-t border-gray-200/60 pt-2.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
-          Membership rollover
-          {isShort && !decision && (
-            <span className="ml-1.5 font-normal normal-case text-gray-300">— no decision removes from pipeline</span>
-          )}
-        </p>
-
-        {!decision ? (
-          /* No decision yet — show both options */
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => setDecision(client.id, 'rollover')}
-              className="flex-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 py-1.5 text-[11px] font-medium text-emerald-600 hover:bg-emerald-500/20 transition-colors"
-            >
-              ✓ Rolling over
-            </button>
-            <button
-              onClick={() => setDecision(client.id, 'no-rollover')}
-              className="flex-1 rounded-lg border border-gray-300 bg-gray-200 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-300 hover:text-gray-700 transition-colors"
-            >
-              ✗ Not rolling
-            </button>
-          </div>
+        {isStraightIn ? (
+          <p className="text-[11px] text-gray-400">Straight-in membership — no rollover decision needed</p>
         ) : (
-          /* Decision made — show status + undo */
-          <div className="flex items-center justify-between">
-            <span className={`flex items-center gap-1.5 text-xs font-medium ${isRollover ? 'text-emerald-600' : 'text-gray-500'}`}>
-              {isRollover ? (
-                <><CheckCircle className="h-3.5 w-3.5" /> Rolling over to membership</>
-              ) : (
-                <><X className="h-3.5 w-3.5" /> Not rolling over{isShort ? ' · removed from pipeline' : ''}</>
+          <>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
+              Membership rollover
+              {isShort && !decision && (
+                <span className="ml-1.5 font-normal normal-case text-gray-300">— no decision removes from pipeline</span>
               )}
-            </span>
-            <button
-              onClick={() => setDecision(client.id, null)}
-              title="Undo decision"
-              className="flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-gray-600 transition-colors ml-2 shrink-0"
-            >
-              <RotateCcw className="h-2.5 w-2.5" />
-              Undo
-            </button>
-          </div>
+            </p>
+
+            {!decision ? (
+              /* No decision yet — show both options */
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => setDecision(client.id, 'rollover', decisionMeta)}
+                  className="flex-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 py-1.5 text-[11px] font-medium text-emerald-600 hover:bg-emerald-500/20 transition-colors"
+                >
+                  ✓ Rolling over
+                </button>
+                <button
+                  onClick={() => setDecision(client.id, 'no-rollover', decisionMeta)}
+                  className="flex-1 rounded-lg border border-gray-300 bg-gray-200 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-300 hover:text-gray-700 transition-colors"
+                >
+                  ✗ Not rolling
+                </button>
+              </div>
+            ) : (
+              /* Decision made — show status + undo */
+              <div className="flex items-center justify-between">
+                <span className={`flex items-center gap-1.5 text-xs font-medium ${isRollover ? 'text-emerald-600' : 'text-gray-500'}`}>
+                  {isRollover ? (
+                    <><CheckCircle className="h-3.5 w-3.5" /> Rolling over to membership</>
+                  ) : (
+                    <><X className="h-3.5 w-3.5" /> Not rolling over{isShort ? ' · removed from pipeline' : ''}</>
+                  )}
+                </span>
+                <button
+                  onClick={() => setDecision(client.id, null)}
+                  title="Undo decision"
+                  className="flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-gray-600 transition-colors ml-2 shrink-0"
+                >
+                  <RotateCcw className="h-2.5 w-2.5" />
+                  Undo
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 

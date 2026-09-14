@@ -135,7 +135,8 @@ export default function OnboardingTab({
           <p className="text-sm text-gray-500 font-medium">No active onboarding clients</p>
           <p className="text-xs text-gray-400 mt-1">
             Clients appear here when they purchase a 3-Session Pass, 14-Day Pass,<br />
-            4-Week Kickstarter, Strong Dad or Strong Mum Transformation.
+            4-Week Kickstarter, Strong Dad or Strong Mum Transformation — or join<br />
+            straight onto a full membership.
           </p>
         </div>
       ) : (
