@@ -12,8 +12,8 @@ const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABAS
 
 /**
  * Supported period values (passed as ?period=xxx):
- *   7days         – rolling last 7 days (default)
- *   calendarWeek  – Mon–Sun of last calendar week
+ *   7days         – last 7 full days, not including today (default)
+ *   calendarWeek  – Sun–Sat of last calendar week
  *   lastMonth     – 1st–last of previous month
  *   weekToDate    – Monday of current week → today
  *   monthToDate   – 1st of current month → today
@@ -22,8 +22,8 @@ function getDateRange(period) {
   const now = new Date();
   switch (period) {
     case 'calendarWeek': {
-      const s = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
-      const e = endOfWeek(subWeeks(now, 1),   { weekStartsOn: 1 });
+      const s = startOfWeek(subWeeks(now, 1), { weekStartsOn: 0 });
+      const e = endOfWeek(subWeeks(now, 1),   { weekStartsOn: 0 });
       return { start: s, end: e };
     }
     case 'lastMonth': {
@@ -37,7 +37,7 @@ function getDateRange(period) {
     }
     case '7days':
     default:
-      return { start: subDays(now, 6), end: now };
+      return { start: subDays(now, 7), end: subDays(now, 1) };
   }
 }
 
