@@ -25,24 +25,24 @@ import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
 import {
   format, parseISO,
   startOfWeek, endOfWeek, startOfMonth, endOfMonth,
-  subMonths, subWeeks, subDays, endOfDay,
+  subMonths, subWeeks,
   differenceInCalendarDays,
 } from 'date-fns';
 
-// Recurring group-class MEMBERSHIP products only — matches the owner's own
-// framing ("weekly, fortnightly, and monthly payments"). Deliberately
-// excludes, based on a live 180-day product sweep (2026-09-19):
-//   - "Newstrength single session" — a one-off drop-in, not a membership
+// Group-class revenue products — confirmed with the owner (2026-09-19):
+// the two recurring memberships PLUS single-session drop-ins all count
+// (a single session still fills a class seat and produces real revenue).
+// Deliberately excludes, based on a live 180-day product sweep:
 //   - "Fat Loss Group" — sounds group-shaped but reads as a fixed-term
-//     program purchase, not an ongoing membership; flagged in the UI footer
-//   - "Open Gym"/"Open gym Family" — separate self-directed access product,
-//     not group classes (also nearly all $0 in practice — bundled free with
-//     other purchases in this account's data)
+//     program purchase, not an ongoing membership — confirmed excluded
+//   - "Open Gym"/"Open gym Family" — separate self-directed access
+//     product, not group classes — confirmed excluded (also nearly all $0
+//     in practice, bundled free with other purchases in this account)
 //   - "Individual Coaching & Open Gym Access" — "Individual", not group
 //   - "Kick Starter"/"3 session pass"/"14 Day Pass"/"Strong Dad/Mum
-//     Transformation" — onboarding trial passes, one-off not recurring
+//     Transformation" — onboarding trial passes, a different pipeline
 // If any of these should actually count, this is the one place to widen.
-const GROUP_MEMBERSHIP_KEYWORDS = ['newstrength unlimited', 'newstrength 2x week'];
+const GROUP_MEMBERSHIP_KEYWORDS = ['newstrength unlimited', 'newstrength 2x week', 'newstrength single session'];
 
 function isGroupMembership(description = '') {
   const d = description.toLowerCase();
@@ -105,16 +105,29 @@ export const handler = async (event) => {
     const token = await getStaffToken();
     const now = new Date();
 
-    // Same trailing-7-day "week" as mb-pt-analytics.js's coachPerformance,
-    // for direct comparability between the two LER views.
-    const yesterday = endOfDay(subDays(now, 1));
-    const w1End = yesterday, w1Start = subDays(w1End, 6);
-    const w2End = endOfDay(subDays(w1Start, 1)), w2Start = subDays(w2End, 6);
+    // Calendar Mon-Sun weeks / calendar months ending "now" — matches
+    // mb-revenue.js's convention exactly. A trailing 7-day window ending
+    // yesterday (this file's original approach, copied from
+    // mb-pt-analytics.js) silently excludes today and shifts "this week"
+    // a day early against the calendar — confirmed live as the cause of
+    // coach counts looking wrong (2026-09-19). Fixed here and in
+    // mb-pt-analytics.js's coachPerformance together.
+    const w1Start = startOfWeek(now, { weekStartsOn: 1 });
+    const w1End   = now;
+    const w2Start = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+    const w2End   = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
 
     const thisMonthStart = startOfMonth(now);
-    const thisMonthEnd   = yesterday;
+    const thisMonthEnd   = now;
     const lastMonthStart = startOfMonth(subMonths(now, 1));
     const lastMonthEnd   = endOfMonth(subMonths(now, 1));
+
+    const dateRanges = {
+      thisWeek:  `${format(w1Start, 'd MMM')} – ${format(w1End, 'd MMM')}`,
+      lastWeek:  `${format(w2Start, 'd MMM')} – ${format(w2End, 'd MMM')}`,
+      thisMonth: `${format(thisMonthStart, 'd MMM')} – ${format(thisMonthEnd, 'd MMM')}`,
+      lastMonth: `${format(lastMonthStart, 'd MMM')} – ${format(lastMonthEnd, 'd MMM')}`,
+    };
 
     const fetchFrom = lastMonthStart;
 
@@ -213,6 +226,7 @@ export const handler = async (event) => {
       lastMonthClassCount: lastMonthClasses,
       overall,
       byCoach,
+      dateRanges,
       excludedThisMonth: periodCount(
         allClasses.filter((c) => !c.IsCanceled).map((c) => ({
           name: (c.ClassDescription?.Name || c.Name || '').trim(),

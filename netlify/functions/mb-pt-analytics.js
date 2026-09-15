@@ -33,6 +33,7 @@ import { classifySession as classify } from './utils/session-classify.js';
 import {
   subDays, format, parseISO,
   startOfMonth, endOfMonth, endOfDay, subMonths,
+  startOfWeek, endOfWeek, subWeeks,
   differenceInCalendarDays,
 } from 'date-fns';
 
@@ -173,6 +174,10 @@ export const handler = async (event) => {
     const now   = new Date();
 
     // ── Date windows ──────────────────────────────────────────────────────
+    // w1-w4: rolling 4-week trend windows (trailing 7 days each, ending
+    // yesterday) — used only by ptReds/sessionCredits/weekCounts below, an
+    // established "last 4 weeks" trend view, not a this/last comparison.
+    // Left as-is; not what the coachPerformance date-window bug was about.
     const yesterday = endOfDay(subDays(now, 1));
 
     const w1End   = yesterday;
@@ -188,12 +193,36 @@ export const handler = async (event) => {
     const w4Start = subDays(w4End, 6);
 
     const thisMonthStart = startOfMonth(now);
-    const thisMonthEnd   = yesterday;
+    const thisMonthEnd   = yesterday; // stats/ptsp below — unrelated to the bug, kept as-is
     const lastMonthStart = startOfMonth(subMonths(now, 1));
     const lastMonthEnd   = endOfMonth(subMonths(now, 1));
 
+    // Calendar Mon-Sun weeks / calendar months ending "now" (not
+    // yesterday) — matches mb-revenue.js's convention exactly. This is
+    // what coachPerformance uses: confirmed live the old w1/w2 trailing
+    // window (e.g. Tue-Mon) silently excluded today's sessions and shifted
+    // "this week" a day early against the calendar, which is what made
+    // coach counts look wrong (2026-09-19).
+    const cwThisWeekStart = startOfWeek(now, { weekStartsOn: 1 });
+    const cwThisWeekEnd   = now;
+    const cwLastWeekStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+    const cwLastWeekEnd   = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+    const cwThisMonthEnd  = now;
+
+    const dateRanges = {
+      thisWeek:  `${format(cwThisWeekStart, 'd MMM')} – ${format(cwThisWeekEnd, 'd MMM')}`,
+      lastWeek:  `${format(cwLastWeekStart, 'd MMM')} – ${format(cwLastWeekEnd, 'd MMM')}`,
+      thisMonth: `${format(thisMonthStart, 'd MMM')} – ${format(cwThisMonthEnd, 'd MMM')}`,
+      lastMonth: `${format(lastMonthStart, 'd MMM')} – ${format(lastMonthEnd, 'd MMM')}`,
+    };
+
+    // Fetch through "now", not yesterday — coachPerformance's this-week/
+    // this-month windows now extend to today, so today's sessions need to
+    // actually be in the fetched pool. Purely additive: everything below
+    // that still filters up to `yesterday` (w1-w4, the old thisMonthEnd)
+    // sees the exact same rows it always did.
     const fetchStart = format(lastMonthStart, "yyyy-MM-dd'T'00:00:00");
-    const fetchEnd   = format(yesterday,      "yyyy-MM-dd'T'23:59:59");
+    const fetchEnd   = format(now,            "yyyy-MM-dd'T'23:59:59");
 
     // ── Fetch session types + appointments + PT/SP sale rates in parallel ──
     const [sessionTypeMap, raw, rates] = await Promise.all([
@@ -290,9 +319,9 @@ export const handler = async (event) => {
     }
 
     const overallPerformance = withWeeklyAvg({
-      thisWeek:  periodBucket(signedOff, w1Start, w1End),
-      lastWeek:  periodBucket(signedOff, w2Start, w2End),
-      thisMonth: periodBucket(signedOff, thisMonthStart, thisMonthEnd),
+      thisWeek:  periodBucket(signedOff, cwThisWeekStart, cwThisWeekEnd),
+      lastWeek:  periodBucket(signedOff, cwLastWeekStart, cwLastWeekEnd),
+      thisMonth: periodBucket(signedOff, thisMonthStart, cwThisMonthEnd),
       lastMonth: periodBucket(signedOff, lastMonthStart, lastMonthEnd),
     });
 
@@ -305,9 +334,9 @@ export const handler = async (event) => {
           staffId,
           staffName,
           ...withWeeklyAvg({
-            thisWeek:  periodBucket(mine, w1Start, w1End),
-            lastWeek:  periodBucket(mine, w2Start, w2End),
-            thisMonth: periodBucket(mine, thisMonthStart, thisMonthEnd),
+            thisWeek:  periodBucket(mine, cwThisWeekStart, cwThisWeekEnd),
+            lastWeek:  periodBucket(mine, cwLastWeekStart, cwLastWeekEnd),
+            thisMonth: periodBucket(mine, thisMonthStart, cwThisMonthEnd),
             lastMonth: periodBucket(mine, lastMonthStart, lastMonthEnd),
           }),
         };
@@ -317,6 +346,7 @@ export const handler = async (event) => {
     const coachPerformance = {
       overall: overallPerformance,
       byCoach,
+      dateRanges,
       rates: { pt: Math.round(rates.pt * 100) / 100, sp: Math.round(rates.sp * 100) / 100, sampleSize: rates.sampleSize, windowDays: RATE_WINDOW_DAYS },
     };
 
