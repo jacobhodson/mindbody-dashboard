@@ -21,13 +21,23 @@
 [functions."mb-snapshot"]
   timeout = 26
 
+# NOTE: no `schedule` field here anymore (2026-09-21) — confirmed live that
+# registering one gets Netlify to report a real schedule via its own API
+# (searchSiteFunctions), and blocks direct HTTP invocation (403) as if it
+# were a real scheduled function... but it never actually auto-fired, not
+# even once, in the 5 days since registering it (checked via
+# clients.synced_at / metric_actuals.synced_at, both stuck exactly where a
+# manual test-curl that day left them). Whatever the cause — plan/account
+# gating on actual Scheduled Functions execution is the leading theory —
+# these are now driven by Supabase pg_cron + pg_net instead (see
+# 20260921000000_scheduled_job_cron.sql), which can be verified to actually
+# fire. Kept as plain HTTP-invocable functions so pg_net's calls (and any
+# manual/backfill curl) reach them.
 [functions."scheduled-daily-refresh"]
   timeout = 26
-  schedule = "0 14 * * *"
 
 [functions."scheduled-client-sync"]
   timeout = 26
-  schedule = "0 15 * * *"
 
 [dev]
   command = "vite"

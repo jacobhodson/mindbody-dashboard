@@ -34,15 +34,21 @@ import { format, parseISO, subDays } from 'date-fns';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-// NOTE: this in-code `config.schedule` export was never actually registered
-// by Netlify — confirmed live 2026-09-16 via `netlify api searchSiteFunctions`,
-// which showed `"schedule": null` for this function despite this export
-// having been in place since it shipped (the roster sync had silently never
-// auto-run even once — every "successful sync" row in `clients.synced_at`
-// up to that point was from a manual/backfill curl during development, not
-// the cron). The real, working schedule now lives in netlify.toml's
-// [functions."scheduled-client-sync"] block — keep both in sync if this
-// ever changes, and treat netlify.toml as the source of truth.
+// NOTE (2026-09-21): this in-code `config.schedule` export does NOT
+// actually schedule anything, and neither did adding `schedule` to
+// netlify.toml — confirmed live both ways: registering it in netlify.toml
+// did get Netlify's own API to report a real schedule and started
+// blocking direct HTTP calls with 403 (as a genuine scheduled function
+// would), but it still never auto-fired even once in 5 days (every
+// "successful sync" row in `clients.synced_at` up to that point was from
+// a manual/backfill curl during development, not the cron — same story
+// repeated). Whatever the cause (a Netlify plan/account gate on actual
+// execution is the leading theory), this is now triggered by Supabase
+// pg_cron + pg_net instead — see 20260921000000_scheduled_job_cron.sql —
+// which calls this function's plain HTTP endpoint on a schedule and can
+// actually be verified to fire. Left as a plain function (no netlify.toml
+// schedule) so that call reaches it; this config.schedule export is now
+// just documentation of intent.
 export const config = {
   schedule: '0 15 * * *', // 3pm UTC = 1am Sydney (AEST) — 1hr after scheduled-daily-refresh
 };
