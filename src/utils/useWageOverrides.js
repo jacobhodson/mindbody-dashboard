@@ -7,8 +7,8 @@ import { supabase } from '../lib/supabaseClient.js';
  * wage figure for whichever staff need it (e.g. a profit-share salary
  * that doesn't reflect face-to-face coaching value); never touches real
  * payroll. RLS on the table already restricts all access to managers, so
- * this hook has no isManager gate of its own — the caller (WageOverridesPanel)
- * doesn't render for non-managers anyway.
+ * this hook has no isManager gate of its own — the caller (LERTable.jsx's
+ * per-row settings expander) doesn't render for non-managers anyway.
  */
 export function useWageOverrides() {
   const [overrides, setOverrides] = useState({}); // staffId -> { effectiveWage, note, updatedAt }
@@ -51,5 +51,5 @@ export function useWageOverrides() {
     return !error;
   }, [load]);
 
-  return { overrides, loading, setOverride, clearOverride };
+  return { overrides, loading, setOverride, clearOverride, reload: load };
 }
