@@ -7,10 +7,20 @@
  * this is a plain link a manager clicks from XeroConnection.jsx, not an API
  * call made programmatically.
  *
- * Scopes requested match exactly what the app registration at
- * developer.xero.com needs approved: offline_access (refresh tokens) +
- * read-only accounting reports/transactions (revenue) + read-only payroll
- * (employees/payruns/payslips, for wages).
+ * Scopes: offline_access (refresh tokens) + read-only payroll
+ * (employees/payruns/payslips, for wages) only — no accounting.* scopes.
+ *
+ * Wages-only was a deliberate strip-back (2026-09-20): revenue for LER
+ * comes from mb-pt-analytics.js/mb-group-performance.js (already built,
+ * Mindbody-sourced), and the owner has a separate P&L dashboard for
+ * full company financials — Xero here is just the wages half. This also
+ * sidesteps a real problem confirmed live: this Xero app's
+ * `accounting.transactions.read`/`accounting.reports.read` scopes were
+ * both rejected with invalid_scope (isolated one scope at a time via the
+ * authorize endpoint, which errors before any login prompt for a scope
+ * the app isn't configured for) — likely those two Accounting API modules
+ * were never enabled on the app itself. All three payroll.* scopes were
+ * individually and jointly confirmed working, hence this scope list.
  */
 import { err, CORS } from './utils/mb-auth.js';
 
@@ -18,8 +28,6 @@ const XERO_AUTHORIZE_URL = 'https://login.xero.com/identity/connect/authorize';
 const REDIRECT_URI = 'https://newstrength-ops-dashboard.netlify.app/api/xero-oauth-callback';
 const SCOPES = [
   'offline_access',
-  'accounting.reports.read',
-  'accounting.transactions.read',
   'payroll.employees.read',
   'payroll.payruns.read',
   'payroll.payslip.read',

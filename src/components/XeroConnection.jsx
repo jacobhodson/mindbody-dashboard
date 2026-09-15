@@ -40,7 +40,7 @@ export default function XeroConnection({ isManager }) {
               {status.connectedAt && ` · since ${formatDistanceToNow(new Date(status.connectedAt), { addSuffix: true })}`}
             </p>
           ) : (
-            <p className="text-xs text-gray-500">Not connected yet — needed for revenue and payroll wage data (LER)</p>
+            <p className="text-xs text-gray-500">Not connected yet — needed for payroll wage data (LER)</p>
           )}
         </div>
       </div>
