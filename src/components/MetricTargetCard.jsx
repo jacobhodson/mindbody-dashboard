@@ -59,6 +59,7 @@ function ProgressRow({ cadenceLabel, target, actual, lastUpdated, canUpdate, onL
 export default function MetricTargetCard({
   metricKey, label, weeklyTarget, monthlyTarget, direction, owners, activeCadence,
   staffList, isManager, staff, actualFor, lastUpdatedFor, onLog, onEdit, onArchive,
+  showManageControls = true,
 }) {
   const isMindbody = MINDBODY_METRIC_KEYS.has(metricKey);
   const ownerNames = owners.map((id) => staffList.find((s) => s.id === id)?.full_name).filter(Boolean).join('/');
@@ -82,7 +83,7 @@ export default function MetricTargetCard({
           <p className="text-sm font-semibold text-gray-900 truncate">{renderFormatted(label)}</p>
           {ownerNames && <p className="text-xs text-gray-500">{ownerNames}</p>}
         </div>
-        {isManager && !isMindbody && (
+        {isManager && !isMindbody && showManageControls && (
           <div className="flex shrink-0 items-center gap-1">
             <button onClick={onEdit} className="text-gray-400 hover:text-gray-700"><Pencil className="h-3.5 w-3.5" /></button>
             <button
