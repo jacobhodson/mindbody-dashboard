@@ -15,6 +15,8 @@ import RevenueCards       from './RevenueCards.jsx';
 import PaymentIssuesTable from './PaymentIssuesTable.jsx';
 import DeclinedList       from './DeclinedList.jsx';
 import GroupPerformanceTable from './GroupPerformanceTable.jsx';
+import XeroConnection      from './XeroConnection.jsx';
+import WageOverridesPanel  from './WageOverridesPanel.jsx';
 import OnboardingTab          from './OnboardingTab.jsx';
 import PersonalTrainingTab    from './PersonalTrainingTab.jsx';
 import CelebrationsPanel   from './CelebrationsPanel.jsx';
@@ -188,6 +190,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         {/* ─ Finances ─ */}
         {tab === 'finances' && (
           <>
+            <XeroConnection isManager={isManager} />
             <RevenueCards
               data={data.revenue}
               loading={loading.revenue}
@@ -204,6 +207,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               error={errors.payments}
             />
             <GroupPerformanceTable isManager={isManager} />
+            <WageOverridesPanel isManager={isManager} currentStaffId={staff?.id} />
           </>
         )}
 
