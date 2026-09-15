@@ -56,10 +56,23 @@ export async function getXeroAuth() {
   return { accessToken: tokenData.access_token, tenantId: conn.tenant_id };
 }
 
-export async function xeroPayrollGet(path, accessToken, tenantId) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Retries once on 429 (respecting Xero's Retry-After header, confirmed
+// live to actually get hit — a small burst of PayRun detail fetches from
+// xero-wages.js, on top of this session's own testing, tripped Xero's
+// rate limit in production on the very first real run). Callers should
+// also fetch sequentially rather than in a Promise.all burst — this alone
+// doesn't make concurrent bursts safe, just recoverable from occasionally.
+export async function xeroPayrollGet(path, accessToken, tenantId, _retried = false) {
   const res = await fetch(`https://api.xero.com/payroll.xro/1.0${path}`, {
     headers: { Authorization: `Bearer ${accessToken}`, 'Xero-tenant-id': tenantId, Accept: 'application/json' },
   });
+  if (res.status === 429 && !_retried) {
+    const retryAfter = Number(res.headers.get('Retry-After')) || 5;
+    await sleep((retryAfter + 1) * 1000);
+    return xeroPayrollGet(path, accessToken, tenantId, true);
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Xero Payroll GET ${path} -> ${res.status}: ${text.slice(0, 300)}`);

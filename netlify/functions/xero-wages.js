@@ -55,9 +55,15 @@ export const handler = async (event) => {
       return end && end >= lastMonthStart && end <= thisMonthEnd;
     });
 
-    const details = await Promise.all(
-      relevantRuns.map((r) => xeroPayrollGet(`/PayRuns/${r.PayRunID}`, accessToken, tenantId)),
-    );
+    // Sequential, not Promise.all — confirmed live that a burst of these
+    // (on top of this session's own testing) tripped Xero's rate limit in
+    // production on the very first real run. There are only ~4-9 relevant
+    // runs per invocation (weekly payroll, 2 months), so sequential is
+    // still fast; xeroPayrollGet itself also retries once on 429.
+    const details = [];
+    for (const r of relevantRuns) {
+      details.push(await xeroPayrollGet(`/PayRuns/${r.PayRunID}`, accessToken, tenantId));
+    }
 
     const wages = {};
     for (const s of staffRows || []) wages[s.id] = { thisMonth: 0, lastMonth: 0 };
