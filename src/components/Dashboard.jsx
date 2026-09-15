@@ -14,6 +14,7 @@ import FringeClientsTable from './FringeClientsTable.jsx';
 import RevenueCards       from './RevenueCards.jsx';
 import PaymentIssuesTable from './PaymentIssuesTable.jsx';
 import DeclinedList       from './DeclinedList.jsx';
+import GroupPerformanceTable from './GroupPerformanceTable.jsx';
 import OnboardingTab          from './OnboardingTab.jsx';
 import PersonalTrainingTab    from './PersonalTrainingTab.jsx';
 import CelebrationsPanel   from './CelebrationsPanel.jsx';
@@ -202,6 +203,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               loading={loading.payments}
               error={errors.payments}
             />
+            <GroupPerformanceTable isManager={isManager} />
           </>
         )}
 
