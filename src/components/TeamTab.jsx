@@ -1,44 +1,42 @@
 import { useState } from 'react';
-import { format } from 'date-fns';
 import { Users, LayoutGrid, UserRound } from 'lucide-react';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useCoachMonthlySnapshots } from '../utils/useCoachMonthlySnapshots.js';
+import { useCoachRolling30 } from '../utils/useCoachRolling30.js';
 import { useTeamTaskStats } from '../utils/useTeamTaskStats.js';
+import { ROLLING_KEY, monthKeyFor, monthOptions } from '../utils/snapshotPeriods.js';
 import TeamByMetric from './TeamByMetric.jsx';
 import TeamByCoach from './TeamByCoach.jsx';
 
-const MONTHS = Array.from({ length: 12 }, (_, i) => i);
-
 /**
  * Manager-only Team tab — coach performance in one place: LER, group class
- * performance, PT sessions/value, and individual task completion, all
- * split two ways per the ask ("dive into the coach themselves, or dive
- * into the filter of the task"):
+ * performance, PT sessions/value, and individual task completion, split two
+ * ways ("dive into the coach themselves, or dive into the filter of the
+ * task"):
  *   - By Coach (TeamByCoach.jsx): pick one coach, see their whole year
  *   - By Metric (TeamByMetric.jsx): pick one metric, compare every coach
- *     for one month
  *
- * The LER/PT/Group figures read from ler_monthly — a real per-coach-per-
- * month database snapshot (scheduled-coach-snapshot.js populates it daily)
- * rather than a live this-month/last-month-only view, so every month of
- * the current year is independently selectable here. History only starts
- * accumulating from whenever that job first ran — see its own header for
- * why earlier months can't be backfilled. Task completion comes from
- * task_completions directly (useTeamTaskStats.js) since that's already
- * historical on its own, no snapshot needed.
+ * Period is either a calendar month (ler_monthly — a real per-coach-per-
+ * month snapshot, every month of the year, wage overrides applied) or a
+ * Rolling 30 Days window (coach_rolling30, refreshed nightly). Both are
+ * written by scheduled-coach-snapshot.js. Task completion comes from
+ * task_completions directly (useTeamTaskStats.js) for the same date range —
+ * it's already historical on its own, no snapshot needed.
  */
 export default function TeamTab({ isManager }) {
   const year = new Date().getFullYear();
-  const [mode, setMode] = useState('coach'); // 'coach' | 'metric'
-  const [monthIndex, setMonthIndex] = useState(new Date().getMonth());
+  const [mode, setMode]     = useState('coach'); // 'coach' | 'metric'
+  const [period, setPeriod] = useState(monthKeyFor(new Date())); // 'rolling30' | 'm:yyyy-MM'
 
   const { staffList, loading: staffLoading } = useAllStaff();
-  const { rows: snapshotRows, loading: snapshotsLoading } = useCoachMonthlySnapshots(isManager, year);
+  const { rows: monthlyRows, loading: monthlyLoading } = useCoachMonthlySnapshots(isManager, year);
+  const { latest: rollingLatest, history: rollingHistory, latestAsOf, loading: rollingLoading } = useCoachRolling30(isManager);
   const { statsFor, loading: tasksLoading } = useTeamTaskStats(isManager);
 
   if (!isManager) return null;
 
-  const loading = staffLoading || snapshotsLoading || tasksLoading;
+  const loading = staffLoading || monthlyLoading || rollingLoading || tasksLoading;
+  const shared = { staffList, monthlyRows, rollingLatest, rollingHistory, latestAsOf, statsFor, period, loading };
 
   return (
     <div className="space-y-6">
@@ -71,36 +69,17 @@ export default function TeamTab({ isManager }) {
           </div>
 
           <select
-            value={monthIndex}
-            onChange={(e) => setMonthIndex(Number(e.target.value))}
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
             className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
-            {MONTHS.map((m) => (
-              <option key={m} value={m}>{format(new Date(year, m, 1), 'MMMM yyyy')}</option>
-            ))}
+            <option value={ROLLING_KEY}>Rolling 30 days</option>
+            {monthOptions(year).map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
           </select>
         </div>
       </div>
 
-      {mode === 'metric' ? (
-        <TeamByMetric
-          staffList={staffList}
-          snapshotRows={snapshotRows}
-          statsFor={statsFor}
-          year={year}
-          monthIndex={monthIndex}
-          loading={loading}
-        />
-      ) : (
-        <TeamByCoach
-          staffList={staffList}
-          snapshotRows={snapshotRows}
-          statsFor={statsFor}
-          year={year}
-          monthIndex={monthIndex}
-          loading={loading}
-        />
-      )}
+      {mode === 'metric' ? <TeamByMetric {...shared} /> : <TeamByCoach {...shared} year={year} />}
     </div>
   );
 }

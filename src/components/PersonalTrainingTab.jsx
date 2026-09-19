@@ -62,7 +62,7 @@ function PTStatsTable({ stats, loading }) {
 }
 
 // ── Main tab ───────────────────────────────────────────────────────────────
-export default function PersonalTrainingTab({ data, loading, error, contactLog, onViewClient }) {
+export default function PersonalTrainingTab({ data, loading, error, contactLog, onViewClient, isManager }) {
   if (error && !data) {
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
@@ -83,7 +83,7 @@ export default function PersonalTrainingTab({ data, loading, error, contactLog, 
       <PTStatsTable stats={data?.stats} loading={loading} />
 
       {/* Coach performance — signed-off sessions, hours, $ value */}
-      <CoachPerformanceTable data={data} loading={loading} error={error} />
+      <CoachPerformanceTable data={data} loading={loading} error={error} isManager={isManager} />
 
       {/* PT Reds */}
       <PTRedsList data={data} loading={loading} error={error} contactLog={contactLog} onViewClient={onViewClient} />

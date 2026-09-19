@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { Lock } from 'lucide-react';
 import { useGroupPerformance } from '../utils/useGroupPerformance.js';
+import { isSnapshotPeriod, periodLabel } from '../utils/snapshotPeriods.js';
+import PeriodTabs from './PeriodTabs.jsx';
+import SnapshotPeriodTable from './SnapshotPeriodTable.jsx';
 
 function fmtAUD(n) {
   if (n === undefined || n === null) return '–';
@@ -40,7 +43,8 @@ export default function GroupPerformanceTable({ isManager }) {
     );
   }
 
-  const dateRange = data?.dateRanges?.[period];
+  const isSnapshot = isSnapshotPeriod(period);
+  const dateRange = isSnapshot ? periodLabel(period) : data?.dateRanges?.[period];
   const byCoach = data?.byCoach || [];
 
   return (
@@ -57,21 +61,19 @@ export default function GroupPerformanceTable({ isManager }) {
             Group membership revenue &amp; per-coach LER{dateRange ? ` · ${dateRange}` : ''}
           </p>
         </div>
-        <div className="flex rounded-lg border border-gray-300 overflow-hidden text-xs">
-          {PERIODS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setPeriod(p.key)}
-              className={`px-3 py-1.5 font-medium transition-colors ${
-                period === p.key ? 'bg-emerald-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+        <PeriodTabs
+          livePeriods={PERIODS}
+          value={period}
+          onChange={setPeriod}
+          showSnapshots
+          year={new Date().getFullYear()}
+        />
       </div>
 
+      {isSnapshot ? (
+        <SnapshotPeriodTable metric="group" period={period} />
+      ) : (
+      <>
       {/* Revenue for the selected period */}
       <div className="px-5 py-4 border-b border-gray-100 flex items-baseline gap-3 flex-wrap">
         <span className="text-2xl font-bold tabular-nums text-gray-900">
@@ -138,6 +140,8 @@ export default function GroupPerformanceTable({ isManager }) {
           Excludes free Saturday Open Gym and Sunday Run Club sessions ({data.excludedThisMonth} this month) — no revenue, no coaching required.
           Counts "Newstrength Unlimited", "Newstrength 2x week", and single-session drop-ins as group revenue.
         </p>
+      )}
+      </>
       )}
     </div>
   );

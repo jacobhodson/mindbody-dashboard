@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { isSnapshotPeriod, periodLabel } from '../utils/snapshotPeriods.js';
+import PeriodTabs from './PeriodTabs.jsx';
+import SnapshotPeriodTable from './SnapshotPeriodTable.jsx';
 
 function fmtAUD(n) {
   if (n === undefined || n === null) return '–';
@@ -30,10 +33,14 @@ const PERIODS = [
  * avgSessionRates() for why an exact trace isn't feasible against this
  * account's Mindbody data.
  */
-export default function CoachPerformanceTable({ data, loading, error }) {
+export default function CoachPerformanceTable({ data, loading, error, isManager }) {
   const [period, setPeriod] = useState('thisWeek');
   const perf = data?.coachPerformance;
-  const dateRange = perf?.dateRanges?.[period];
+  // Rolling 30 Days / month picker are snapshot-backed and manager-only
+  // (the snapshot tables are manager-only via RLS); everyone still gets the
+  // live This Week / Last Week / This Month / Last Month tabs.
+  const isSnapshot = !!isManager && isSnapshotPeriod(period);
+  const dateRange = isSnapshot ? periodLabel(period) : perf?.dateRanges?.[period];
 
   if (error && !data) {
     return (
@@ -54,21 +61,19 @@ export default function CoachPerformanceTable({ data, loading, error }) {
             Signed-off PT &amp; Semi-Private sessions{dateRange ? ` · ${dateRange}` : ''}
           </p>
         </div>
-        <div className="flex rounded-lg border border-gray-300 overflow-hidden text-xs">
-          {PERIODS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setPeriod(p.key)}
-              className={`px-3 py-1.5 font-medium transition-colors ${
-                period === p.key ? 'bg-emerald-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+        <PeriodTabs
+          livePeriods={PERIODS}
+          value={period}
+          onChange={setPeriod}
+          showSnapshots={!!isManager}
+          year={new Date().getFullYear()}
+        />
       </div>
 
+      {isSnapshot ? (
+        <SnapshotPeriodTable metric="pt" period={period} />
+      ) : (
+      <>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -125,6 +130,8 @@ export default function CoachPerformanceTable({ data, loading, error }) {
         <p className="px-5 py-2.5 text-[11px] text-gray-400 border-t border-gray-100">
           $ value based on a {perf.rates.windowDays}-day average sale price — PT {fmtAUD(perf.rates.pt)}/session ({perf.rates.sampleSize?.pt ?? 0} sales), SP {fmtAUD(perf.rates.sp)}/session ({perf.rates.sampleSize?.sp ?? 0} sales).
         </p>
+      )}
+      </>
       )}
     </div>
   );

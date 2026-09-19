@@ -1,31 +1,40 @@
 import { useState, useEffect, useCallback, Fragment } from 'react';
-import { Gauge, Lock, Settings2, ChevronUp } from 'lucide-react';
+import { format } from 'date-fns';
+import { Gauge, Lock, Settings2, ChevronUp, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient.js';
-import { useGroupPerformance } from '../utils/useGroupPerformance.js';
-import { useWageOverrides } from '../utils/useWageOverrides.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
+import { useWageOverrides } from '../utils/useWageOverrides.js';
+import { useMonthlyWageOverrides } from '../utils/useMonthlyWageOverrides.js';
+import { useCoachMonthlySnapshots } from '../utils/useCoachMonthlySnapshots.js';
+import { useCoachRolling30 } from '../utils/useCoachRolling30.js';
+import { ROLLING_KEY, monthKeyFor, monthDateOf, periodLabel, snapshotRowFor } from '../utils/snapshotPeriods.js';
+import PeriodTabs from './PeriodTabs.jsx';
 
 function fmtAUD(n) {
   if (n === undefined || n === null) return '–';
   return `$${Math.round(n).toLocaleString('en-AU')}`;
 }
 
-const PERIODS = [
-  { key: 'thisMonth', label: 'This Month' },
-  { key: 'lastMonth', label: 'Last Month' },
-];
+const inputClass = 'rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900';
+const saveClass  = 'rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 disabled:opacity-50';
+const clearClass = 'rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50';
 
-// Inline per-coach settings — Xero employee mapping + wage override —
-// expanded in place under a row rather than living as separate always-on
-// panels (2026-09-21, per feedback: "saves us from having that there all
-// the time"). Both write straight through to the same tables
-// XeroEmployeeMapping.jsx/WageOverridesPanel.jsx used before being folded
-// in here.
-function CoachSettingsRow({ staffId, xeroEmployeeId, employees, override, currentStaffId, setOverride, clearOverride, onMappingSaved, onOverrideSaved }) {
-  const [wage, setWage]   = useState(override?.effectiveWage ?? '');
-  const [note, setNote]   = useState(override?.note ?? '');
-  const [savingMap, setSavingMap] = useState(false);
-  const [savingWage, setSavingWage] = useState(false);
+// Inline per-coach settings, expanded in place under a row: Xero employee
+// mapping, a wage override for the period being viewed (per MONTH — pick a
+// month up top; the rolling 30-day view spreads each month's override
+// across its days), and a standing default wage used for any month without
+// its own override. All for LER only — none of it touches real payroll.
+function CoachSettingsRow({
+  staffId, xeroEmployeeId, employees, standing, monthly, month, monthLabel, currentStaffId,
+  setStanding, clearStanding, setMonthly, clearMonthly, onMappingSaved, onSaved,
+}) {
+  const [monthWage, setMonthWage]     = useState(monthly?.effectiveWage ?? '');
+  const [monthNote, setMonthNote]     = useState(monthly?.note ?? '');
+  const [standWage, setStandWage]     = useState(standing?.effectiveWage ?? '');
+  const [standNote, setStandNote]     = useState(standing?.note ?? '');
+  const [savingMap, setSavingMap]     = useState(false);
+  const [savingMonth, setSavingMonth] = useState(false);
+  const [savingStand, setSavingStand] = useState(false);
 
   const saveMapping = async (employeeId) => {
     setSavingMap(true);
@@ -34,48 +43,67 @@ function CoachSettingsRow({ staffId, xeroEmployeeId, employees, override, curren
     if (!error) onMappingSaved();
   };
 
-  const saveWage = async () => {
-    setSavingWage(true);
-    if (wage === '') await clearOverride(staffId);
-    else await setOverride(staffId, Number(wage), note, currentStaffId);
-    setSavingWage(false);
-    onOverrideSaved();
+  const saveMonth = async () => {
+    setSavingMonth(true);
+    if (monthWage === '') await clearMonthly(staffId, month);
+    else await setMonthly(staffId, month, Number(monthWage), monthNote);
+    setSavingMonth(false);
+    onSaved();
+  };
+  const clearMonth = async () => {
+    setSavingMonth(true);
+    await clearMonthly(staffId, month);
+    setMonthWage(''); setMonthNote('');
+    setSavingMonth(false);
+    onSaved();
+  };
+
+  const saveStanding = async () => {
+    setSavingStand(true);
+    if (standWage === '') await clearStanding(staffId);
+    else await setStanding(staffId, Number(standWage), standNote, currentStaffId);
+    setSavingStand(false);
+    onSaved();
   };
 
   return (
     <tr className="bg-gray-50/40">
       <td colSpan={4} className="px-4 py-3">
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+        <div className="space-y-2.5 text-xs">
           <div className="flex items-center gap-1.5">
-            <span className="text-gray-500">Xero employee:</span>
+            <span className="text-gray-500 w-28 shrink-0">Xero employee:</span>
             <select
               value={xeroEmployeeId || ''}
               onChange={(e) => saveMapping(e.target.value)}
               disabled={savingMap}
-              className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 disabled:opacity-50"
+              className={`${inputClass} disabled:opacity-50`}
             >
               <option value="">Not mapped</option>
               {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-500">Wage override:</span>
-            <input
-              type="number" value={wage} onChange={(e) => setWage(e.target.value)}
-              placeholder="e.g. 1200" className="w-24 rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900"
-            />
-            <input
-              type="text" value={note} onChange={(e) => setNote(e.target.value)}
-              placeholder="note (optional)" className="w-36 rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900"
-            />
-            <button
-              disabled={savingWage} onClick={saveWage}
-              className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-            >
-              Save
-            </button>
-            <span className="text-gray-400">For LER only — doesn't touch real payroll.</span>
+          {month ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-gray-500 w-28 shrink-0">Wage for {monthLabel}:</span>
+              <input type="number" value={monthWage} onChange={(e) => setMonthWage(e.target.value)} placeholder="e.g. 1200" className={`${inputClass} w-24`} />
+              <input type="text" value={monthNote} onChange={(e) => setMonthNote(e.target.value)} placeholder="note (optional)" className={`${inputClass} w-36`} />
+              <button disabled={savingMonth} onClick={saveMonth} className={saveClass}>Save</button>
+              {monthly && <button disabled={savingMonth} onClick={clearMonth} className={clearClass}>Clear</button>}
+              <span className="text-gray-400">Replaces the Xero wage for this month only.</span>
+            </div>
+          ) : (
+            <p className="text-gray-400">
+              Wage overrides are set per month — pick a month above to edit one. The rolling 30 days uses each month's override, spread across its days.
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-gray-500 w-28 shrink-0">Standing wage:</span>
+            <input type="number" value={standWage} onChange={(e) => setStandWage(e.target.value)} placeholder="e.g. 2000" className={`${inputClass} w-24`} />
+            <input type="text" value={standNote} onChange={(e) => setStandNote(e.target.value)} placeholder="note (optional)" className={`${inputClass} w-36`} />
+            <button disabled={savingStand} onClick={saveStanding} className={saveClass}>Save</button>
+            <span className="text-gray-400">Default monthly wage for months without their own override. LER only — doesn't touch real payroll.</span>
           </div>
         </div>
       </td>
@@ -84,77 +112,55 @@ function CoachSettingsRow({ staffId, xeroEmployeeId, employees, override, curren
 }
 
 /**
- * Labour efficiency ratio (revenue ÷ wages) per coach — the piece that
- * stitches together three previously-separate data sources:
- *   - PT/SP revenue: mb-pt-analytics.js's coachPerformance (passed in as
- *     `ptData`, already fetched app-wide — not re-fetched here)
- *   - Group class revenue: mb-group-performance.js via useGroupPerformance
- *   - Wages: xero-wages.js (Xero Payroll), with staff_wage_overrides
- *     substituted in for anyone who has one set (e.g. a profit-share
- *     salary that doesn't reflect coaching value)
+ * Labour efficiency ratio (revenue ÷ wages) per coach, month by month plus
+ * a rolling 30 days. Reads the nightly snapshot tables (ler_monthly /
+ * coach_rolling30 — see scheduled-coach-snapshot.js) rather than stitching
+ * PT, Group and Xero together live in the browser, so every month of the
+ * year is selectable and matches the Team tab exactly. Refresh re-runs the
+ * snapshot on demand.
  *
- * Xero employee mapping and wage overrides are set inline per row (the
- * settings gear) rather than as separate always-visible panels — folded
- * in 2026-09-21, replacing XeroEmployeeMapping.jsx/WageOverridesPanel.jsx.
+ * Wages: month-specific override -> standing override -> Xero Payroll.
+ * Overrides and Xero employee mapping are set inline per row (the gear).
+ * Changing a month's override recomputes that month immediately (RPC);
+ * anything touching the rolling window or wages re-runs the snapshot in the
+ * background.
  *
- * Only this/last month — Xero payroll runs weekly, PT/Group revenue is
- * only ever computed live for a ~2-month window, so this is as far back
- * as a real LER can go right now. Rolling 3/6/12-month averages need
- * ler_monthly to actually accumulate history first (not built yet — see
- * the project memory).
- *
- * Matches a coach across the three sources by first-name substring
- * (mb-pt-analytics.js/mb-group-performance.js use Mindbody's full
- * "First Last" staffName; this app's own `staff.full_name` values happen
- * to all be first-name-only today) — a real, documented simplification,
- * not a robust ID join. Revisit if two active coaches ever share a first
- * name, or fold in a proper mindbody_staff_id mapping (mirroring
- * xero_employee_id) if this gets fragile.
+ * Coaches are matched across sources by first-name substring (see the
+ * snapshot function) — a documented simplification, not an ID join.
  */
-export default function LERTable({ isManager, ptData, currentStaffId }) {
-  const { staffList, reload: reloadStaff } = useAllStaff();
-  const { data: groupData, loading: groupLoading } = useGroupPerformance(isManager);
-  const { overrides, loading: overridesLoading, setOverride, clearOverride, reload: reloadOverrides } = useWageOverrides();
-  const [wages, setWages]         = useState(null);
-  const [wagesLoading, setWagesLoading] = useState(true);
-  const [wagesError, setWagesError]     = useState(null);
-  const [employees, setEmployees] = useState([]);
-  const [period, setPeriod]       = useState('thisMonth');
+export default function LERTable({ isManager, currentStaffId }) {
+  const year = new Date().getFullYear();
+  const [period, setPeriod] = useState(monthKeyFor(new Date()));
   const [openStaffId, setOpenStaffId] = useState(null);
+  const [employees, setEmployees]     = useState([]);
+  const [refreshing, setRefreshing]   = useState(false);
 
-  const loadWages = useCallback(() => {
-    setWagesLoading(true);
-    return fetch('/api/xero-wages')
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-      .then(setWages)
-      .catch((e) => setWagesError(e.message))
-      .finally(() => setWagesLoading(false));
-  }, []);
+  const { staffList, reload: reloadStaff } = useAllStaff();
+  const { rows: monthlyRows, loading: monthlyLoading, reload: reloadMonthly } = useCoachMonthlySnapshots(isManager, year);
+  const { latest, latestAsOf, loading: rollingLoading, reload: reloadRolling } = useCoachRolling30(isManager);
+  const { overrides: standingOverrides, loading: standingLoading, setOverride: setStanding, clearOverride: clearStanding } = useWageOverrides();
+  const { overrides: monthlyOverrides, loading: monthlyOvLoading, setMonthlyOverride, clearMonthlyOverride } = useMonthlyWageOverrides(isManager);
 
   useEffect(() => {
-    if (!isManager) { setWagesLoading(false); return; }
-    loadWages();
+    if (!isManager) return;
     fetch('/api/xero-employees')
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((d) => setEmployees(d.employees || []))
       .catch(() => {});
-  }, [isManager, loadWages]);
+  }, [isManager]);
+
+  const refreshSnapshots = useCallback(async () => {
+    setRefreshing(true);
+    try { await fetch('/api/scheduled-coach-snapshot'); } catch { /* just reload what's there */ }
+    await Promise.all([reloadMonthly(), reloadRolling()]);
+    setRefreshing(false);
+  }, [reloadMonthly, reloadRolling]);
 
   if (!isManager) return null;
 
-  const loading = groupLoading || wagesLoading || overridesLoading;
-
-  if (wagesError) {
-    return (
-      <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
-        <p className="text-sm text-red-600">Could not load LER: {wagesError}</p>
-        <p className="text-xs text-gray-400 mt-1">Check Xero is connected (above) and staff are mapped (the gear next to each coach below).</p>
-      </div>
-    );
-  }
-
-  const ptByCoach    = ptData?.coachPerformance?.byCoach || [];
-  const groupByCoach = groupData?.byCoach || [];
+  const loading = monthlyLoading || rollingLoading || standingLoading || monthlyOvLoading;
+  const isRolling = period === ROLLING_KEY;
+  const month = isRolling ? null : monthDateOf(period);
 
   const rows = !loading
     ? staffList
@@ -163,34 +169,26 @@ export default function LERTable({ isManager, ptData, currentStaffId }) {
         // they'd otherwise show up here at $0/0.00x every month.
         .filter((s) => s.active !== false && s.is_coach !== false)
         .map((s) => {
-          const firstName  = s.full_name;
-          const ptMatch    = ptByCoach.find((c) => c.staffName.includes(firstName));
-          const groupMatch = groupByCoach.find((c) => c.staffName.includes(firstName));
-          const wageRow    = wages?.byStaff?.find((w) => w.staffId === s.id);
-          const override   = overrides[s.id];
-
-          const ptRevenue    = ptMatch?.[period]?.value || 0;
-          const groupRevenue = groupMatch?.[period]?.value || 0;
-          const revenue      = ptRevenue + groupRevenue;
-          const wage          = override ? Number(override.effectiveWage) : (wageRow?.[period] ?? null);
-          const ler           = wage > 0 ? revenue / wage : null;
-
+          const r = snapshotRowFor(period, s.id, monthlyRows, latest);
           return {
-            staffId: s.id, name: firstName, revenue, wage, ler,
-            isOverride: !!override, xeroEmployeeId: s.xero_employee_id || null,
+            staffId: s.id, name: s.full_name, has: !!r,
+            revenue: r ? Number(r.pt_revenue) + Number(r.group_revenue) : null,
+            wage:    r?.wages != null ? Number(r.wages) : null,
+            ler:     r?.ler != null ? Number(r.ler) : null,
+            source:  r?.wages_source || null,
+            updatedAt: r?.updated_at || null,
+            xeroEmployeeId: s.xero_employee_id || null,
           };
         })
     : [];
 
-  const totalRevenue = rows.reduce((sum, r) => sum + r.revenue, 0);
-  const totalWage     = rows.reduce((sum, r) => sum + (r.wage || 0), 0);
-  const totalLer       = totalWage > 0 ? totalRevenue / totalWage : null;
+  const hasData = rows.some((r) => r.has);
+  const totalRevenue = rows.reduce((sum, r) => sum + (r.revenue || 0), 0);
+  const totalWage    = rows.reduce((sum, r) => sum + (r.wage || 0), 0);
+  const totalLer     = totalWage > 0 ? totalRevenue / totalWage : null;
+  const updatedAt    = rows.reduce((max, r) => (r.updatedAt && r.updatedAt > max ? r.updatedAt : max), '');
 
-  const refreshAfterSettingsChange = () => {
-    reloadStaff();
-    reloadOverrides();
-    loadWages();
-  };
+  const onSaved = () => { reloadMonthly(); refreshSnapshots(); };
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -203,20 +201,21 @@ export default function LERTable({ isManager, ptData, currentStaffId }) {
               <Lock className="h-2.5 w-2.5" /> Manager
             </span>
           </div>
-          <p className="text-xs text-gray-500 mt-0.5">PT + Group revenue ÷ Xero wages, per coach — click the gear to map Xero or set a wage override</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            PT + Group revenue ÷ wages, per coach · {periodLabel(period)}
+            {isRolling && latestAsOf ? ` (30 days to ${latestAsOf})` : ''} — click a coach to map Xero or override wages
+          </p>
         </div>
-        <div className="flex rounded-lg border border-gray-300 overflow-hidden text-xs">
-          {PERIODS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setPeriod(p.key)}
-              className={`px-3 py-1.5 font-medium transition-colors ${
-                period === p.key ? 'bg-emerald-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 flex-wrap">
+          <PeriodTabs value={period} onChange={setPeriod} showSnapshots year={year} />
+          <button
+            onClick={refreshSnapshots}
+            disabled={refreshing}
+            title={updatedAt ? `Snapshot last updated ${format(new Date(updatedAt), 'd MMM, h:mm a')}` : 'Recompute the snapshot now'}
+            className="flex items-center gap-1 rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Updating…' : 'Refresh'}
+          </button>
         </div>
       </div>
 
@@ -242,8 +241,8 @@ export default function LERTable({ isManager, ptData, currentStaffId }) {
                 <td colSpan={3} className="px-4 py-3"><div className="h-4 w-full animate-pulse rounded bg-gray-200" /></td>
               ) : (
                 <>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-gray-800">{fmtAUD(totalRevenue)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-gray-600">{fmtAUD(totalWage)}</td>
+                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-gray-800">{hasData ? fmtAUD(totalRevenue) : '–'}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-gray-600">{hasData ? fmtAUD(totalWage) : '–'}</td>
                   <td className="px-4 py-3 text-right font-bold tabular-nums text-gray-900">{totalLer !== null ? `${totalLer.toFixed(1)}x` : '–'}</td>
                 </>
               )}
@@ -256,17 +255,24 @@ export default function LERTable({ isManager, ptData, currentStaffId }) {
                     <button
                       onClick={() => setOpenStaffId(openStaffId === r.staffId ? null : r.staffId)}
                       className="flex items-center gap-1.5 hover:text-gray-900"
-                      title="Xero mapping & wage override"
+                      title="Xero mapping & wage overrides"
                     >
                       {openStaffId === r.staffId ? <ChevronUp className="h-3 w-3 text-gray-400" /> : <Settings2 className="h-3 w-3 text-gray-400" />}
                       {r.name}
-                      {!r.xeroEmployeeId && !r.isOverride && (
+                      {!r.xeroEmployeeId && r.source !== 'override' && (
                         <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0 text-[10px] font-medium text-amber-600">not mapped</span>
                       )}
-                      {r.isOverride && <span className="text-[10px] text-amber-600" title={overrides[r.staffId]?.note || 'Manual wage override'}>·override</span>}
+                      {(r.source === 'override' || r.source === 'mixed') && (
+                        <span
+                          className="text-[10px] text-amber-600"
+                          title={monthlyOverrides[`${r.staffId}|${month}`]?.note || standingOverrides[r.staffId]?.note || 'Manual wage override'}
+                        >
+                          ·{r.source === 'mixed' ? 'part override' : 'override'}
+                        </span>
+                      )}
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-gray-700">{fmtAUD(r.revenue)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-gray-700">{r.has ? fmtAUD(r.revenue) : '–'}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-gray-500">{r.wage != null ? fmtAUD(r.wage) : '–'}</td>
                   <td className={`px-4 py-3 text-right font-semibold tabular-nums ${r.ler === null ? 'text-gray-300' : r.ler >= 3 ? 'text-emerald-600' : r.ler >= 2 ? 'text-amber-600' : 'text-red-600'}`}>
                     {r.ler !== null ? `${r.ler.toFixed(1)}x` : '–'}
@@ -274,31 +280,41 @@ export default function LERTable({ isManager, ptData, currentStaffId }) {
                 </tr>
                 {openStaffId === r.staffId && (
                   <CoachSettingsRow
+                    key={`${r.staffId}|${period}`}
                     staffId={r.staffId}
                     xeroEmployeeId={r.xeroEmployeeId}
                     employees={employees}
-                    override={overrides[r.staffId]}
+                    standing={standingOverrides[r.staffId]}
+                    monthly={month ? monthlyOverrides[`${r.staffId}|${month}`] : undefined}
+                    month={month}
+                    monthLabel={month ? format(new Date(`${month}T00:00:00`), 'MMMM') : ''}
                     currentStaffId={currentStaffId}
-                    setOverride={setOverride}
-                    clearOverride={clearOverride}
-                    onMappingSaved={refreshAfterSettingsChange}
-                    onOverrideSaved={refreshAfterSettingsChange}
+                    setStanding={setStanding}
+                    clearStanding={clearStanding}
+                    setMonthly={setMonthlyOverride}
+                    clearMonthly={clearMonthlyOverride}
+                    onMappingSaved={() => { reloadStaff(); refreshSnapshots(); }}
+                    onSaved={onSaved}
                   />
                 )}
               </Fragment>
             ))}
 
             {!loading && rows.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-6 text-center text-sm text-gray-400">No active staff found</td></tr>
+              <tr><td colSpan={4} className="px-4 py-6 text-center text-sm text-gray-400">No active coaches found</td></tr>
+            )}
+            {!loading && rows.length > 0 && !hasData && (
+              <tr><td colSpan={4} className="px-4 py-6 text-center text-sm text-gray-400">No snapshot for this period yet</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
       <p className="px-5 py-2.5 text-[11px] text-gray-400 border-t border-gray-100">
-        Revenue is PT/SP + Group class $ value from earlier in this tab. Wages come from Xero Payroll (or a manual override where set).
-        LER = revenue ÷ wages — 3x+ is generally healthy, under 2x is worth a look. Only this/last month for now; rolling 3/6/12-month
-        averages need a few months of history to accumulate first.
+        Revenue is PT/SP + Group class $ value (see those tables). Wages are the month's override if one is set, else the standing override,
+        else Xero Payroll. LER = revenue ÷ wages — 3x+ is generally healthy, under 2x is worth a look.
+        Numbers come from the nightly snapshot{updatedAt ? ` (last updated ${format(new Date(updatedAt), 'd MMM, h:mm a')})` : ''} — hit Refresh to update now.
+        {isRolling && ' Rolling 30 days spreads each pay run across its pay period, and fills the most recent unpaid days at the average daily rate, so the latest week isn\'t missing from wages.'}
       </p>
     </div>
   );

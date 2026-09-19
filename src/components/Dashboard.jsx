@@ -227,7 +227,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               error={errors.payments}
             />
             <GroupPerformanceTable isManager={isManager} />
-            <LERTable isManager={isManager} ptData={data.pt} currentStaffId={staff?.id} />
+            <LERTable isManager={isManager} currentStaffId={staff?.id} />
           </>
         )}
 
@@ -255,6 +255,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             error={errors.pt}
             contactLog={contactLog}
             onViewClient={onViewClient}
+            isManager={isManager}
           />
         )}
 
