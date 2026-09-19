@@ -20,7 +20,9 @@ export default function TeamByMetric({ staffList, snapshotRows, statsFor, year, 
   const monthEnd   = endOfMonth(monthDate);
 
   const rows = staffList
-    .filter((s) => s.active !== false)
+    // is_coach excludes non-revenue-generating staff (e.g. a generic admin
+    // login) from every performance view on this tab.
+    .filter((s) => s.active !== false && s.is_coach !== false)
     .map((s) => {
       let value;
       if (metricKey === 'taskRate') {

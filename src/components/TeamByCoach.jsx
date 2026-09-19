@@ -12,7 +12,9 @@ function fmtLer(n)  { return n == null ? '–' : `${n.toFixed(2)}x`; }
 // monthly figures underneath and how they're tracking on their own tasks
 // for whichever month is selected up top.
 export default function TeamByCoach({ staffList, snapshotRows, statsFor, year, monthIndex, loading }) {
-  const activeStaff = staffList.filter((s) => s.active !== false);
+  // is_coach excludes non-revenue-generating staff (e.g. a generic admin
+  // login) from the coach picker and everything below it.
+  const activeStaff = staffList.filter((s) => s.active !== false && s.is_coach !== false);
   const [staffId, setStaffId] = useState(null);
   const selected = activeStaff.find((s) => s.id === staffId) || activeStaff[0] || null;
 

@@ -167,7 +167,7 @@ async function wagesThisMonth(thisMonthStart, thisMonthEnd) {
   const { accessToken, tenantId } = await getXeroAuth();
 
   const { data: staffRows } = await supabase
-    .from('staff').select('id, xero_employee_id').not('xero_employee_id', 'is', null);
+    .from('staff').select('id, xero_employee_id').eq('is_coach', true).not('xero_employee_id', 'is', null);
   const staffByEmployeeId = {};
   for (const s of staffRows || []) staffByEmployeeId[s.xero_employee_id] = s;
 
@@ -217,7 +217,9 @@ export const handler = async () => {
         console.warn('[scheduled-coach-snapshot] wages fetch failed, continuing without wages:', e.message);
         return {};
       }),
-      supabase.from('staff').select('id, full_name, active').eq('active', true).then(({ data }) => data || []),
+      // is_coach excludes non-revenue-generating staff (e.g. a generic
+      // admin login) so no ler_monthly row is ever created for them.
+      supabase.from('staff').select('id, full_name, active').eq('active', true).eq('is_coach', true).then(({ data }) => data || []),
       supabase.from('staff_wage_overrides').select('staff_id, effective_wage').then(({ data }) => data || []),
     ]);
     const overrideByStaffId = {};

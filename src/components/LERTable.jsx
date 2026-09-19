@@ -158,7 +158,10 @@ export default function LERTable({ isManager, ptData, currentStaffId }) {
 
   const rows = !loading
     ? staffList
-        .filter((s) => s.active !== false)
+        // is_coach excludes staff who don't generate revenue (e.g. a
+        // generic admin login) — an office role, not a coaching one, so
+        // they'd otherwise show up here at $0/0.00x every month.
+        .filter((s) => s.active !== false && s.is_coach !== false)
         .map((s) => {
           const firstName  = s.full_name;
           const ptMatch    = ptByCoach.find((c) => c.staffName.includes(firstName));
