@@ -17,6 +17,11 @@ export default function OnboardingBoard({
   getDecision,
   setDecision,
   tasksByWeek,
+  assignmentByMindbodyId,
+  staffNameById,
+  staffList,
+  isManager,
+  updateCaseload,
 }) {
   const [activeTask, setActiveTask] = useState(null);
 
@@ -64,6 +69,11 @@ export default function OnboardingBoard({
                       getDecision={getDecision}
                       setDecision={setDecision}
                       tasksByWeek={tasksByWeek}
+                      assignment={assignmentByMindbodyId?.[client.id]}
+                      staffNameById={staffNameById}
+                      staffList={staffList}
+                      isManager={isManager}
+                      updateCaseload={updateCaseload}
                     />
                   ))
                 )}

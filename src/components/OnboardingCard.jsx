@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { AlertTriangle, BookOpen, MessageSquare, CheckCircle, X, RotateCcw, UserMinus } from 'lucide-react';
+import { AlertTriangle, BookOpen, MessageSquare, CheckCircle, X, RotateCcw, UserMinus, UserCog } from 'lucide-react';
 import ContactModal from './ContactModal.jsx';
+import { GROUP_VALUE, caseloadSelectValue, caseloadPayloadFor } from '../utils/caseload.js';
 
 // Short-program products that get removed from pipeline on no-rollover
 const SHORT_PRODUCTS = new Set(['3-Session', '14-Day']);
@@ -50,6 +51,11 @@ export default function OnboardingCard({
   getDecision,
   setDecision,
   tasksByWeek,
+  assignment,
+  staffNameById,
+  staffList,
+  isManager,
+  updateCaseload,
 }) {
   const [showContact, setShowContact] = useState(false);
 
@@ -65,6 +71,17 @@ export default function OnboardingCard({
   const decisionMeta  = { shortProduct: client.shortProduct, isStraightIn, product: client.product };
 
   const wasContacted   = contactLog?.isContacted(client.id) ?? false;
+
+  // Coach assignment — same assigned_staff_id/assigned_group fields as the
+  // Clients tab, joined in by OnboardingTab.jsx via Mindbody ID. `assignment`
+  // is undefined when this client hasn't landed in the `clients` table yet
+  // (roster sync runs nightly, so a same-day trial purchase can lag a day).
+  const caseloadShim   = { assigned_staff_id: assignment?.staffId ?? null, assigned_group: !!assignment?.group };
+  const coachDisplay   = !assignment
+    ? null
+    : assignment.group
+      ? 'Group Program'
+      : (staffNameById?.[assignment.staffId] || 'Unassigned');
 
   // Card border/bg based on priority: rollover > at-risk > all tasks done
   const cardClass = isRollover
@@ -142,6 +159,26 @@ export default function OnboardingCard({
         <span className="text-[11px] text-gray-400">
           Started {format(startDate, 'd MMM')}
         </span>
+      </div>
+
+      {/* ── Coach assignment — same caseload as the Clients tab ── */}
+      <div className="flex items-center gap-1.5">
+        <UserCog className="h-3 w-3 text-gray-400 shrink-0" />
+        {isManager && assignment ? (
+          <select
+            value={caseloadSelectValue(caseloadShim)}
+            onChange={(e) => updateCaseload(assignment.id, caseloadPayloadFor(e.target.value))}
+            className="rounded-lg border border-gray-300 bg-gray-50 px-1.5 py-1 text-[11px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          >
+            <option value="">Unassigned</option>
+            <option value={GROUP_VALUE}>Group Program</option>
+            {staffList?.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+          </select>
+        ) : (
+          <span className="text-[11px] text-gray-500">
+            {coachDisplay || (assignment ? 'Unassigned' : 'Not yet synced to Clients')}
+          </span>
+        )}
       </div>
 
       {/* ── Row 3: session counts per week ── */}

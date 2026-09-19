@@ -43,7 +43,7 @@ function Field({ label, value, Icon }) {
   );
 }
 
-export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
+export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds, onBack }) {
   const {
     client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, loading, error,
     updateCaseload, updatePackage, updateNextProgramDue, updateStatusOverride, addNote, deleteNote,
@@ -116,11 +116,12 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
   const scorecardStatus = scorecardStatusFor(avgWeekly);
   const visibleVisits = visitsExpanded ? visits : visits.slice(0, 10);
   const visibleContactLogs = contactLogsExpanded ? contactLogs : contactLogs.slice(0, 3);
-  const status = simplifiedStatus(client);
+  const status = simplifiedStatus(client, pipelineIds);
   const overridden = hasStatusOverride(client);
+  const autoTrial = !overridden && status === 'Trial';
   // Controlled value for the override select: collapse any legacy
   // non-simple override (e.g. a pre-2026-09-15 'Non-Member') down to
-  // 'Inactive' so it still matches one of the two <option>s below.
+  // 'Inactive' so it still matches one of the <option>s below.
   const overrideSelectValue = client.status_override ? status : '';
 
   return (
@@ -138,7 +139,13 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
               {status && (
                 <span
                   title={overridden ? `Manually set — Mindbody has this client as "${client.status}"` : undefined}
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${overridden ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' : 'bg-gray-200 text-gray-600'}`}
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    overridden
+                      ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                      : status === 'Trial'
+                        ? 'bg-violet-500/10 text-violet-600 border border-violet-500/20'
+                        : 'bg-gray-200 text-gray-600'
+                  }`}
                 >
                   {status}{overridden && ' •'}
                 </span>
@@ -252,16 +259,26 @@ export default function ClientDetail({ mindbodyId, isManager, staff, onBack }) {
           <div>
             <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Status</p>
             {isManager ? (
-              <select
-                value={overrideSelectValue}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
-              >
-                <option value="">{client.status} (Mindbody)</option>
-                {SIMPLE_STATUSES.filter((s) => s !== client.status).map((s) => (
-                  <option key={s} value={s}>{s} (manual)</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={overrideSelectValue}
+                  onChange={(e) => handleStatusChange(e.target.value)}
+                  className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
+                >
+                  <option value="">{client.status} (Mindbody)</option>
+                  {SIMPLE_STATUSES.filter((s) => s !== client.status).map((s) => (
+                    <option key={s} value={s}>{s} (manual)</option>
+                  ))}
+                </select>
+                {autoTrial && (
+                  <span
+                    title="Currently on a front-end offer/intro pass — auto-detected from the Onboarding pipeline"
+                    className="shrink-0 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 border border-violet-500/20"
+                  >
+                    Trial
+                  </span>
+                )}
+              </div>
             ) : (
               <p className="text-sm text-gray-800">{status}</p>
             )}

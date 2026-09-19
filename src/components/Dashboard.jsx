@@ -77,6 +77,23 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
     }).length;
   }, [data.onboarding, decisions]);
 
+  // Mindbody IDs of clients currently on a genuine front-end offer/intro
+  // pass — same active-pipeline + decision filtering as onboardingIds above,
+  // but excluding straight-in members (they joined straight onto a full
+  // membership, so they're correctly 'Active' already, not a trial/offer
+  // client). Feeds the Clients tab's third "Trial" status — see
+  // clientStatus.js's simplifiedStatus().
+  const tradeOnboardingIds = useMemo(() => new Set(
+    allOnboardingClients
+      .filter((c) => !c.isStraightIn)
+      .filter((c) => decisions[c.id]?.decision !== 'removed')
+      .filter((c) => {
+        if (!SHORT_PRODUCTS.has(c.shortProduct)) return true;
+        return decisions[c.id]?.decision !== 'no-rollover';
+      })
+      .map((c) => c.id)
+  ), [allOnboardingClients, decisions]);
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       {/* ── Header ── */}
@@ -141,6 +158,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         {tab === 'home' && (
           <Home
             user={user} staff={staff} isManager={isManager} onViewClient={onViewClient}
+            onboardingData={data.onboarding} pipelineIds={tradeOnboardingIds}
             week4Clients={data.onboarding?.week4} decisions={decisions} setDecision={setDecision}
           />
         )}
@@ -222,6 +240,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             getDecision={getDecision}
             setDecision={setDecision}
             staff={staff}
+            isManager={isManager}
           />
         )}
 
@@ -243,10 +262,11 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               mindbodyId={selectedClientMindbodyId}
               isManager={isManager}
               staff={staff}
+              pipelineIds={tradeOnboardingIds}
               onBack={() => setSelectedClientMindbodyId(null)}
             />
           ) : (
-            <ClientsList onSelect={setSelectedClientMindbodyId} isManager={isManager} />
+            <ClientsList onSelect={setSelectedClientMindbodyId} isManager={isManager} pipelineIds={tradeOnboardingIds} />
           )
         )}
 

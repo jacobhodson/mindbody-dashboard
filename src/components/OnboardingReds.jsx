@@ -12,7 +12,7 @@ function lastSeenText(dateStr) {
   return `Last seen ${format(parseISO(dateStr), 'd MMM')}`;
 }
 
-export default function OnboardingReds({ clients = [], contactLog }) {
+export default function OnboardingReds({ clients = [], contactLog, assignmentByMindbodyId, staffNameById }) {
   const [selected, setSelected] = useState(null);
 
   const isContacted   = contactLog?.isContacted  ?? (() => false);
@@ -41,6 +41,8 @@ export default function OnboardingReds({ clients = [], contactLog }) {
           const startDate    = parseISO(client.startDate);
           const dayText      = `Day ${client.daysSinceStart + 1} of 28`;
           const lastSeen     = lastSeenText(client.lastSessionDate);
+          const assignment   = assignmentByMindbodyId?.[client.id];
+          const coachName    = assignment?.group ? 'Group Program' : staffNameById?.[assignment?.staffId];
 
           return (
             <div
@@ -59,6 +61,11 @@ export default function OnboardingReds({ clients = [], contactLog }) {
                   <span className="shrink-0 text-[10px] font-medium text-gray-400 bg-gray-200 rounded px-1.5 py-0.5">
                     {client.shortProduct || client.product}
                   </span>
+                  {coachName && (
+                    <span className="shrink-0 text-[10px] font-medium text-gray-500">
+                      Coach: {coachName}
+                    </span>
+                  )}
                   {wasContacted && (
                     <span className="shrink-0 flex items-center gap-1 text-xs text-emerald-500">
                       <CheckCircle className="h-3 w-3" />

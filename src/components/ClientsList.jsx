@@ -30,7 +30,7 @@ function visitBucketFor(lastVisitDate, today) {
 
 const selectClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
-export default function ClientsList({ onSelect, initialSearch, isManager }) {
+export default function ClientsList({ onSelect, initialSearch, isManager, pipelineIds }) {
   const { clientsList, loading, updateCaseload, updatePackage, updateDueDate, updateStatusOverride } = useAllClients();
   const { staffList } = useAllStaff();
   const { packages, createPackage } = useMembershipPackages();
@@ -39,9 +39,9 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
   // boolean — that flag turned out to be true for every client in this
   // account regardless of status, even Terminated, so it carries no signal
   // here and isn't usable as a filter). Matches simplifiedStatus (a
-  // manager's status_override, if set, else the Mindbody-synced status,
-  // collapsed to Active/Inactive).
-  const [statusFilter, setStatusFilter]     = useState('Active'); // 'Active' | 'Inactive' | 'all'
+  // manager's status_override, if set, else pipeline detection, else the
+  // Mindbody-synced status, collapsed to Active/Inactive/Trial).
+  const [statusFilter, setStatusFilter]     = useState('Active'); // 'Active' | 'Inactive' | 'Trial' | 'all'
 
   const [assignedFilter, setAssignedFilter] = useState('all');    // 'all' | 'unassigned' | 'group' | <staff id>
   const [dueFilter, setDueFilter]           = useState('all');    // 'all' | 'overdue' | 'due_week' | 'due_month' | 'not_set'
@@ -73,7 +73,7 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
         c.mobile_phone?.includes(q)
       )) return false;
 
-      if (statusFilter !== 'all' && simplifiedStatus(c) !== statusFilter) return false;
+      if (statusFilter !== 'all' && simplifiedStatus(c, pipelineIds) !== statusFilter) return false;
 
       if (assignedFilter === 'unassigned' && (c.assigned_staff_id || c.assigned_group)) return false;
       if (assignedFilter === 'group' && !c.assigned_group) return false;
@@ -86,7 +86,7 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
 
       return true;
     });
-  }, [clientsList, search, statusFilter, assignedFilter, dueFilter, visitFilter, startersOnly, today]);
+  }, [clientsList, search, statusFilter, assignedFilter, dueFilter, visitFilter, startersOnly, today, pipelineIds]);
 
   const handlePackageChange = (clientId, value) => {
     if (value === ADD_PACKAGE_VALUE) { setAddingPackageForId(clientId); setNewPackageName(''); return; }
@@ -127,6 +127,7 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={`${selectClass} py-1.5`}>
             <option value="Active">Status: Active</option>
             <option value="Inactive">Status: Inactive</option>
+            <option value="Trial">Status: Trial</option>
             <option value="all">Status: All</option>
           </select>
 
@@ -183,8 +184,9 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
             )}
             {!loading && filtered.map((c) => {
               const needsPackage = isStarter(c, today) && !c.package_id;
-              const status = simplifiedStatus(c);
+              const status = simplifiedStatus(c, pipelineIds);
               const overridden = hasStatusOverride(c);
+              const autoTrial = !overridden && status === 'Trial';
               // Controlled value for the override select: collapse any
               // legacy non-simple override (e.g. a pre-2026-09-15 'Non-
               // Member') down to 'Inactive' so it still matches one of the
@@ -210,17 +212,27 @@ export default function ClientsList({ onSelect, initialSearch, isManager }) {
 
                   <td className="px-3 py-2.5 text-gray-600" onClick={(e) => isManager && e.stopPropagation()}>
                     {isManager ? (
-                      <select
-                        value={overrideSelectValue}
-                        onChange={(e) => updateStatusOverride(c.id, e.target.value)}
-                        title={overridden ? `Manually set — Mindbody has this client as "${c.status}"` : undefined}
-                        className={selectClass}
-                      >
-                        <option value="">{c.status} (Mindbody)</option>
-                        {SIMPLE_STATUSES.filter((s) => s !== c.status).map((s) => (
-                          <option key={s} value={s}>{s} (manual)</option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={overrideSelectValue}
+                          onChange={(e) => updateStatusOverride(c.id, e.target.value)}
+                          title={overridden ? `Manually set — Mindbody has this client as "${c.status}"` : undefined}
+                          className={selectClass}
+                        >
+                          <option value="">{c.status} (Mindbody)</option>
+                          {SIMPLE_STATUSES.filter((s) => s !== c.status).map((s) => (
+                            <option key={s} value={s}>{s} (manual)</option>
+                          ))}
+                        </select>
+                        {autoTrial && (
+                          <span
+                            title="Currently on a front-end offer/intro pass — auto-detected from the Onboarding pipeline"
+                            className="shrink-0 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 border border-violet-500/20"
+                          >
+                            Trial
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <span>{status}{overridden && ' •'}</span>
                     )}
