@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Dumbbell, LogOut, BarChart3, Menu, Contact } from 'lucide-react';
+import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact } from 'lucide-react';
 import logo from '../assets/newstrength-logo.svg';
 import Sidebar             from './Sidebar.jsx';
 import Home                from './Home.jsx';
@@ -22,6 +22,7 @@ import PersonalTrainingTab    from './PersonalTrainingTab.jsx';
 import CelebrationsPanel   from './CelebrationsPanel.jsx';
 import ClientsList         from './ClientsList.jsx';
 import ClientDetail        from './ClientDetail.jsx';
+import TeamTab             from './TeamTab.jsx';
 import { useOnboardingRollover } from '../utils/useOnboardingRollover.js';
 
 const TABS = [
@@ -31,6 +32,7 @@ const TABS = [
   { key: 'onboarding',        label: 'Onboarding',        Icon: Users2    },
   { key: 'personalTraining',  label: 'Personal Training', Icon: Dumbbell  },
   { key: 'clients',           label: 'Clients',           Icon: Contact    },
+  { key: 'team',              label: 'Team',              Icon: Users, managerOnly: true },
   { key: 'scorecard',         label: 'Scorecard',         Icon: BarChart3 },
 ];
 
@@ -143,7 +145,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
 
       <div className="flex items-start">
         <Sidebar
-          tabs={TABS}
+          tabs={TABS.filter((t) => !t.managerOnly || isManager)}
           activeTab={tab}
           onSelect={setTab}
           atRiskCount={atRiskCount}
@@ -270,6 +272,9 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             <ClientsList onSelect={setSelectedClientMindbodyId} isManager={isManager} pipelineIds={tradeOnboardingIds} />
           )
         )}
+
+        {/* ─ Team ─ */}
+        {tab === 'team' && isManager && <TeamTab isManager={isManager} />}
 
         {/* ─ Scorecard ─ */}
         {tab === 'scorecard' && <Scorecard staff={staff} isManager={isManager} />}

@@ -2,6 +2,7 @@ import {
   format, startOfWeek, startOfMonth,
   addDays, addWeeks, addMonths,
   endOfWeek, endOfMonth, setDate, getDaysInMonth,
+  eachDayOfInterval,
 } from 'date-fns';
 
 /**
@@ -75,4 +76,32 @@ export function dueDateFor(template, now = new Date()) {
   const start = new Date(`${periodStart}T00:00:00`);
   const day = Math.min(template.due_day, getDaysInMonth(start));
   return format(setDate(start, day), 'yyyy-MM-dd');
+}
+
+/**
+ * Every distinct period_start a template would actually record within
+ * [rangeStart, rangeEnd] (both Dates) — used by the Team tab to compute
+ * "expected vs completed" for a given month. Derived per-day via
+ * periodStartFor rather than calendar math (eachWeekOfInterval etc.), so a
+ * weekly task whose period spans a month boundary is counted exactly the
+ * way it's really stored (a week logged anywhere in it always keys off
+ * that week's Monday, even when the Monday itself falls in the prior
+ * month) — no separate boundary-splitting logic needed.
+ *
+ * A template's own created_at clamps the start — a task created partway
+ * through the month was never missable before it existed.
+ */
+export function periodsInRange(template, rangeStart, rangeEnd) {
+  if (template.cadence === 'once') {
+    if (!template.due_date) return [];
+    const due = new Date(`${template.due_date}T00:00:00`);
+    return due >= rangeStart && due <= rangeEnd ? [template.due_date] : [];
+  }
+
+  const createdAt = template.created_at ? new Date(template.created_at) : null;
+  const effectiveStart = createdAt && createdAt > rangeStart ? createdAt : rangeStart;
+  if (effectiveStart > rangeEnd) return [];
+
+  const days = eachDayOfInterval({ start: effectiveStart, end: rangeEnd });
+  return [...new Set(days.map((d) => periodStartFor(template.cadence, d)))];
 }

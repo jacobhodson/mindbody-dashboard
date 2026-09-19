@@ -39,6 +39,9 @@
 [functions."scheduled-client-sync"]
   timeout = 26
 
+[functions."scheduled-coach-snapshot"]
+  timeout = 26
+
 [dev]
   command = "vite"
   port = 8888
