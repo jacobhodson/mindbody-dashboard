@@ -19,13 +19,25 @@
  * 837 line items in a 60-day window against a roster nowhere near that
  * size). Detected instead from `clients.creation_date` (Supabase, synced
  * nightly) — see straightInCandidates() below.
+ *
+ * A client's start date (sale date, or creation_date for straight-in) can be
+ * manually corrected via `onboarding_start_overrides` — a coach fixing a
+ * mis-logged sale, or pushing a client's effective start later because they
+ * were extended/started late. See getStartOverrides() below.
+ *
+ * Week 1–4 is bucketed by real Monday–Sunday calendar weeks (differenceInCalendarWeeks,
+ * weekStartsOn: 1) rather than a rolling exact-7-day window from the start
+ * date's own time-of-day — the old approach put a Wednesday starter halfway
+ * through week boundaries all program long. Same convention as
+ * mb-revenue.js/coachPerformance's "this week".
  */
 import { createClient } from '@supabase/supabase-js';
 import { getStaffToken, mbGet, ok, err, CORS, formatPhone } from './utils/mb-auth.js';
-import { subDays, format, parseISO, differenceInDays } from 'date-fns';
+import { subDays, format, parseISO, differenceInDays, differenceInCalendarWeeks } from 'date-fns';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-const ONBOARDING_WINDOW_DAYS = 27;
+const ONBOARDING_WINDOW_DAYS = 27; // still governs the straight-in creation_date cutoff and the sales/classes fetch window
+const ONBOARDING_WEEKS = 4;        // the pipeline itself is now bucketed by calendar week, not day count
 
 const BATCH = 15;
 
@@ -142,6 +154,32 @@ async function straightInCandidates(excludeIds) {
   });
 }
 
+// Manual corrections to a client's onboarding start date (see this file's
+// header and the onboarding_start_overrides migration) — applied after
+// detection below so the rest of this function doesn't need to know
+// overrides exist. Keyed by Mindbody client ID, same as
+// onboarding_rollover_decisions.
+async function getStartOverrides() {
+  const { data, error } = await supabase
+    .from('onboarding_start_overrides')
+    .select('mindbody_client_id, start_date');
+  if (error) { console.error('[mb-onboarding] getStartOverrides failed:', error.message); return {}; }
+  const map = {};
+  for (const row of data || []) map[row.mindbody_client_id] = row.start_date; // 'yyyy-MM-dd'
+  return map;
+}
+
+// Real Monday–Sunday calendar weeks, not a rolling exact-7-day window from
+// the start date's own time-of-day (see file header for why). Week is
+// clamped to [1, ONBOARDING_WEEKS] — a client whose real week has run past
+// 4 still shows in week 4 rather than disappearing, same clamp behaviour
+// the old day-count version had.
+function weekInfoFor(startDate, now) {
+  const weeksSinceStart = differenceInCalendarWeeks(now, startDate, { weekStartsOn: 1 });
+  const week = Math.min(ONBOARDING_WEEKS, Math.max(1, weeksSinceStart + 1));
+  return { weeksSinceStart, week };
+}
+
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export const handler = async (event) => {
@@ -155,14 +193,16 @@ export const handler = async (event) => {
     const fetchStart  = format(windowStart, "yyyy-MM-dd'T'00:00:00");
     const fetchEnd    = format(now,         "yyyy-MM-dd'T'23:59:59");
 
-    // Fetch sales, clients, and classes in parallel to minimise wall-clock time
+    // Fetch sales, clients, classes, and start-date overrides in parallel to
+    // minimise wall-clock time
     console.log('[mb-onboarding] Starting parallel fetch…');
-    const [allSales, clientMap, allClasses] = await Promise.all([
+    const [allSales, clientMap, allClasses, startOverrides] = await Promise.all([
       getSales(token, fetchStart, fetchEnd),
       getAllClients(token),
       getClasses(token, fetchStart, fetchEnd),
+      getStartOverrides(),
     ]);
-    console.log(`[mb-onboarding] Got ${allSales.length} sales, ${Object.keys(clientMap).length} clients, ${allClasses.length} classes`);
+    console.log(`[mb-onboarding] Got ${allSales.length} sales, ${Object.keys(clientMap).length} clients, ${allClasses.length} classes, ${Object.keys(startOverrides).length} start overrides`);
 
     // ── Identify onboarding clients from sales ────────────────────────────
     const onboardingMap = {};  // clientId → { startDate, product, shortProduct }
@@ -189,34 +229,43 @@ export const handler = async (event) => {
       }
     }
 
-    // Filter to clients currently in the 0–27 day window
+    // Filter to clients currently within weeks 1–4 of their (possibly
+    // overridden) start date
     const tradeOnboarding = Object.entries(onboardingMap)
       .map(([clientId, info]) => {
-        const daysSinceStart = differenceInDays(now, info.startDate);
-        const week = Math.min(4, Math.floor(daysSinceStart / 7) + 1);
-        return { clientId, ...info, daysSinceStart, week, isStraightIn: false };
+        const override  = startOverrides[clientId];
+        const startDate = override ? parseISO(override) : info.startDate;
+        const { weeksSinceStart, week } = weekInfoFor(startDate, now);
+        return {
+          clientId, ...info, startDate,
+          daysSinceStart: differenceInDays(now, startDate),
+          weeksSinceStart, week,
+          hasStartOverride: !!override,
+          isStraightIn: false,
+        };
       })
-      .filter((c) => c.daysSinceStart >= 0 && c.daysSinceStart <= ONBOARDING_WINDOW_DAYS);
+      .filter((c) => c.weeksSinceStart >= 0 && c.weeksSinceStart < ONBOARDING_WEEKS);
 
     // Straight-in members — same board/tasks, no rollover decision (see
     // OnboardingCard.jsx). Anchored to their actual signup (creation_date)
     // rather than a sale, since there's no trial-purchase event to anchor to.
     const straightIn = (await straightInCandidates(new Set(tradeOnboarding.map((c) => c.clientId))))
       .map((c) => {
-        const startDate = parseISO(c.creation_date);
-        const daysSinceStart = differenceInDays(now, startDate);
-        const week = Math.min(4, Math.floor(daysSinceStart / 7) + 1);
+        const override  = startOverrides[c.mindbody_id];
+        const startDate = override ? parseISO(override) : parseISO(c.creation_date);
+        const { weeksSinceStart, week } = weekInfoFor(startDate, now);
         return {
           clientId: c.mindbody_id,
           startDate,
           product: 'Straight-in membership',
           shortProduct: 'Straight-In',
-          daysSinceStart,
-          week,
+          daysSinceStart: differenceInDays(now, startDate),
+          weeksSinceStart, week,
+          hasStartOverride: !!override,
           isStraightIn: true,
         };
       })
-      .filter((c) => c.daysSinceStart >= 0 && c.daysSinceStart <= ONBOARDING_WINDOW_DAYS);
+      .filter((c) => c.weeksSinceStart >= 0 && c.weeksSinceStart < ONBOARDING_WEEKS);
 
     const activeOnboarding = [...tradeOnboarding, ...straightIn];
 
@@ -262,11 +311,8 @@ export const handler = async (event) => {
       const weekSessions = [0, 0, 0, 0];   // index 0 = Week 1
 
       for (const visitDate of visits) {
-        const day = differenceInDays(visitDate, c.startDate);
-        if      (day >= 0  && day < 7)  weekSessions[0]++;
-        else if (day >= 7  && day < 14) weekSessions[1]++;
-        else if (day >= 14 && day < 21) weekSessions[2]++;
-        else if (day >= 21 && day < 28) weekSessions[3]++;
+        const weekIdx = differenceInCalendarWeeks(visitDate, c.startDate, { weekStartsOn: 1 });
+        if (weekIdx >= 0 && weekIdx < ONBOARDING_WEEKS) weekSessions[weekIdx]++;
       }
 
       const totalSessions       = weekSessions.reduce((s, w) => s + w, 0);
@@ -289,6 +335,7 @@ export const handler = async (event) => {
         startDate:          format(c.startDate, 'yyyy-MM-dd'),
         daysSinceStart:     c.daysSinceStart,
         week:               c.week,
+        hasStartOverride:   c.hasStartOverride,
         weekSessions,
         totalSessions,
         currentWeekSessions,

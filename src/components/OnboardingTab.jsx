@@ -1,10 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import { startOfWeek, subWeeks, format } from 'date-fns';
 import { Users2 } from 'lucide-react';
 import OnboardingBoard   from './OnboardingBoard.jsx';
 import OnboardingReds    from './OnboardingReds.jsx';
 import OnboardingRemoved from './OnboardingRemoved.jsx';
 import { useOnboardingTasks } from '../utils/useOnboardingTasks.js';
 import { useOnboardingTaskTemplates } from '../utils/useOnboardingTaskTemplates.js';
+import { useOnboardingStartOverrides } from '../utils/useOnboardingStartOverrides.js';
 import { useAllClients } from '../utils/useAllClients.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 
@@ -30,12 +32,33 @@ export default function OnboardingTab({
   setDecision,
   staff,
   isManager,
+  refreshOnboarding,
 }) {
   const { templates: taskTemplates, tasksByWeek } = useOnboardingTaskTemplates();
   const { isComplete, toggleTask } = useOnboardingTasks(staff, taskTemplates);
   const { clientsList, updateCaseload } = useAllClients();
   const { staffList } = useAllStaff();
+  const { setStartOverride } = useOnboardingStartOverrides(staff);
   const [myClientsOnly, setMyClientsOnly] = useState(false);
+
+  // Both the date-picker on a card and dragging a card to another column
+  // boil down to the same write: set (or clear) this client's start-date
+  // override, then re-pull the live onboarding data so the board reflects
+  // the week mb-onboarding.js now computes for them.
+  const handleSetStartDate = useCallback(async (clientId, dateStr) => {
+    await setStartOverride(clientId, dateStr);
+    await refreshOnboarding?.();
+  }, [setStartOverride, refreshOnboarding]);
+
+  // Dragging to week N sets the override to the Monday of "N-1 weeks before
+  // this week's Monday" — guarantees they land in week N today regardless
+  // of what day it is, and stays a plain start-date override under the
+  // hood, same as the date picker.
+  const handleDropToWeek = useCallback((clientId, targetWeek) => {
+    const thisMonday   = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const targetMonday = subWeeks(thisMonday, targetWeek - 1);
+    return handleSetStartDate(clientId, format(targetMonday, 'yyyy-MM-dd'));
+  }, [handleSetStartDate]);
 
   // Coach assignment per onboarding client, keyed by Mindbody ID (the id
   // OnboardingCard/pipelineReds work with) rather than the Supabase `clients`
@@ -196,6 +219,8 @@ export default function OnboardingTab({
           staffList={staffList}
           isManager={isManager}
           updateCaseload={updateCaseload}
+          onSetStartDate={handleSetStartDate}
+          onDropToWeek={handleDropToWeek}
         />
       )}
 

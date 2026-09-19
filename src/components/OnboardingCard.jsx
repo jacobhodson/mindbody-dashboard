@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { format, parseISO } from 'date-fns';
-import { AlertTriangle, BookOpen, MessageSquare, CheckCircle, X, RotateCcw, UserMinus, UserCog } from 'lucide-react';
+import { AlertTriangle, BookOpen, MessageSquare, CheckCircle, X, RotateCcw, UserMinus, UserCog, CalendarClock } from 'lucide-react';
 import ContactModal from './ContactModal.jsx';
 import { GROUP_VALUE, caseloadSelectValue, caseloadPayloadFor } from '../utils/caseload.js';
 
@@ -56,11 +55,11 @@ export default function OnboardingCard({
   staffList,
   isManager,
   updateCaseload,
+  onSetStartDate,
 }) {
   const [showContact, setShowContact] = useState(false);
 
   const weekTasks  = tasksByWeek?.[client.week] || [];
-  const startDate  = parseISO(client.startDate);
   const doneTasks  = weekTasks.filter((t) => isComplete(client.id, t.id)).length;
   const allDone    = doneTasks === weekTasks.length && weekTasks.length > 0;
 
@@ -93,7 +92,12 @@ export default function OnboardingCard({
         : 'border-gray-200';
 
   return (
-    <div className={`rounded-lg border bg-white p-3.5 space-y-3 transition-colors ${cardClass}`}>
+    <div
+      draggable
+      onDragStart={(e) => e.dataTransfer.setData('text/plain', String(client.id))}
+      title="Drag onto another week to move this client there"
+      className={`rounded-lg border bg-white p-3.5 space-y-3 transition-colors cursor-grab active:cursor-grabbing ${cardClass}`}
+    >
 
       {/* ── Row 1: name + badges + contact button ── */}
       <div className="flex items-start gap-2">
@@ -156,9 +160,29 @@ export default function OnboardingCard({
         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${productColor(client.shortProduct)}`}>
           {client.shortProduct || client.product}
         </span>
-        <span className="text-[11px] text-gray-400">
-          Started {format(startDate, 'd MMM')}
-        </span>
+      </div>
+
+      {/* ── Start date — editable; drives which week column this card is  ── */}
+      {/* in (mb-onboarding.js recomputes their week from this). Dragging   */}
+      {/* the card to another column does the same thing under the hood.   */}
+      <div className="flex items-center gap-1.5">
+        <CalendarClock className="h-3 w-3 text-gray-400 shrink-0" />
+        <input
+          type="date"
+          value={client.startDate}
+          onChange={(e) => e.target.value && onSetStartDate(client.id, e.target.value)}
+          title="Started — correct this if it's wrong, or push it back for an extension"
+          className="rounded-lg border border-gray-300 bg-gray-50 px-1.5 py-1 text-[11px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+        {client.hasStartOverride && (
+          <button
+            onClick={() => onSetStartDate(client.id, null)}
+            title="Reset to the detected start date"
+            className="text-[10px] text-gray-400 hover:text-gray-600 underline shrink-0"
+          >
+            Reset
+          </button>
+        )}
       </div>
 
       {/* ── Coach assignment — same caseload as the Clients tab ── */}

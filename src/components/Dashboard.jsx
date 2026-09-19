@@ -37,7 +37,7 @@ const TABS = [
 // Short-program products: removed from pipeline on no-rollover
 const SHORT_PRODUCTS = new Set(['3-Session', '14-Day']);
 
-export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh, contactLog, user, staff, isManager, onSignOut }) {
+export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh, refreshOnboarding, contactLog, user, staff, isManager, onSignOut }) {
   const [tab, setTab] = useState('home');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [selectedClientMindbodyId, setSelectedClientMindbodyId] = useState(null);
@@ -241,6 +241,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             setDecision={setDecision}
             staff={staff}
             isManager={isManager}
+            refreshOnboarding={refreshOnboarding}
           />
         )}
 

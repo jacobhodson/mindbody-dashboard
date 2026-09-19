@@ -74,6 +74,19 @@ export default function App() {
     ]).then(() => setLastRefresh(new Date()));
   }, []);
 
+  // Lighter-weight than refresh(true) — just re-pulls the live onboarding
+  // endpoint, for after a start-date override/drag-drop changes which week
+  // a client falls in server-side (see mb-onboarding.js). A full refresh()
+  // would also force-repull the cached snapshot endpoints, which this
+  // doesn't need and would just slow the round-trip down.
+  const refreshOnboarding = useCallback(() => {
+    setLoading(prev => ({ ...prev, onboarding: true }));
+    return safeFetch('/api/mb-onboarding')
+      .then(json => setData(prev => ({ ...prev, onboarding: json })))
+      .catch(e   => setErrors(prev => ({ ...prev, onboarding: e.message })))
+      .finally(() => setLoading(prev => ({ ...prev, onboarding: false })));
+  }, []);
+
   // Don't touch the Mindbody API at all until someone's actually signed in.
   useEffect(() => { if (user) refresh(false); }, [user, refresh]);
 
@@ -96,6 +109,7 @@ export default function App() {
       errors={errors}
       lastRefresh={lastRefresh}
       onRefresh={() => refresh(true)}
+      refreshOnboarding={refreshOnboarding}
       contactLog={contactLog}
       user={user}
       staff={staff}
