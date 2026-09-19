@@ -1,16 +1,8 @@
-import { differenceInCalendarDays, parseISO, startOfDay } from 'date-fns';
 import { UserPlus2 } from 'lucide-react';
 import { useUnallocatedClients } from '../utils/useUnallocatedClients.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { GROUP_VALUE, caseloadPayloadFor } from '../utils/caseload.js';
-
-function daysAgoLabel(creationDate) {
-  if (!creationDate) return null;
-  const days = differenceInCalendarDays(startOfDay(new Date()), parseISO(creationDate));
-  if (days <= 0) return 'Started today';
-  if (days === 1) return 'Started yesterday';
-  return `Started ${days} days ago`;
-}
+import { daysAgoLabel } from '../utils/dateLabels.js';
 
 const selectClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
