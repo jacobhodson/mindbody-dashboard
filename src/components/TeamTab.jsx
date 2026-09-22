@@ -4,7 +4,7 @@ import { useAllStaff } from '../utils/useAllStaff.js';
 import { useCoachMonthlySnapshots } from '../utils/useCoachMonthlySnapshots.js';
 import { useCoachRolling30 } from '../utils/useCoachRolling30.js';
 import { useTeamTaskStats } from '../utils/useTeamTaskStats.js';
-import { ROLLING_KEY, monthKeyFor, monthOptions } from '../utils/snapshotPeriods.js';
+import { monthKeyFor, monthOptions } from '../utils/snapshotPeriods.js';
 import TeamByMetric from './TeamByMetric.jsx';
 import TeamByCoach from './TeamByCoach.jsx';
 import TeamWages from './TeamWages.jsx';
@@ -20,27 +20,27 @@ import TeamWages from './TeamWages.jsx';
  *   - Wages (TeamWages.jsx): the wage LER uses per coach per month, with
  *     manual per-month overrides that feed LER here and on Finance
  *
- * By Coach's period is either a calendar month (ler_monthly — a real per-
- * coach-per-month snapshot, every month of the year, wage overrides applied)
- * or a Rolling 30 Days window (coach_rolling30, refreshed nightly). Both are
- * written by scheduled-coach-snapshot.js. Task completion comes from
- * task_completions directly (useTeamTaskStats.js) for the same date range —
- * it's already historical on its own, no snapshot needed.
+ * By Coach's period is a calendar month (ler_monthly — a real per-coach-per-
+ * month snapshot, every month of the year, wage overrides applied); By Metric
+ * also shows a Rolling 30 Days column (coach_rolling30, refreshed nightly).
+ * Both tables are written by scheduled-coach-snapshot.js. Task completion
+ * comes from task_completions directly (useTeamTaskStats.js) for the same
+ * date range — it's already historical on its own, no snapshot needed.
  */
 export default function TeamTab({ isManager }) {
   const year = new Date().getFullYear();
   const [mode, setMode]     = useState('coach'); // 'coach' | 'metric' | 'wages'
-  const [period, setPeriod] = useState(monthKeyFor(new Date())); // 'rolling30' | 'm:yyyy-MM'
+  const [period, setPeriod] = useState(monthKeyFor(new Date())); // 'm:yyyy-MM' (By Coach's month)
 
   const { staffList, loading: staffLoading } = useAllStaff();
   const { rows: monthlyRows, loading: monthlyLoading, reload: reloadMonthly } = useCoachMonthlySnapshots(isManager, year);
-  const { latest: rollingLatest, history: rollingHistory, latestAsOf, loading: rollingLoading, reload: reloadRolling } = useCoachRolling30(isManager);
+  const { latest: rollingLatest, loading: rollingLoading, reload: reloadRolling } = useCoachRolling30(isManager);
   const { statsFor, loading: tasksLoading } = useTeamTaskStats(isManager);
 
   if (!isManager) return null;
 
   const loading = staffLoading || monthlyLoading || rollingLoading || tasksLoading;
-  const shared = { staffList, monthlyRows, rollingLatest, rollingHistory, latestAsOf, statsFor, period, year, loading };
+  const shared = { staffList, monthlyRows, rollingLatest, statsFor, period, year, loading };
 
   return (
     <div className="space-y-6">
@@ -87,7 +87,6 @@ export default function TeamTab({ isManager }) {
               onChange={(e) => setPeriod(e.target.value)}
               className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
-              <option value={ROLLING_KEY}>Rolling 30 days</option>
               {monthOptions(year).map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
             </select>
           )}

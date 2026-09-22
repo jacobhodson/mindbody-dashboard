@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CheckCircle, XCircle } from 'lucide-react';
-import { ROLLING_KEY, monthKeyFor, periodRange, periodLabel } from '../utils/snapshotPeriods.js';
+import { monthKeyFor, periodRange, periodLabel } from '../utils/snapshotPeriods.js';
+import { mean } from '../utils/teamMetrics.js';
 
 function fmtAUD(n) { return n == null ? '–' : `$${Math.round(n).toLocaleString('en-AU')}`; }
 function fmtLer(n)  { return n == null ? '–' : `${Number(n).toFixed(2)}x`; }
@@ -11,9 +12,15 @@ const sourceMark = (src) => (src === 'override' ? ' ·override' : src === 'mixed
 
 // "Dive into the coach themselves" — pick one coach and see their full-year
 // LER trend (month by month, straight from ler_monthly), the exact figures
-// underneath (with the rolling 30 days as the top row), and how they're
-// tracking on their own tasks for whichever period is selected up top.
-export default function TeamByCoach({ staffList, monthlyRows, rollingLatest, rollingHistory, latestAsOf, statsFor, period, year, loading }) {
+// underneath (year average and last-3-months average as the top rows), and
+// how they're tracking on their own tasks for whichever month is selected up
+// top.
+//
+// Averages are over COMPLETED months only — the current month is part-way
+// through, with wages still posting — and are the plain mean of the months
+// the coach has data for (a month with no data isn't counted as zero). Same
+// rules as the By Metric table.
+export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, year, loading }) {
   // is_coach excludes non-revenue-generating staff (e.g. a generic admin
   // login) from the coach picker and everything below it.
   const activeStaff = staffList.filter((s) => s.active !== false && s.is_coach !== false);
@@ -36,12 +43,25 @@ export default function TeamByCoach({ staffList, monthlyRows, rollingLatest, rol
     const r = selected ? monthlyRows.find((x) => x.staff_id === selected.id && x.month === format(monthDate, 'yyyy-MM-dd')) : null;
     return toRow(format(monthDate, 'MMM'), monthKeyFor(monthDate), r);
   });
-  const rollingRow = toRow(latestAsOf ? `Rolling 30 (to ${format(new Date(`${latestAsOf}T00:00:00`), 'd MMM')})` : 'Rolling 30 days', ROLLING_KEY, selected ? rollingLatest[selected.id] : null);
+
+  const now = new Date();
+  const completedCount = now.getFullYear() === year ? now.getMonth() : 12; // months 0..n-1 are finished
+  const completed = monthlyTable.slice(0, completedCount);
+  const recent    = completed.slice(-3);
+  const spanLabel = (list) => (list.length === 0 ? '' : list.length === 1 ? list[0].label : `${list[0].label}–${list[list.length - 1].label}`);
+  const avgRow = (label, key, list) => {
+    const avg = (field) => mean(list.map((r) => r[field]));
+    return {
+      key, label, isAvg: true,
+      ler: avg('ler'), ptRevenue: avg('ptRevenue'), ptSessions: avg('ptSessions'),
+      groupRevenue: avg('groupRevenue'), groupClasses: avg('groupClasses'), wages: avg('wages'),
+      source: null,
+    };
+  };
+  const yearAvgRow   = avgRow(`Year avg${completed.length ? ` (${spanLabel(completed)})` : ''}`, 'avg-year', completed);
+  const recentAvgRow = avgRow(`Last ${recent.length === 1 ? 'month' : `${recent.length} months`} avg${recent.length ? ` (${spanLabel(recent)})` : ''}`, 'avg-recent', recent);
 
   const hasAnyData = monthlyTable.some((r) => r.ler != null || r.ptRevenue || r.groupRevenue);
-  const rollingTrend = selected
-    ? rollingHistory.filter((r) => r.staff_id === selected.id).map((r) => ({ label: format(new Date(`${r.as_of}T00:00:00`), 'd MMM'), ler: r.ler != null ? Number(r.ler) : null }))
-    : [];
 
   const { start, end } = periodRange(period);
   const taskStats = selected ? statsFor(selected.id, start, end) : null;
@@ -81,23 +101,6 @@ export default function TeamByCoach({ staffList, monthlyRows, rollingLatest, rol
         )}
       </div>
 
-      {period === ROLLING_KEY && rollingTrend.length >= 2 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5">
-          <h3 className="font-semibold text-gray-900 mb-3">Rolling 30-day LER, day by day</h3>
-          <div className="h-52">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={rollingTrend} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v) => fmtLer(v)} />
-                <Line type="monotone" dataKey="ler" name="LER" stroke="#059669" strokeWidth={2} dot={false} connectNulls={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
       {/* Exact figures — the actual database history behind the chart */}
       <div className="rounded-xl border border-gray-200 bg-white overflow-x-auto">
         <table className="w-full text-sm">
@@ -113,13 +116,13 @@ export default function TeamByCoach({ staffList, monthlyRows, rollingLatest, rol
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200/60">
-            {[rollingRow, ...monthlyTable].map((r) => (
-              <tr key={r.key} className={r.key === period ? 'bg-emerald-500/5' : ''}>
+            {[yearAvgRow, recentAvgRow, ...monthlyTable].map((r) => (
+              <tr key={r.key} className={r.isAvg ? 'bg-gray-50 font-semibold' : r.key === period ? 'bg-emerald-500/5' : ''}>
                 <td className="px-5 py-2 font-medium text-gray-900 whitespace-nowrap">{r.label}</td>
                 <td className="px-3 py-2 text-gray-600 tabular-nums">{fmtAUD(r.ptRevenue)}</td>
-                <td className="px-3 py-2 text-gray-600 tabular-nums">{r.ptSessions ?? '–'}</td>
+                <td className="px-3 py-2 text-gray-600 tabular-nums">{r.ptSessions != null ? Math.round(r.ptSessions) : '–'}</td>
                 <td className="px-3 py-2 text-gray-600 tabular-nums">{fmtAUD(r.groupRevenue)}</td>
-                <td className="px-3 py-2 text-gray-600 tabular-nums">{r.groupClasses ?? '–'}</td>
+                <td className="px-3 py-2 text-gray-600 tabular-nums">{r.groupClasses != null ? Math.round(r.groupClasses) : '–'}</td>
                 <td className="px-3 py-2 text-gray-600 tabular-nums whitespace-nowrap">
                   {fmtAUD(r.wages)}<span className="text-[10px] text-amber-600">{sourceMark(r.source)}</span>
                 </td>
