@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, ResponsiveContainer } from 'recharts';
-import { TEAM_METRICS, valueForMetric, mean } from '../utils/teamMetrics.js';
+import { TEAM_METRICS, valueForMetric, mean, lerTone, LER_KEY_TEXT } from '../utils/teamMetrics.js';
 import { ROLLING_KEY, monthKeyFor, snapshotRowFor, periodRange } from '../utils/snapshotPeriods.js';
 
 const RECENT_COLOR = '#059669'; // emerald-600, matches the app's accent
@@ -71,6 +71,9 @@ export default function TeamByMetric({ staffList, monthlyRows, rollingLatest, st
   const hasData = rows.some((r) => r.yearAvg != null || r.recentAvg != null || r.rolling != null || months.some((m) => r.byMonth[m.key] != null));
   const chartData = rows.map((r) => ({ name: r.name, recent: r.recentAvg, year: r.yearAvg }));
   const recentLabel = `Last ${recent.length === 1 ? 'month' : `${recent.length} months`} avg`;
+
+  // LER figures are colour-coded (green / orange / red); other metrics keep their normal text colour.
+  const toneFor = (v, fallback) => (metricKey === 'ler' && v != null ? lerTone(v) : fallback);
 
   const labelProps = { position: 'top', fontSize: 10, fill: '#6b7280', formatter: (v) => (v == null ? '' : metric.format(v)) };
 
@@ -143,11 +146,11 @@ export default function TeamByMetric({ staffList, monthlyRows, rollingLatest, st
             ) : rows.map((r) => (
               <tr key={r.staffId} className="text-right">
                 <td className="px-5 py-2.5 font-medium text-gray-900 text-left whitespace-nowrap sticky left-0 bg-white">{r.name}</td>
-                <td className="px-3 py-2.5 font-semibold text-gray-900 tabular-nums bg-emerald-500/5">{metric.format(r.yearAvg)}</td>
-                <td className="px-3 py-2.5 font-semibold text-gray-900 tabular-nums bg-emerald-500/5">{metric.format(r.recentAvg)}</td>
-                <td className="px-3 py-2.5 text-gray-600 tabular-nums">{metric.format(r.rolling)}</td>
+                <td className={`px-3 py-2.5 font-semibold tabular-nums bg-emerald-500/5 ${toneFor(r.yearAvg, 'text-gray-900')}`}>{metric.format(r.yearAvg)}</td>
+                <td className={`px-3 py-2.5 font-semibold tabular-nums bg-emerald-500/5 ${toneFor(r.recentAvg, 'text-gray-900')}`}>{metric.format(r.recentAvg)}</td>
+                <td className={`px-3 py-2.5 tabular-nums ${toneFor(r.rolling, 'text-gray-600')}`}>{metric.format(r.rolling)}</td>
                 {months.map((m) => (
-                  <td key={m.key} className={`px-3 py-2.5 tabular-nums ${m.inProgress ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <td key={m.key} className={`px-3 py-2.5 tabular-nums ${toneFor(r.byMonth[m.key], m.inProgress ? 'text-gray-400' : 'text-gray-600')} ${m.inProgress && metricKey === 'ler' ? 'opacity-60' : ''}`}>
                     {metric.format(r.byMonth[m.key])}
                   </td>
                 ))}
@@ -157,7 +160,7 @@ export default function TeamByMetric({ staffList, monthlyRows, rollingLatest, st
         </table>
         <p className="px-5 py-2.5 text-[11px] text-gray-400 border-t border-gray-100">
           Averages cover completed months only — the current month is shown but not counted, since it's part-way through and wages
-          are still posting. Months with no data are skipped, not counted as zero.
+          are still posting. Months with no data are skipped, not counted as zero.{metricKey === 'ler' && ` ${LER_KEY_TEXT}`}
         </p>
       </div>
     </div>

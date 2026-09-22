@@ -10,6 +10,17 @@ export const TEAM_METRICS = [
   { key: 'taskRate',     label: 'Task Completion',  format: (n) => (n == null ? '–' : `${Math.round(n)}%`) },
 ];
 
+// LER colour bands, used everywhere an LER figure is shown (Finance LER table,
+// Team tab): 3x or more is green, 2.5x up to 3x is orange, under 2.5x is red.
+// Judged on the real value, not the rounded display, so 2.96x reads orange.
+export const LER_GREEN_AT  = 3;
+export const LER_ORANGE_AT = 2.5;
+export function lerTone(n) {
+  if (n == null || Number.isNaN(Number(n))) return '';
+  return n >= LER_GREEN_AT ? 'text-emerald-600' : n >= LER_ORANGE_AT ? 'text-orange-600' : 'text-red-600';
+}
+export const LER_KEY_TEXT = 'Colour key: green 3x+, orange 2.5x to under 3x, red under 2.5x.';
+
 // Simple mean of the values that exist — null/undefined months (a coach who
 // hadn't started yet, a month with no tasks assigned) are skipped rather than
 // dragging the average down as zeros. null when there's nothing to average.

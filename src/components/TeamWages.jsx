@@ -4,6 +4,7 @@ import { Wallet } from 'lucide-react';
 import { useMonthlyWageOverrides } from '../utils/useMonthlyWageOverrides.js';
 import { useWageOverrides } from '../utils/useWageOverrides.js';
 import { monthKeyFor } from '../utils/snapshotPeriods.js';
+import { lerTone } from '../utils/teamMetrics.js';
 
 function fmtAUD(n) { return n == null ? '–' : `$${Math.round(n).toLocaleString('en-AU')}`; }
 function fmtLer(n) { return n == null ? '–' : `${Number(n).toFixed(2)}x`; }
@@ -64,7 +65,7 @@ function WageEditor({ coach, monthDate, row, monthly, standing, onSave, onClear,
       </div>
 
       <p className="text-gray-400">
-        {previewLer != null && <>LER at this wage: <span className="font-medium text-gray-600">{fmtLer(previewLer)}</span>. </>}
+        {previewLer != null && <>LER at this wage: <span className={`font-semibold ${lerTone(previewLer)}`}>{fmtLer(previewLer)}</span>. </>}
         Replaces the Xero wage for this month only, and flows into the LER here and on the Finance tab.
         {monthly ? ' Clearing it reverts to the standing wage if there is one, otherwise Xero.' : ''}
       </p>

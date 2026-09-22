@@ -8,6 +8,7 @@ import { useMonthlyWageOverrides } from '../utils/useMonthlyWageOverrides.js';
 import { useCoachMonthlySnapshots } from '../utils/useCoachMonthlySnapshots.js';
 import { useCoachRolling30 } from '../utils/useCoachRolling30.js';
 import { ROLLING_KEY, monthKeyFor, monthDateOf, periodLabel, snapshotRowFor } from '../utils/snapshotPeriods.js';
+import { lerTone } from '../utils/teamMetrics.js';
 import PeriodTabs from './PeriodTabs.jsx';
 
 function fmtAUD(n) {
@@ -243,7 +244,7 @@ export default function LERTable({ isManager, currentStaffId }) {
                 <>
                   <td className="px-4 py-3 text-right font-semibold tabular-nums text-gray-800">{hasData ? fmtAUD(totalRevenue) : '–'}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-gray-600">{hasData ? fmtAUD(totalWage) : '–'}</td>
-                  <td className="px-4 py-3 text-right font-bold tabular-nums text-gray-900">{totalLer !== null ? `${totalLer.toFixed(1)}x` : '–'}</td>
+                  <td className={`px-4 py-3 text-right font-bold tabular-nums ${totalLer !== null ? lerTone(totalLer) : 'text-gray-900'}`}>{totalLer !== null ? `${totalLer.toFixed(2)}x` : '–'}</td>
                 </>
               )}
             </tr>
@@ -274,8 +275,8 @@ export default function LERTable({ isManager, currentStaffId }) {
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-gray-700">{r.has ? fmtAUD(r.revenue) : '–'}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-gray-500">{r.wage != null ? fmtAUD(r.wage) : '–'}</td>
-                  <td className={`px-4 py-3 text-right font-semibold tabular-nums ${r.ler === null ? 'text-gray-300' : r.ler >= 3 ? 'text-emerald-600' : r.ler >= 2 ? 'text-amber-600' : 'text-red-600'}`}>
-                    {r.ler !== null ? `${r.ler.toFixed(1)}x` : '–'}
+                  <td className={`px-4 py-3 text-right font-semibold tabular-nums ${r.ler === null ? 'text-gray-300' : lerTone(r.ler)}`}>
+                    {r.ler !== null ? `${r.ler.toFixed(2)}x` : '–'}
                   </td>
                 </tr>
                 {openStaffId === r.staffId && (
@@ -312,7 +313,7 @@ export default function LERTable({ isManager, currentStaffId }) {
 
       <p className="px-5 py-2.5 text-[11px] text-gray-400 border-t border-gray-100">
         Revenue is PT/SP + Group class $ value (see those tables). Wages are the month's override if one is set, else the standing override,
-        else Xero Payroll. LER = revenue ÷ wages — 3x+ is generally healthy, under 2x is worth a look.
+        else Xero Payroll. LER = revenue ÷ wages. Green is 3x or more, orange is 2.5x to under 3x, red is under 2.5x.
         Numbers come from the nightly snapshot{updatedAt ? ` (last updated ${format(new Date(updatedAt), 'd MMM, h:mm a')})` : ''} — hit Refresh to update now.
         {isRolling && ' Rolling 30 days spreads each pay run across its pay period, and fills the most recent unpaid days at the average daily rate, so the latest week isn\'t missing from wages.'}
       </p>

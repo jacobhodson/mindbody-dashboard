@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { monthKeyFor, periodRange, periodLabel } from '../utils/snapshotPeriods.js';
-import { mean } from '../utils/teamMetrics.js';
+import { mean, lerTone, LER_KEY_TEXT } from '../utils/teamMetrics.js';
 
 function fmtAUD(n) { return n == null ? '–' : `$${Math.round(n).toLocaleString('en-AU')}`; }
 function fmtLer(n)  { return n == null ? '–' : `${Number(n).toFixed(2)}x`; }
@@ -126,11 +126,12 @@ export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, 
                 <td className="px-3 py-2 text-gray-600 tabular-nums whitespace-nowrap">
                   {fmtAUD(r.wages)}<span className="text-[10px] text-amber-600">{sourceMark(r.source)}</span>
                 </td>
-                <td className="px-3 py-2 text-gray-900 font-semibold tabular-nums">{fmtLer(r.ler)}</td>
+                <td className={`px-3 py-2 font-semibold tabular-nums ${lerTone(r.ler) || 'text-gray-900'}`}>{fmtLer(r.ler)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        <p className="px-5 py-2.5 text-[11px] text-gray-400 border-t border-gray-100">{LER_KEY_TEXT}</p>
       </div>
 
       {/* Task completion for whichever period is selected up top */}
