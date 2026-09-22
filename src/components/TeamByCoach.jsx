@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { monthKeyFor, periodRange, periodLabel } from '../utils/snapshotPeriods.js';
-import { mean, lerTone, LER_KEY_TEXT } from '../utils/teamMetrics.js';
+import { mean, lerTone, hasActivity, LER_KEY_TEXT } from '../utils/teamMetrics.js';
 
 function fmtAUD(n) { return n == null ? '–' : `$${Math.round(n).toLocaleString('en-AU')}`; }
 function fmtLer(n)  { return n == null ? '–' : `${Number(n).toFixed(2)}x`; }
@@ -27,16 +27,22 @@ export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, 
   const [staffId, setStaffId] = useState(null);
   const selected = activeStaff.find((s) => s.id === staffId) || activeStaff[0] || null;
 
-  const toRow = (label, key, r) => ({
-    key, label,
-    ler:          r?.ler != null ? Number(r.ler) : null,
-    ptRevenue:    r ? Number(r.pt_revenue) : null,
-    ptSessions:   r ? r.pt_sessions : null,
-    groupRevenue: r ? Number(r.group_revenue) : null,
-    groupClasses: r ? r.group_classes : null,
-    wages:        r?.wages != null ? Number(r.wages) : null,
-    source:       r?.wages_source || null,
-  });
+  // A month before the coach started (all zeros, no wage) is treated as no
+  // data, so it shows dashes and stays out of the averages — see hasActivity.
+  const toRow = (label, key, raw) => {
+    const r = hasActivity(raw) ? raw : null;
+    return {
+      key, label,
+      ler:          r?.ler != null ? Number(r.ler) : null,
+      ptRevenue:    r ? Number(r.pt_revenue) : null,
+      ptSessions:   r ? r.pt_sessions : null,
+      groupRevenue: r ? Number(r.group_revenue) : null,
+      groupClasses: r ? r.group_classes : null,
+      totalRevenue: r ? Number(r.pt_revenue) + Number(r.group_revenue) : null,
+      wages:        r?.wages != null ? Number(r.wages) : null,
+      source:       r?.wages_source || null,
+    };
+  };
 
   const monthlyTable = Array.from({ length: 12 }, (_, m) => {
     const monthDate = new Date(year, m, 1);
@@ -54,7 +60,7 @@ export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, 
     return {
       key, label, isAvg: true,
       ler: avg('ler'), ptRevenue: avg('ptRevenue'), ptSessions: avg('ptSessions'),
-      groupRevenue: avg('groupRevenue'), groupClasses: avg('groupClasses'), wages: avg('wages'),
+      groupRevenue: avg('groupRevenue'), groupClasses: avg('groupClasses'), totalRevenue: avg('totalRevenue'), wages: avg('wages'),
       source: null,
     };
   };
@@ -111,6 +117,7 @@ export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, 
               <th className="px-3 py-2 font-medium">PT Sessions</th>
               <th className="px-3 py-2 font-medium">Group Revenue</th>
               <th className="px-3 py-2 font-medium">Group Classes</th>
+              <th className="px-3 py-2 font-medium">Total Revenue</th>
               <th className="px-3 py-2 font-medium">Wages</th>
               <th className="px-3 py-2 font-medium">LER</th>
             </tr>
@@ -123,6 +130,7 @@ export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, 
                 <td className="px-3 py-2 text-gray-600 tabular-nums">{r.ptSessions != null ? Math.round(r.ptSessions) : '–'}</td>
                 <td className="px-3 py-2 text-gray-600 tabular-nums">{fmtAUD(r.groupRevenue)}</td>
                 <td className="px-3 py-2 text-gray-600 tabular-nums">{r.groupClasses != null ? Math.round(r.groupClasses) : '–'}</td>
+                <td className="px-3 py-2 text-gray-900 tabular-nums">{fmtAUD(r.totalRevenue)}</td>
                 <td className="px-3 py-2 text-gray-600 tabular-nums whitespace-nowrap">
                   {fmtAUD(r.wages)}<span className="text-[10px] text-amber-600">{sourceMark(r.source)}</span>
                 </td>

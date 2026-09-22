@@ -1,6 +1,7 @@
 import Noticeboard from './Noticeboard.jsx';
 import TargetsPanel from './TargetsPanel.jsx';
 import TaskChecklist from './TaskChecklist.jsx';
+import StaffNeedingXeroMapping from './StaffNeedingXeroMapping.jsx';
 import NewClientsToAllocate from './NewClientsToAllocate.jsx';
 import PipelineClientsToAllocate from './PipelineClientsToAllocate.jsx';
 import MyPipelineTasks from './MyPipelineTasks.jsx';
@@ -19,6 +20,7 @@ export default function Home({
         </h1>
         <p className="text-sm text-gray-500">Here's what's due, and how the week's tracking.</p>
       </div>
+      <StaffNeedingXeroMapping isManager={isManager} />
       <NewClientsToAllocate onViewClient={onViewClient} />
       <PipelineClientsToAllocate pipelineIds={pipelineIds} isManager={isManager} onViewClient={onViewClient} />
       <MyPipelineTasks staff={staff} data={onboardingData} decisions={decisions} onViewClient={onViewClient} />

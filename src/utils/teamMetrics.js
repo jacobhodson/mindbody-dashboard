@@ -7,6 +7,7 @@ export const TEAM_METRICS = [
   { key: 'ptSessions',   label: 'PT Sessions',      format: (n) => (n == null ? '–' : Math.round(n).toLocaleString('en-AU')) },
   { key: 'groupRevenue', label: 'Group Revenue',    format: (n) => (n == null ? '–' : `$${Math.round(n).toLocaleString('en-AU')}`) },
   { key: 'groupClasses', label: 'Group Classes',    format: (n) => (n == null ? '–' : Math.round(n).toLocaleString('en-AU')) },
+  { key: 'grossRevenue', label: 'Total Revenue',    format: (n) => (n == null ? '–' : `$${Math.round(n).toLocaleString('en-AU')}`) },
   { key: 'taskRate',     label: 'Task Completion',  format: (n) => (n == null ? '–' : `${Math.round(n)}%`) },
 ];
 
@@ -29,17 +30,30 @@ export function mean(values) {
   return present.length ? present.reduce((a, b) => a + b, 0) / present.length : null;
 }
 
+// A coach-month with no revenue, no sessions or classes and no wage is "wasn't
+// working yet" (e.g. someone who joined in August has all-zero rows for Jan–
+// Jul), not a real $0 month — so it's treated as no data and skipped from
+// averages rather than dragging them down. A month with a wage but no revenue
+// still counts: they were paid and produced nothing.
+export function hasActivity(row) {
+  if (!row) return false;
+  return Number(row.pt_revenue) > 0 || Number(row.group_revenue) > 0
+    || Number(row.pt_sessions) > 0 || Number(row.group_classes) > 0
+    || row.wages != null;
+}
+
 // Reads the relevant field off one ler_monthly row for a given metric key —
 // everything except 'taskRate', which isn't in that table (see
 // useTeamTaskStats.js instead).
 export function valueForMetric(metricKey, snapshotRow) {
-  if (!snapshotRow) return null;
+  if (!snapshotRow || !hasActivity(snapshotRow)) return null;
   switch (metricKey) {
     case 'ler':          return snapshotRow.ler;
     case 'ptRevenue':    return snapshotRow.pt_revenue;
     case 'ptSessions':   return snapshotRow.pt_sessions;
     case 'groupRevenue': return snapshotRow.group_revenue;
     case 'groupClasses': return snapshotRow.group_classes;
+    case 'grossRevenue': return Number(snapshotRow.pt_revenue || 0) + Number(snapshotRow.group_revenue || 0);
     default:             return null;
   }
 }
