@@ -10,6 +10,14 @@ export const TEAM_METRICS = [
   { key: 'taskRate',     label: 'Task Completion',  format: (n) => (n == null ? '–' : `${Math.round(n)}%`) },
 ];
 
+// Simple mean of the values that exist — null/undefined months (a coach who
+// hadn't started yet, a month with no tasks assigned) are skipped rather than
+// dragging the average down as zeros. null when there's nothing to average.
+export function mean(values) {
+  const present = values.filter((v) => v != null && !Number.isNaN(v));
+  return present.length ? present.reduce((a, b) => a + b, 0) / present.length : null;
+}
+
 // Reads the relevant field off one ler_monthly row for a given metric key —
 // everything except 'taskRate', which isn't in that table (see
 // useTeamTaskStats.js instead).
