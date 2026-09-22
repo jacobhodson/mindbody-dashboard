@@ -7,8 +7,15 @@ import { X } from 'lucide-react';
  * WinTheWeek.jsx/Scoreboard.jsx (adds to a metric's daily metric_actuals
  * row) and count-type task rows in TaskChecklist.jsx (adds to that
  * period's task_completions.value) — same interaction either way.
+ *
+ * `subtle` (home page's compact MetricTargetCard only, 2026-09-22): the
+ * filled gray pill read as too loud a call-to-action sitting in a dense
+ * row of KPI cards — a plain text link in the same spot is still an
+ * obvious "log here", just without competing with the number itself for
+ * attention. Scorecard tab's own cards (more breathing room, and this IS
+ * the primary action there) keep the filled-pill default.
  */
-export default function AddProgress({ onAdd, label = 'Update metric' }) {
+export default function AddProgress({ onAdd, label = 'Update metric', subtle = false }) {
   const [open, setOpen]   = useState(false);
   const [value, setValue] = useState('');
   const [busy, setBusy]   = useState(false);
@@ -17,7 +24,9 @@ export default function AddProgress({ onAdd, label = 'Update metric' }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="rounded-lg bg-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-300 transition-colors"
+        className={subtle
+          ? 'text-[10px] font-medium text-emerald-700 hover:text-emerald-800 hover:underline transition-colors'
+          : 'rounded-lg bg-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-300 transition-colors'}
       >
         {label}
       </button>

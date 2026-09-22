@@ -6,7 +6,13 @@ import { TrendingUp } from 'lucide-react';
 // onboarding_rollover_decisions via useRolloverStats.js. Sits alongside the
 // regular metric cards in Scoreboard.jsx's grid and follows its Week/Month
 // tab like everything else there.
-export default function RolloverRateCard({ cadenceLabel, rollovers, decided, pct }) {
+//
+// `monthPct` (optional, home page's compact "Win the Week" tab only): a
+// small second line showing the month's rate alongside the week's — mirrors
+// MetricTargetCard's compact-mode SecondaryCadenceBadge, so Rollover Rate
+// doesn't stand out as the one card missing month context. Omit it (as
+// Scoreboard.jsx does) to render exactly as before.
+export default function RolloverRateCard({ cadenceLabel, rollovers, decided, pct, monthPct }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3">
       <div className="flex items-center gap-1.5">
@@ -30,6 +36,10 @@ export default function RolloverRateCard({ cadenceLabel, rollovers, decided, pct
           </>
         )}
       </div>
+
+      {monthPct != null && (
+        <p className="mt-1.5 text-[10px] tabular-nums text-gray-400">Month: {monthPct}%</p>
+      )}
     </div>
   );
 }

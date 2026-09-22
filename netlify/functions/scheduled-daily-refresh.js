@@ -17,6 +17,28 @@ import {
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+// Netlify Functions run in UTC, but every "today"/"yesterday" boundary below
+// needs to be Sydney's calendar date. This cron deliberately fires at 14:00
+// UTC to land right at Sydney midnight (AEST; ~1am during AEDT) — but at
+// that exact instant Sydney's calendar date is already a day AHEAD of
+// UTC's. The previous code did `format(subDays(new Date(), 1), ...)`, which
+// subtracts a day from *UTC's* calendar date — landing on Sydney's
+// day-before-yesterday, not yesterday. Confirmed live: a run firing at UTC
+// 2026-09-21T14:00 (Sydney midnight, start of 2026-09-22) wrote
+// metric_date 2026-09-20 instead of 2026-09-21 — one extra day of
+// staleness, every single day, which is why "this week's" attendance could
+// still be sitting empty mid-week. sydneyDateStr() reads the wall-clock
+// date Sydney is actually on right now (DST-aware, via Intl) before doing
+// any day-offset math, instead of assuming the runtime's own UTC date lines
+// up with Sydney's.
+function sydneyDateStr(date = new Date(), daysOffset = 0) {
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(date); // yyyy-MM-dd
+  if (!daysOffset) return todayStr;
+  const d = new Date(`${todayStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + daysOffset);
+  return format(d, 'yyyy-MM-dd');
+}
+
 // NOTE (2026-09-21): this in-code `config.schedule` export does NOT
 // actually schedule anything, and neither did adding `schedule` to
 // netlify.toml — confirmed live both ways: registering it in netlify.toml
@@ -192,7 +214,7 @@ export const handler = async (event) => {
         fetchAttendance(token, backfillDays),
         fetchDailyRevenue(token, backfillDays),
       ]);
-      const today = format(new Date(), 'yyyy-MM-dd');
+      const today = sydneyDateStr();
       const rows = [];
       for (const d of att.daily) {
         if (d.date === today) continue;
@@ -236,7 +258,7 @@ export const handler = async (event) => {
 
     // Sync yesterday's completed-day numbers into metric_actuals.
     if (att.status === 'fulfilled') {
-      const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd');
+      const yesterday = sydneyDateStr(new Date(), -1);
       const yAtt = att.value.daily.find((d) => d.date === yesterday);
       const dailyRev = await fetchDailyRevenue(token, 2).catch(() => ({}));
       const rows = [];
