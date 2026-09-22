@@ -51,10 +51,11 @@ export default function TeamByMetric({ staffList, monthlyRows, rollingLatest, st
     return v != null ? Number(v) : null;
   };
 
-  const rows = staffList
-    // is_coach excludes non-revenue-generating staff (e.g. a generic admin
-    // login) from every performance view on this tab.
-    .filter((s) => s.active !== false && s.is_coach !== false)
+  // is_coach excludes non-revenue-generating staff (e.g. a generic admin
+  // login) from every performance view on this tab.
+  const coaches = staffList.filter((s) => s.active !== false && s.is_coach !== false);
+
+  const rows = coaches
     .map((s) => {
       const byMonth = {};
       for (const m of months) byMonth[m.key] = valueFor(s.id, m.key);
@@ -68,8 +69,33 @@ export default function TeamByMetric({ staffList, monthlyRows, rollingLatest, st
       };
     });
 
+  // Team LER — total revenue ÷ total wages across every coach, NOT an average
+  // of the coaches' own LERs. A period covering several months (year / last 3)
+  // pools those months' totals the same way. Same maths as the Finance LER
+  // table's Team Total, so the two always agree for a given month.
+  const teamLerFor = (keys) => {
+    let revenue = 0, wages = 0, any = false;
+    for (const key of keys) {
+      for (const c of coaches) {
+        const r = snapshotRowFor(key, c.id, monthlyRows, rollingLatest);
+        if (!r) continue;
+        any = true;
+        revenue += Number(r.pt_revenue) + Number(r.group_revenue);
+        wages   += r.wages != null ? Number(r.wages) : 0;
+      }
+    }
+    return any && wages > 0 ? revenue / wages : null;
+  };
+  const team = metricKey === 'ler' ? {
+    byMonth: Object.fromEntries(months.map((m) => [m.key, teamLerFor([m.key])])),
+    rolling: teamLerFor([ROLLING_KEY]),
+    yearAvg: teamLerFor(completed.map((m) => m.key)),
+    recentAvg: teamLerFor(recent.map((m) => m.key)),
+  } : null;
+
   const hasData = rows.some((r) => r.yearAvg != null || r.recentAvg != null || r.rolling != null || months.some((m) => r.byMonth[m.key] != null));
   const chartData = rows.map((r) => ({ name: r.name, recent: r.recentAvg, year: r.yearAvg }));
+  if (team) chartData.push({ name: 'Team', recent: team.recentAvg, year: team.yearAvg });
   const recentLabel = `Last ${recent.length === 1 ? 'month' : `${recent.length} months`} avg`;
 
   // LER figures are colour-coded (green / orange / red); other metrics keep their normal text colour.
@@ -156,11 +182,24 @@ export default function TeamByMetric({ staffList, monthlyRows, rollingLatest, st
                 ))}
               </tr>
             ))}
+            {!loading && team && (
+              <tr className="text-right bg-gray-50 border-t-2 border-gray-200">
+                <td className="px-5 py-2.5 font-semibold text-gray-900 text-left whitespace-nowrap sticky left-0 bg-gray-50">Team</td>
+                <td className={`px-3 py-2.5 font-bold tabular-nums ${toneFor(team.yearAvg, 'text-gray-900')}`}>{metric.format(team.yearAvg)}</td>
+                <td className={`px-3 py-2.5 font-bold tabular-nums ${toneFor(team.recentAvg, 'text-gray-900')}`}>{metric.format(team.recentAvg)}</td>
+                <td className={`px-3 py-2.5 font-semibold tabular-nums ${toneFor(team.rolling, 'text-gray-600')}`}>{metric.format(team.rolling)}</td>
+                {months.map((m) => (
+                  <td key={m.key} className={`px-3 py-2.5 font-semibold tabular-nums ${toneFor(team.byMonth[m.key], 'text-gray-600')} ${m.inProgress ? 'opacity-60' : ''}`}>
+                    {metric.format(team.byMonth[m.key])}
+                  </td>
+                ))}
+              </tr>
+            )}
           </tbody>
         </table>
         <p className="px-5 py-2.5 text-[11px] text-gray-400 border-t border-gray-100">
           Averages cover completed months only — the current month is shown but not counted, since it's part-way through and wages
-          are still posting. Months with no data are skipped, not counted as zero.{metricKey === 'ler' && ` ${LER_KEY_TEXT}`}
+          are still posting. Months with no data are skipped, not counted as zero.{metricKey === 'ler' && ` ${LER_KEY_TEXT} The Team row is total revenue ÷ total wages for the period (not an average of the coaches' LERs) — its year and last-3-months figures add up those months' totals the same way.`}
         </p>
       </div>
     </div>
