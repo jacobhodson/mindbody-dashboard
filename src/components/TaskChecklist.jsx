@@ -428,6 +428,15 @@ function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onU
 export default function TaskChecklist({ user, staff, isManager }) {
   const { templates, loading, error, toggle, completionFor, logCount, logContactTask, createTask, updateTask, deleteTask } = useTeamTasks(user, staff);
   const [showCreate, setShowCreate] = useState(false);
+  // Managers only — non-managers' `templates` is already scoped to just
+  // their own + team tasks by RLS (see useTeamTasks.js), so this toggle
+  // would have nothing to filter for them. Managers, on the other hand,
+  // can read every individual's personal tasks (is_manager() is one of the
+  // RLS `select` conditions on task_templates) and used to always see them
+  // all mixed together with no way to tell whose was whose — defaulting to
+  // 'mine' keeps the home page focused on what THIS manager owes, with an
+  // explicit "Full team" switch for the standup-style check-in view.
+  const [viewScope, setViewScope] = useState('mine'); // 'mine' | 'team'
   const { staffList } = useAllStaff();
   const { clientsList } = useAllClients();
   const { targets } = useTargets(staff);
@@ -450,12 +459,20 @@ export default function TaskChecklist({ user, staff, isManager }) {
     return m;
   }, [targets]);
 
+  // What this list actually shows — everyone (non-managers, always, via
+  // RLS) sees team-scope tasks plus whatever's theirs (owned or assigned);
+  // a manager viewing 'team' sees every template RLS hands them, unfiltered.
+  const visibleTemplates = useMemo(() => {
+    if (isManager && viewScope === 'team') return templates;
+    return templates.filter((t) => t.scope === 'team' || t.owner_staff_id === staff?.id || t.assigned_staff_id === staff?.id);
+  }, [templates, isManager, viewScope, staff]);
+
   const grouped = useMemo(() => {
     const g = { daily: [], weekly: [], monthly: [], once: [] };
-    for (const t of templates) g[t.cadence]?.push(t);
+    for (const t of visibleTemplates) g[t.cadence]?.push(t);
     g.once.sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
     return g;
-  }, [templates]);
+  }, [visibleTemplates]);
 
   const handleUpdate = async (template, fields) => {
     await updateTask(template.id, {
@@ -491,20 +508,46 @@ export default function TaskChecklist({ user, staff, isManager }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-base font-semibold text-gray-900">Tasks</h2>
-          <p className="text-xs text-gray-500">Check off what you've done — it's logged automatically.</p>
+          <p className="text-xs text-gray-500">
+            {isManager && viewScope === 'team'
+              ? "The whole team's tasks — check off what's done."
+              : "Check off what you've done — it's logged automatically."}
+          </p>
         </div>
-        {!showCreate && (
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-300 transition-colors"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Create task
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isManager && (
+            <div className="flex gap-1 rounded-lg border border-gray-200 bg-white p-1">
+              <button
+                onClick={() => setViewScope('mine')}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                  viewScope === 'mine' ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <User className="h-3.5 w-3.5" /> My tasks
+              </button>
+              <button
+                onClick={() => setViewScope('team')}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                  viewScope === 'team' ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <Users className="h-3.5 w-3.5" /> Full team
+              </button>
+            </div>
+          )}
+          {!showCreate && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-300 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Create task
+            </button>
+          )}
+        </div>
       </div>
 
       {showCreate && (
@@ -549,9 +592,11 @@ export default function TaskChecklist({ user, staff, isManager }) {
         );
       })}
 
-      {templates.length === 0 && (
+      {visibleTemplates.length === 0 && (
         <p className="text-sm text-gray-500">
-          No tasks yet — create one above, or a manager can add some in the Supabase Table Editor (task_templates).
+          {isManager && viewScope === 'mine' && templates.length > 0
+            ? 'Nothing just for you right now — switch to "Full team" to see everyone\'s tasks.'
+            : 'No tasks yet — create one above, or a manager can add some in the Supabase Table Editor (task_templates).'}
         </p>
       )}
     </div>

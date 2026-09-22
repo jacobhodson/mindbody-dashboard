@@ -6,15 +6,23 @@ import { useAllStaff } from '../utils/useAllStaff.js';
 import MetricTargetCard from './MetricTargetCard.jsx';
 
 /**
- * Home-page mirror of the Scorecard tab's Scoreboard, pinned to the weekly
- * cadence — "This week's targets" (2026-09-21 rebuild). Used to be its own
- * separate raw target list (plain numbers, no progress bars, its own
- * "New target" form) that had drifted out of step with how Scoreboard.jsx
- * actually displays the same underlying `targets` rows. Now it's the exact
- * same data pipeline (groupTargetsByMetric + MetricTargetCard +
- * useMetricProgress) filtered to `!department` (Scoreboard's own metrics,
- * not WinTheWeek's) — nothing here to independently drift out of sync
- * with the Scorecard tab ever again, because it's the same read.
+ * Home-page mirror of the Scorecard tab's Scoreboard AND Win the Week,
+ * pinned to the weekly cadence — "This week's targets" (2026-09-21 rebuild,
+ * widened 2026-09-22 to include Win the Week). Used to be its own separate
+ * raw target list (plain numbers, no progress bars, its own "New target"
+ * form) that had drifted out of step with how Scoreboard.jsx actually
+ * displays the same underlying `targets` rows. Now it's the exact same data
+ * pipeline (groupTargetsByMetric + MetricTargetCard + useMetricProgress) —
+ * nothing here to independently drift out of sync with the Scorecard tab
+ * ever again, because it's the same read.
+ *
+ * Deliberately NOT filtered by `department` anymore: Win the Week's
+ * operations/acquisition targets (e.g. "open week referral messages") need
+ * to show up here too, so the week's open Win the Week items are visible
+ * without a trip to the Scorecard tab. activeCadence="weekly" on
+ * MetricTargetCard already does the trimming that matters here — a metric
+ * with no weekly row (monthly-only) renders nothing, so this panel only
+ * ever shows what's actually due *this week*, whichever tab it came from.
  *
  * showManageControls={false} hides the edit/archive pencil+trash (metric
  * management belongs in the Scorecard tab, not a home-page glance) while
@@ -22,11 +30,15 @@ import MetricTargetCard from './MetricTargetCard.jsx';
  */
 export default function TargetsPanel({ staff, isManager }) {
   const { targets, loading, error } = useTargets(staff);
-  const scoreboardTargets = targets.filter((t) => !t.department);
-  const { actualFor, lastUpdatedFor, logProgress } = useMetricProgress(scoreboardTargets);
+  const { actualFor, lastUpdatedFor, logProgress } = useMetricProgress(targets);
   const { staffList } = useAllStaff();
 
-  const metrics = useMemo(() => groupTargetsByMetric(scoreboardTargets), [targets]);
+  // Filtered to metrics that actually have a weekly row — a monthly-only
+  // metric (some Win the Week acquisition targets are monthly, not weekly)
+  // would otherwise count toward `metrics.length` here while its
+  // MetricTargetCard renders nothing (activeCadence="weekly" with no
+  // weekly row), leaving a card-less gap with no "nothing to show" message.
+  const metrics = useMemo(() => groupTargetsByMetric(targets).filter((m) => m.weeklyTarget), [targets]);
 
   if (loading) return null;
 
