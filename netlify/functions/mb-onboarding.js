@@ -6,7 +6,8 @@
  * (proven to work — same pattern as mb-client-analytics.js).
  *
  * Triggered by purchases of any of these products:
- *   "3 Session Pass" | "14 Day Pass" | "4 Week Kickstarter"
+ *   "3 Session Pass" | "14 Day Pass" | "Kick Starter" (the 4-week product's real
+ *   Mindbody name — "4 Week Kickstarter" never appears in sales)
  *   "Strong Dad Transformation" | "Strong Mum Transformation"
  *
  * PLUS a third pathway that isn't a sales-product match at all:
@@ -45,6 +46,7 @@ const ONBOARDING_KEYWORDS = [
   '3 session pass',
   '14 day pass',
   '4 week kickstarter',
+  'kick starter',
   'strong dad transformation',
   'strong mum transformation',
 ];
@@ -58,7 +60,7 @@ function shortProduct(name = '') {
   const lower = name.toLowerCase();
   if (lower.includes('strong dad'))                            return 'Strong Dad';
   if (lower.includes('strong mum'))                            return 'Strong Mum';
-  if (lower.includes('4 week') || lower.includes('kickstarter')) return '4-Week';
+  if (lower.includes('4 week') || lower.includes('kickstarter') || lower.includes('kick starter')) return '4-Week';
   if (lower.includes('14 day'))                                return '14-Day';
   if (lower.includes('3 session'))                             return '3-Session';
   return name.split(' ').slice(0, 2).join(' ');
