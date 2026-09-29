@@ -21,7 +21,9 @@
  * GROUP_MEMBERSHIP_KEYWORDS is a judgement call, not a Mindbody-provided
  * flag — see the comment below for exactly what's in/out and why.
  */
-import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
+import { ok, err, CORS } from './utils/mb-auth.js';
+// Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
+import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
 import {
   format, parseISO,
   startOfWeek, endOfWeek, startOfMonth, endOfMonth,

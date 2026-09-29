@@ -12,7 +12,9 @@
  *                    Uses client.AccountBalance as source of truth so paid-off accounts
  *                    are automatically excluded.
  */
-import { getStaffToken, mbGet, ok, err, CORS, formatPhone } from './utils/mb-auth.js';
+import { ok, err, CORS, formatPhone } from './utils/mb-auth.js';
+// Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
+import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
 import { subDays, format, parseISO } from 'date-fns';
 
 const FAILED_KEYWORDS = ['declined', 'failed', 'error', 'chargeback', 'disputed', 'returned', 'void'];

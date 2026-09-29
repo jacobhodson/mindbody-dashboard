@@ -28,7 +28,9 @@
  * Every upsert is idempotent, so backfill calls are safe to re-run/resume.
  */
 import { createClient } from '@supabase/supabase-js';
-import { getStaffToken, mbGet, ok, err, formatPhone } from './utils/mb-auth.js';
+import { ok, err, formatPhone } from './utils/mb-auth.js';
+// Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
+import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
 import { classifySession } from './utils/session-classify.js';
 import { format, parseISO, subDays } from 'date-fns';
 

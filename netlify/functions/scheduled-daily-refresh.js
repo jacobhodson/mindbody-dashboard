@@ -1,19 +1,13 @@
 /**
- * Scheduled daily cache refresh — runs at 2:00 PM UTC = midnight AEST (Sydney standard time).
- * During daylight saving (AEDT, UTC+11) this fires at 1 AM Sydney — close enough.
- *
- * Calls Mindbody directly (same logic as the individual endpoints) rather than
- * HTTP-calling the other functions, which would create a timeout chain.
+ * Scheduled daily metric sync — writes yesterday's attendance + revenue into
+ * metric_actuals. Runs after scheduled-mb-mirror.js's nightly pass and reads
+ * the Supabase mirror, not Mindbody (see 20260930000010_mindbody_mirror_cron.sql).
  */
-import { getStore } from '@netlify/blobs';
 import { createClient } from '@supabase/supabase-js';
-import { getStaffToken, mbGet, ok, err } from './utils/mb-auth.js';
-import {
-  subDays, format, parseISO,
-  startOfWeek, endOfWeek, subWeeks,
-  startOfMonth, endOfMonth, subMonths,
-  eachDayOfInterval,
-} from 'date-fns';
+import { ok, err } from './utils/mb-auth.js';
+// Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
+import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
+import { subDays, format, parseISO, eachDayOfInterval } from 'date-fns';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -91,49 +85,10 @@ async function fetchAttendance(token, daysBack = 6) {
   };
 }
 
-async function fetchRevenue(token) {
-  const now = new Date();
-  const periods = {
-    thisWeek:  { start: startOfWeek(now, { weekStartsOn: 1 }), end: now },
-    lastWeek:  { start: startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 }), end: endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 }) },
-    thisMonth: { start: startOfMonth(now), end: now },
-    lastMonth: { start: startOfMonth(subMonths(now, 1)), end: endOfMonth(subMonths(now, 1)) },
-  };
-
-  let allSales = [], offset = 0;
-  const fetchStart = format(periods.lastMonth.start, "yyyy-MM-dd'T'00:00:00");
-  const fetchEnd   = format(now, "yyyy-MM-dd'T'23:59:59");
-  while (true) {
-    const data = await mbGet('/sale/sales', token, { StartSaleDateTime: fetchStart, EndSaleDateTime: fetchEnd, Limit: 200, Offset: offset });
-    allSales = allSales.concat(data.Sales || []);
-    if ((data.Sales || []).length < 200 || offset >= 1800) break;
-    offset += 200;
-  }
-
-  const totals = { thisWeek: 0, lastWeek: 0, thisMonth: 0, lastMonth: 0 };
-  const counts = { thisWeek: 0, lastWeek: 0, thisMonth: 0, lastMonth: 0 };
-  for (const sale of allSales) {
-    if (!sale.SaleDate) continue;
-    const amount = (sale.PurchasedItems || []).reduce((s, i) => i.Returned ? s : s + (i.TotalAmount || 0), 0);
-    if (amount <= 0) continue;
-    for (const [key, range] of Object.entries(periods)) {
-      const d = parseISO(sale.SaleDate);
-      if (d >= range.start && d <= range.end) { totals[key] += amount; counts[key]++; }
-    }
-  }
-  const r = (n) => Math.round(n * 100) / 100;
-  return {
-    thisWeek:  { total: r(totals.thisWeek),  count: counts.thisWeek  },
-    lastWeek:  { total: r(totals.lastWeek),  count: counts.lastWeek  },
-    thisMonth: { total: r(totals.thisMonth), count: counts.thisMonth },
-    lastMonth: { total: r(totals.lastMonth), count: counts.lastMonth },
-  };
-}
-
-// Daily revenue — mb-revenue.js/fetchRevenue() above only returns 4 rolling
-// windows, no true per-day breakdown. One paginated query across the whole
+// Daily revenue — mb-revenue.js only returns 4 rolling windows, no true
+// per-day breakdown. One paginated query across the whole
 // range, bucketed by calendar day client-side (same pagination pattern as
-// fetchRevenue), so a 30-day backfill is 1 query, not 30.
+// mb-revenue.js), so a 30-day backfill is 1 query, not 30.
 async function fetchDailyRevenue(token, daysBack) {
   const now   = new Date();
   const start = subDays(now, daysBack);
@@ -187,8 +142,6 @@ async function upsertMetrics(rows) {
   return { error: null };
 }
 
-const BASE_URL = process.env.URL || 'http://localhost:8888';
-
 // ─── Handler ────────────────────────────────────────────────────────────────
 //
 // Normal cron trigger (no query params): syncs yesterday's attendance +
@@ -229,32 +182,12 @@ export const handler = async (event) => {
       return ok({ backfilled: rows.length, days: backfillDays });
     }
 
-    // Attendance + revenue: fetched inline (simpler logic, avoids HTTP chain)
-    // clientAnalytics + payments: delegate to their own endpoints (complex N+1 logic)
-    const [att, rev, ana, pay] = await Promise.allSettled([
-      fetchAttendance(token),
-      fetchRevenue(token),
-      fetch(`${BASE_URL}/api/mb-client-analytics`).then(r => r.json()),
-      fetch(`${BASE_URL}/api/mb-payments`).then(r => r.json()),
-    ]);
-
-    const snapshot = {
-      attendance:      att.status === 'fulfilled' ? att.value : null,
-      revenue:         rev.status === 'fulfilled' ? rev.value : null,
-      clientAnalytics: ana.status === 'fulfilled' ? ana.value : null,
-      payments:        pay.status === 'fulfilled' ? pay.value : null,
-      cachedAt:        new Date().toISOString(),
-    };
-
-    // Blobs cache write and the metric_actuals sync are independent — Blobs
-    // is currently broken (MissingBlobsEnvironmentError, a pre-existing
-    // issue), and it must not take the metric sync down with it if it throws.
-    try {
-      const store = getStore('dashboard-cache');
-      await store.set('dashboard-snapshot', JSON.stringify(snapshot));
-    } catch (blobsErr) {
-      console.error('[scheduled-daily-refresh] Blobs cache write failed:', blobsErr.message);
-    }
+    // The old Netlify Blobs dashboard snapshot (attendance/revenue/client-
+    // analytics/payments) is gone (2026-09-30): Blobs had been failing with
+    // MissingBlobsEnvironmentError, so every page load fell through to live
+    // Mindbody calls. The endpoints now read the Supabase mirror directly and
+    // cost nothing to call, so there's nothing left to cache here.
+    const att = await Promise.allSettled([fetchAttendance(token)]).then(([r]) => r);
 
     // Sync yesterday's completed-day numbers into metric_actuals.
     if (att.status === 'fulfilled') {
@@ -270,7 +203,7 @@ export const handler = async (event) => {
 
     console.log(
       '[scheduled-daily-refresh] Done.',
-      `att=${att.status} rev=${rev.status} ana=${ana.status} pay=${pay.status}`,
+      `att=${att.status}`,
     );
   } catch (e) {
     console.error('[scheduled-daily-refresh] Failed:', e.message);

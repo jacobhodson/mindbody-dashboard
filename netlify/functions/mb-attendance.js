@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
+import { ok, err, CORS } from './utils/mb-auth.js';
+// Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
+import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
 import {
   subDays, format, parseISO,
   startOfWeek, endOfWeek,

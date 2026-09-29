@@ -2,7 +2,9 @@
  * Revenue totals for 4 periods: this week, last week, this month, last month.
  * Uses /sale/sales and sums PurchasedItems[].TotalAmount (excluding returned items).
  */
-import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
+import { ok, err, CORS } from './utils/mb-auth.js';
+// Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
+import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
 import {
   format, parseISO,
   startOfWeek, endOfWeek,

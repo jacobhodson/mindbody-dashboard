@@ -46,7 +46,8 @@
  * share a first name).
  */
 import { createClient } from '@supabase/supabase-js';
-import { getStaffToken, mbGet } from './utils/mb-auth.js';
+// Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
+import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
 import { getXeroAuth, xeroPayrollGet, parseXeroDate } from './utils/xero-auth.js';
 import { classifySession as classify } from './utils/session-classify.js';
 import {

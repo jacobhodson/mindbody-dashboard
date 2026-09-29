@@ -6,7 +6,9 @@
  *   birthdaysInactive – lapsed/inactive members (conversation opportunity)
  *   anniversaries     – active members only, sorted by days_until asc
  */
-import { getStaffToken, mbGet, ok, err, CORS } from './utils/mb-auth.js';
+import { ok, err, CORS } from './utils/mb-auth.js';
+// Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
+import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
 
 const WINDOW_DAYS = 30;
 

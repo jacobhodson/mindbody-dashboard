@@ -24,7 +24,9 @@
  *   suspensions – clients with active SuspensionInfo or hold-type status
  *                 (excludes Terminated, Expired, Non Member)
  */
-import { getStaffToken, mbGet, ok, err, CORS, formatPhone } from './utils/mb-auth.js';
+import { ok, err, CORS, formatPhone } from './utils/mb-auth.js';
+// Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
+import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
 import { subDays, endOfDay, format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 
 const BATCH = 15;
@@ -342,16 +344,14 @@ export const handler = async (event) => {
       .filter((c) => (c.status || '').toLowerCase() === 'active')
       .filter((c) => !(c.suspensionInfo && Object.keys(c.suspensionInfo).length > 0))
       .filter((c) => !seenIds.has(c.id))
-      .sort((a, b) => a.name.localeCompare(b.name))
-      // Higher cap than reds: PT/SP-only clients (filtered out below, after
-      // the contract check) will always show up here — 0 group visits is
-      // normal for them — so a chunk of this pool won't make the final list.
-      .slice(0, 150);
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     // Contract check both groups so staff can prioritise active-contract
-    // holders first. Capped before fetching to bound parallel MB API calls
-    // (same pattern as the suspensions contract lookup below).
-    const redsForContractCheck = reds.slice(0, 100);
+    // holders first. These used to be capped (first 150 long-lapsed
+    // alphabetically, first 100 reds) to bound live Mindbody calls, which
+    // silently skipped everyone past the cap. Contracts now come from the
+    // Supabase mirror at no cost, so every candidate is checked.
+    const redsForContractCheck = reds;
     const [redsContracts, lapsedContracts] = await Promise.all([
       Promise.allSettled(redsForContractCheck.map((c) => getActiveContract(token, c.id))),
       Promise.allSettled(longLapsedCandidates.map((c) => getActiveContract(token, c.id))),

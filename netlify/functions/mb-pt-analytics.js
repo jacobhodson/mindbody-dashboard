@@ -28,7 +28,9 @@
  * session, but a real, current, sales-derived rate rather than a manual
  * guess.
  */
-import { getStaffToken, mbGet, ok, err, CORS, formatPhone } from './utils/mb-auth.js';
+import { ok, err, CORS, formatPhone } from './utils/mb-auth.js';
+// Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
+import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
 import { classifySession as classify } from './utils/session-classify.js';
 import {
   subDays, format, parseISO,
@@ -401,7 +403,7 @@ export const handler = async (event) => {
     // ── Session Credits ───────────────────────────────────────────────────
     const recentIds = [...new Set(
       ptsp.filter(a => a._date >= w4Start).map(a => a._id)
-    )].slice(0, 60);
+    )]; // no cap: credits come from the Supabase mirror now, not per-client Mindbody calls
 
     const creditMap = {};
     for (let i = 0; i < recentIds.length; i += CREDIT_BATCH) {

@@ -5,18 +5,20 @@ import { useContactLog } from './utils/useContactLog.js';
 import { useAuth } from './utils/useAuth.js';
 import { useStaff } from './utils/useStaff.js';
 
-// Initial load reads from the Netlify Blobs cache via GET /api/mb-snapshot.
-// The Refresh button POSTs to /api/mb-snapshot to force a live pull + cache update.
-// onboarding and pt are always fetched live (too dynamic to cache daily).
-// If the snapshot is unavailable, each key falls back to its live endpoint.
+// Every /api/mb-* endpoint reads the Supabase Mindbody mirror (kept current
+// by scheduled-mb-mirror.js), never Mindbody itself — so loading or
+// refreshing the dashboard costs no Mindbody API calls.
 
 const LOADING_ALL = { attendance: true, clientAnalytics: true, payments: true, revenue: true, onboarding: true, pt: true, celebrations: true };
 
-const CACHED_ENDPOINTS = {
+const ENDPOINTS = {
   attendance:      '/api/mb-attendance',
   clientAnalytics: '/api/mb-client-analytics',
   payments:        '/api/mb-payments',
   revenue:         '/api/mb-revenue',
+  onboarding:      '/api/mb-onboarding',
+  pt:              '/api/mb-pt-analytics',
+  celebrations:    '/api/mb-celebrations',
 };
 
 async function safeFetch(url, options) {
@@ -34,51 +36,21 @@ export default function App() {
   const [lastRefresh, setLastRefresh] = useState(null);
   const contactLog = useContactLog(staff);
 
-  const refresh = useCallback((forceRefresh = false) => {
+  const refresh = useCallback(() => {
     setLoading(LOADING_ALL);
     setErrors({});
 
-    const liveFetch = (key, url) =>
+    Promise.all(Object.entries(ENDPOINTS).map(([key, url]) =>
       safeFetch(url)
         .then(json => setData(prev => ({ ...prev, [key]: json })))
         .catch(e  => setErrors(prev => ({ ...prev, [key]: e.message })))
-        .finally(() => setLoading(prev => ({ ...prev, [key]: false })));
-
-    // Try snapshot for the 4 cached endpoints.
-    // GET = serve from cache; POST = force live pull + update cache.
-    // Falls back key-by-key (or entirely) to live calls if cache is incomplete.
-    const cachedLoad = safeFetch('/api/mb-snapshot', { method: forceRefresh ? 'POST' : 'GET' })
-      .then(snap => {
-        if (snap.error) throw new Error(snap.error);
-        const update  = {};
-        const missing = [];
-        for (const [key, url] of Object.entries(CACHED_ENDPOINTS)) {
-          if (snap[key] != null) update[key] = snap[key];
-          else missing.push([key, url]);
-        }
-        if (Object.keys(update).length) setData(prev => ({ ...prev, ...update }));
-        return Promise.all(missing.map(([k, url]) => liveFetch(k, url)));
-      })
-      .catch(() =>
-        Promise.all(Object.entries(CACHED_ENDPOINTS).map(([k, url]) => liveFetch(k, url)))
-      )
-      .finally(() =>
-        setLoading(prev => ({ ...prev, attendance: false, clientAnalytics: false, payments: false, revenue: false }))
-      );
-
-    Promise.all([
-      cachedLoad,
-      liveFetch('onboarding',    '/api/mb-onboarding'),
-      liveFetch('pt',            '/api/mb-pt-analytics'),
-      liveFetch('celebrations',  '/api/mb-celebrations'),
-    ]).then(() => setLastRefresh(new Date()));
+        .finally(() => setLoading(prev => ({ ...prev, [key]: false })))
+    )).then(() => setLastRefresh(new Date()));
   }, []);
 
-  // Lighter-weight than refresh(true) — just re-pulls the live onboarding
-  // endpoint, for after a start-date override/drag-drop changes which week
-  // a client falls in server-side (see mb-onboarding.js). A full refresh()
-  // would also force-repull the cached snapshot endpoints, which this
-  // doesn't need and would just slow the round-trip down.
+  // Lighter-weight than refresh() — just re-pulls the onboarding endpoint,
+  // for after a start-date override/drag-drop changes which week a client
+  // falls in server-side (see mb-onboarding.js).
   const refreshOnboarding = useCallback(() => {
     setLoading(prev => ({ ...prev, onboarding: true }));
     return safeFetch('/api/mb-onboarding')
@@ -87,8 +59,11 @@ export default function App() {
       .finally(() => setLoading(prev => ({ ...prev, onboarding: false })));
   }, []);
 
-  // Don't touch the Mindbody API at all until someone's actually signed in.
-  useEffect(() => { if (user) refresh(false); }, [user, refresh]);
+  // Load once per signed-in user. Keyed on the id, not the user object:
+  // Supabase hands back a new user object on every hourly token refresh,
+  // which used to re-run this whole load for every open tab.
+  const userId = user?.id;
+  useEffect(() => { if (userId) refresh(); }, [userId, refresh]);
 
   if (authLoading) {
     return <div className="min-h-screen bg-gray-50" />;
@@ -108,7 +83,7 @@ export default function App() {
       loading={loading}
       errors={errors}
       lastRefresh={lastRefresh}
-      onRefresh={() => refresh(true)}
+      onRefresh={refresh}
       refreshOnboarding={refreshOnboarding}
       contactLog={contactLog}
       user={user}
