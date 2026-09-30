@@ -31,32 +31,13 @@ function page(params) {
   return { from: offset, to: offset + limit - 1 };
 }
 
-async function rawRange(table, start, end, params) {
-  const { from, to } = page(params);
-  let q = supabase.from(table).select('raw').order('local_ts').order('id');
-  if (start) q = q.gte('local_ts', start);
-  if (end)   q = q.lte('local_ts', end);
-  const { data, error } = await q.range(from, to);
-  if (error) throw new Error(`mirror ${table}: ${error.message}`);
-  return data.map((r) => r.raw);
-}
-
-async function clients(params) {
-  const { from, to } = page(params);
-  let q = supabase.from('mb_clients_raw').select('raw').order('id');
-  const ids = params.ClientIds ?? params.clientIds;
-  if (ids) q = q.in('id', (Array.isArray(ids) ? ids : [ids]).map(String));
-  const { data, error } = await q.range(from, to);
-  if (error) throw new Error(`mirror mb_clients_raw: ${error.message}`);
-  return data.map((r) => r.raw);
-}
-
-// Per-item lookups (/class/classvisits per class, contracts/services per
-// client) are called hundreds of times per request. Netlify runs in the US
-// and Supabase in Sydney, so one query each costs a trans-Pacific round
-// trip apiece (~12s per endpoint, measured live). Instead each table is
-// loaded once in a single paged query and served from memory; the short TTL
-// keeps a warm Lambda from serving a previous request's data for long.
+// Endpoints make hundreds of small reads per request: paging a date range
+// 200 rows at a time, and per-item lookups (/class/classvisits per class,
+// contracts/services per client). Netlify runs in the US and Supabase in
+// Sydney, so each one is a trans-Pacific round trip (~12s per endpoint,
+// measured live). Instead each range or table is loaded once (1000-row
+// pages in parallel) and served from memory; the short TTL keeps a warm
+// Lambda from serving a previous request's data for long.
 const CACHE_TTL_MS = 30_000;
 const cache = new Map(); // name -> { at, promise: Promise<Map> }
 
@@ -66,6 +47,39 @@ function cached(name, load) {
   const promise = load().catch((e) => { cache.delete(name); throw e; });
   cache.set(name, { at: Date.now(), promise });
   return promise;
+}
+
+async function loadAll(build) {
+  const { count, error } = await build('id', { count: 'exact', head: true });
+  if (error) throw new Error(error.message);
+  const pages = Array.from({ length: Math.ceil((count || 0) / 1000) }, (_, i) => i);
+  const results = await Promise.all(pages.map(async (i) => {
+    const { data, error: e } = await build('raw').range(i * 1000, i * 1000 + 999);
+    if (e) throw new Error(e.message);
+    return data;
+  }));
+  return results.flat().map((r) => r.raw);
+}
+
+async function rawRange(table, start, end, params) {
+  const { from, to } = page(params);
+  const rows = await cached(`${table}|${start}|${end}`, () => loadAll((cols, opts) => {
+    let q = supabase.from(table).select(cols, opts);
+    if (start) q = q.gte('local_ts', start);
+    if (end)   q = q.lte('local_ts', end);
+    return q.order('local_ts').order('id');
+  }).catch((e) => { throw new Error(`mirror ${table}: ${e.message}`); }));
+  return rows.slice(from, to + 1);
+}
+
+async function clients(params) {
+  const { from, to } = page(params);
+  const all = await cached('clients', () => loadAll((cols, opts) => supabase.from('mb_clients_raw').select(cols, opts).order('id'))
+    .catch((e) => { throw new Error(`mirror mb_clients_raw: ${e.message}`); }));
+  const ids = params.ClientIds ?? params.clientIds;
+  if (!ids) return all.slice(from, to + 1);
+  const want = new Set((Array.isArray(ids) ? ids : [ids]).map(String));
+  return all.filter((c) => want.has(String(c.Id))).slice(from, to + 1);
 }
 
 async function loadMap(table, keyCol, valueCol, filter) {
