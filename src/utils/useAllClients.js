@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabaseClient.js';
  * ClientsList and by the client-picker datalists in TaskChecklist.jsx
  * (ContactLogForm/TaskForm).
  *
- * Also exposes row-level writes for ClientsList's inline manager editing
+ * Also exposes row-level writes for ClientsList's inline editing (any staff)
  * (caseload/package/next-programme-due/status override) — same fields and
  * payload shapes as useClientDetail.js's single-client versions, just
  * parameterized by clientId and patching the list in place instead of a
@@ -26,13 +26,15 @@ export function useAllClients() {
     setClientsList((prev) => prev.map((c) => (c.id === clientId ? { ...c, ...patch } : c)));
   }, []);
 
-  const applyUpdate = useCallback(async (clientId, patch) => {
-    const { data, error } = await supabase
-      .from('clients').update({ ...patch, updated_at: new Date().toISOString() })
-      .eq('id', clientId).select().single();
+  // Package/next-programme-due/status override each go through a one-column
+  // SECURITY DEFINER RPC (see 20260930000020_coach_client_field_rpcs.sql) so
+  // coaches can edit them too, not just managers — same reasoning as
+  // assign_client_caseload() below.
+  const callFieldRpc = useCallback(async (clientId, fn, args, patch) => {
+    const { error } = await supabase.rpc(fn, { p_client_id: clientId, ...args });
     if (error) return null;
-    patchClient(clientId, data);
-    return data;
+    patchClient(clientId, patch);
+    return patch;
   }, [patchClient]);
 
   // { staffId } for a specific staff member, { group: true } for "Group
@@ -54,17 +56,17 @@ export function useAllClients() {
   }, [patchClient]);
 
   const updatePackage = useCallback((clientId, packageId) =>
-    applyUpdate(clientId, { package_id: packageId || null }),
-  [applyUpdate]);
+    callFieldRpc(clientId, 'set_client_package', { p_package_id: packageId || null }, { package_id: packageId || null }),
+  [callFieldRpc]);
 
   const updateDueDate = useCallback((clientId, dateStr) =>
-    applyUpdate(clientId, { next_program_due: dateStr || null }),
-  [applyUpdate]);
+    callFieldRpc(clientId, 'set_client_next_program_due', { p_due: dateStr || null }, { next_program_due: dateStr || null }),
+  [callFieldRpc]);
 
   // null clears the override, falling back to the Mindbody-synced `status`.
   const updateStatusOverride = useCallback((clientId, value) =>
-    applyUpdate(clientId, { status_override: value || null }),
-  [applyUpdate]);
+    callFieldRpc(clientId, 'set_client_status_override', { p_status: value || null }, { status_override: value || null }),
+  [callFieldRpc]);
 
   return { clientsList, loading, updateCaseload, updatePackage, updateDueDate, updateStatusOverride };
 }

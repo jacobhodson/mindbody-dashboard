@@ -27,10 +27,9 @@ function weeklyAttendanceFrom(classRows) {
  * a 4-week attendance breakdown, and notes, and exposes the writes a
  * manager/staff member can make from the client profile: caseload
  * assignment (a specific staff member, "Group Program", or unassigned),
- * package, next-programme-due date, and adding a note. RLS already
- * restricts who can actually do each of these (managers only for the
- * clients-row update; any signed-in staff for their own note) — this hook
- * just performs the write, same division of labour as useTeamTasks.js.
+ * package, next-programme-due date, status override, and adding a note.
+ * The client-field writes go through SECURITY DEFINER RPCs any signed-in
+ * staff can call; notes are RLS-gated (any staff for their own note).
  */
 export function useClientDetail(mindbodyId) {
   const [client, setClient]           = useState(null);
@@ -117,36 +116,28 @@ export function useClientDetail(mindbodyId) {
     return patch;
   }, [client]);
 
-  const updatePackage = useCallback(async (packageId) => {
+  // Same one-column RPCs as useAllClients.js — writable by any signed-in
+  // staff, not just managers.
+  const callFieldRpc = useCallback(async (fn, args, patch) => {
     if (!client) return null;
-    const { data, error: updErr } = await supabase
-      .from('clients').update({ package_id: packageId || null, updated_at: new Date().toISOString() })
-      .eq('id', client.id).select().single();
+    const { error: updErr } = await supabase.rpc(fn, { p_client_id: client.id, ...args });
     if (updErr) { setError(updErr.message); return null; }
-    setClient(data);
-    return data;
+    setClient((prev) => ({ ...prev, ...patch }));
+    return patch;
   }, [client]);
 
-  const updateNextProgramDue = useCallback(async (dateStr) => {
-    if (!client) return null;
-    const { data, error: updErr } = await supabase
-      .from('clients').update({ next_program_due: dateStr || null, updated_at: new Date().toISOString() })
-      .eq('id', client.id).select().single();
-    if (updErr) { setError(updErr.message); return null; }
-    setClient(data);
-    return data;
-  }, [client]);
+  const updatePackage = useCallback((packageId) =>
+    callFieldRpc('set_client_package', { p_package_id: packageId || null }, { package_id: packageId || null }),
+  [callFieldRpc]);
+
+  const updateNextProgramDue = useCallback((dateStr) =>
+    callFieldRpc('set_client_next_program_due', { p_due: dateStr || null }, { next_program_due: dateStr || null }),
+  [callFieldRpc]);
 
   // null clears the override, falling back to the Mindbody-synced `status`.
-  const updateStatusOverride = useCallback(async (value) => {
-    if (!client) return null;
-    const { data, error: updErr } = await supabase
-      .from('clients').update({ status_override: value || null, updated_at: new Date().toISOString() })
-      .eq('id', client.id).select().single();
-    if (updErr) { setError(updErr.message); return null; }
-    setClient(data);
-    return data;
-  }, [client]);
+  const updateStatusOverride = useCallback((value) =>
+    callFieldRpc('set_client_status_override', { p_status: value || null }, { status_override: value || null }),
+  [callFieldRpc]);
 
   const addNote = useCallback(async (staffId, note) => {
     if (!client || !note.trim()) return null;

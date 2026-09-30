@@ -63,12 +63,6 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
     return m;
   }, [staffList]);
 
-  const packageNameById = useMemo(() => {
-    const m = {};
-    for (const p of packages) m[p.id] = p.name;
-    return m;
-  }, [packages]);
-
   if (loading) return <p className="text-sm text-gray-500">Loading client…</p>;
   if (error) return <p className="text-sm text-red-600">Could not load client: {error}</p>;
   if (!client) {
@@ -112,7 +106,6 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
   };
 
   const caseloadSelectValue = caseloadValueFor(client);
-  const caseloadDisplay = client.assigned_group ? 'Group Program' : (staffNameById[client.assigned_staff_id] || 'Unassigned');
   const scorecardStatus = scorecardStatusFor(avgWeekly);
   const visibleVisits = visitsExpanded ? visits : visits.slice(0, 10);
   const visibleContactLogs = contactLogsExpanded ? contactLogs : contactLogs.slice(0, 3);
@@ -198,90 +191,76 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
         <div className="flex flex-wrap gap-6">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Assigned to</p>
-            {isManager ? (
-              <select
-                value={caseloadSelectValue}
-                onChange={(e) => handleCaseloadChange(e.target.value)}
-                className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
-              >
-                <option value="">Unassigned</option>
-                <option value={GROUP_VALUE}>Group Program</option>
-                {staffList.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
-              </select>
-            ) : (
-              <p className="text-sm text-gray-800">{caseloadDisplay}</p>
-            )}
+            <select
+              value={caseloadSelectValue}
+              onChange={(e) => handleCaseloadChange(e.target.value)}
+              className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
+            >
+              <option value="">Unassigned</option>
+              <option value={GROUP_VALUE}>Group Program</option>
+              {staffList.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+            </select>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Package</p>
-            {isManager ? (
-              addingPackage ? (
-                <form onSubmit={submitNewPackage} className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    autoFocus
-                    placeholder="New package name"
-                    value={newPackageName}
-                    onChange={(e) => setNewPackageName(e.target.value)}
-                    className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
-                  />
-                  <button type="submit" className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-emerald-500">Save</button>
-                  <button type="button" onClick={() => { setAddingPackage(false); setNewPackageName(''); }} className="rounded-lg bg-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-300">Cancel</button>
-                </form>
-              ) : (
-                <select
-                  value={client.package_id || ''}
-                  onChange={(e) => handlePackageChange(e.target.value)}
+            {addingPackage ? (
+              <form onSubmit={submitNewPackage} className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="New package name"
+                  value={newPackageName}
+                  onChange={(e) => setNewPackageName(e.target.value)}
                   className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
-                >
-                  <option value="">Not set</option>
-                  {packages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  <option value={ADD_PACKAGE_VALUE}>+ Add new package…</option>
-                </select>
-              )
+                />
+                <button type="submit" className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-emerald-500">Save</button>
+                <button type="button" onClick={() => { setAddingPackage(false); setNewPackageName(''); }} className="rounded-lg bg-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-300">Cancel</button>
+              </form>
             ) : (
-              <p className="text-sm text-gray-800">{packageNameById[client.package_id] || 'Not set'}</p>
+              <select
+                value={client.package_id || ''}
+                onChange={(e) => handlePackageChange(e.target.value)}
+                className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
+              >
+                <option value="">Not set</option>
+                {packages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {isManager && <option value={ADD_PACKAGE_VALUE}>+ Add new package…</option>}
+              </select>
             )}
           </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Next programme due</p>
-            {isManager ? (
+          {!client.assigned_group && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Next programme due</p>
               <input
                 type="date"
                 value={client.next_program_due || ''}
                 onChange={(e) => updateNextProgramDue(e.target.value || null)}
                 className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
               />
-            ) : (
-              <p className="text-sm text-gray-800">{fmtDate(client.next_program_due)}</p>
-            )}
-          </div>
+            </div>
+          )}
           <div>
             <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Status</p>
-            {isManager ? (
-              <div className="flex items-center gap-1.5">
-                <select
-                  value={overrideSelectValue}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                  className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
+            <div className="flex items-center gap-1.5">
+              <select
+                value={overrideSelectValue}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
+              >
+                <option value="">{client.status} (Mindbody)</option>
+                {SIMPLE_STATUSES.filter((s) => s !== client.status).map((s) => (
+                  <option key={s} value={s}>{s} (manual)</option>
+                ))}
+              </select>
+              {autoTrial && (
+                <span
+                  title="Currently on a front-end offer/intro pass — auto-detected from the Onboarding pipeline"
+                  className="shrink-0 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 border border-violet-500/20"
                 >
-                  <option value="">{client.status} (Mindbody)</option>
-                  {SIMPLE_STATUSES.filter((s) => s !== client.status).map((s) => (
-                    <option key={s} value={s}>{s} (manual)</option>
-                  ))}
-                </select>
-                {autoTrial && (
-                  <span
-                    title="Currently on a front-end offer/intro pass — auto-detected from the Onboarding pipeline"
-                    className="shrink-0 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 border border-violet-500/20"
-                  >
-                    Trial
-                  </span>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-800">{status}</p>
-            )}
+                  Trial
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

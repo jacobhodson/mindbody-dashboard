@@ -52,18 +52,6 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
 
   const today = useMemo(() => startOfDay(new Date()), []);
 
-  const staffNameById = useMemo(() => {
-    const m = {};
-    for (const s of staffList) m[s.id] = s.full_name;
-    return m;
-  }, [staffList]);
-
-  const packageNameById = useMemo(() => {
-    const m = {};
-    for (const p of packages) m[p.id] = p.name;
-    return m;
-  }, [packages]);
-
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return clientsList.filter((c) => {
@@ -79,7 +67,9 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
       if (assignedFilter === 'group' && !c.assigned_group) return false;
       if (assignedFilter !== 'all' && assignedFilter !== 'unassigned' && assignedFilter !== 'group' && c.assigned_staff_id !== assignedFilter) return false;
 
-      if (dueFilter !== 'all' && dueBucketFor(c.next_program_due, today) !== dueFilter) return false;
+      // Group Program clients don't get individual programmes, so they have no
+      // next-programme-due and never match a due bucket.
+      if (dueFilter !== 'all' && (c.assigned_group || dueBucketFor(c.next_program_due, today) !== dueFilter)) return false;
       if (visitFilter !== 'all' && visitBucketFor(c.last_visit_date, today) !== visitFilter) return false;
 
       if (startersOnly && !isStarter(c, today)) return false;
@@ -210,91 +200,77 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
                     <p className="text-xs text-gray-500">{c.email || c.mobile_phone || '—'}</p>
                   </td>
 
-                  <td className="px-3 py-2.5 text-gray-600" onClick={(e) => isManager && e.stopPropagation()}>
-                    {isManager ? (
-                      <div className="flex items-center gap-1.5">
-                        <select
-                          value={overrideSelectValue}
-                          onChange={(e) => updateStatusOverride(c.id, e.target.value)}
-                          title={overridden ? `Manually set — Mindbody has this client as "${c.status}"` : undefined}
-                          className={selectClass}
-                        >
-                          <option value="">{c.status} (Mindbody)</option>
-                          {SIMPLE_STATUSES.filter((s) => s !== c.status).map((s) => (
-                            <option key={s} value={s}>{s} (manual)</option>
-                          ))}
-                        </select>
-                        {autoTrial && (
-                          <span
-                            title="Currently on a front-end offer/intro pass — auto-detected from the Onboarding pipeline"
-                            className="shrink-0 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 border border-violet-500/20"
-                          >
-                            Trial
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span>{status}{overridden && ' •'}</span>
-                    )}
-                  </td>
-
-                  <td className="px-3 py-2.5 text-gray-600" onClick={(e) => isManager && e.stopPropagation()}>
-                    {isManager ? (
+                  <td className="px-3 py-2.5 text-gray-600" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1.5">
                       <select
-                        value={caseloadSelectValue(c)}
-                        onChange={(e) => updateCaseload(c.id, caseloadPayloadFor(e.target.value))}
+                        value={overrideSelectValue}
+                        onChange={(e) => updateStatusOverride(c.id, e.target.value)}
+                        title={overridden ? `Manually set — Mindbody has this client as "${c.status}"` : undefined}
                         className={selectClass}
                       >
-                        <option value="">Unassigned</option>
-                        <option value={GROUP_VALUE}>Group Program</option>
-                        {staffList.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                        <option value="">{c.status} (Mindbody)</option>
+                        {SIMPLE_STATUSES.filter((s) => s !== c.status).map((s) => (
+                          <option key={s} value={s}>{s} (manual)</option>
+                        ))}
                       </select>
-                    ) : (
-                      c.assigned_group ? 'Group Program' : (staffNameById[c.assigned_staff_id] || '—')
-                    )}
-                  </td>
-
-                  <td className="px-3 py-2.5 text-gray-600" onClick={(e) => isManager && e.stopPropagation()}>
-                    {isManager ? (
-                      addingPackageForId === c.id ? (
-                        <form onSubmit={(e) => submitNewPackage(e, c.id)} className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            autoFocus
-                            placeholder="New package"
-                            value={newPackageName}
-                            onChange={(e) => setNewPackageName(e.target.value)}
-                            className="w-28 rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-xs text-gray-900"
-                          />
-                          <button type="submit" className="rounded-lg bg-emerald-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-emerald-500">Save</button>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setAddingPackageForId(null); }} className="rounded-lg bg-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-300">✕</button>
-                        </form>
-                      ) : (
-                        <select
-                          value={c.package_id || ''}
-                          onChange={(e) => handlePackageChange(c.id, e.target.value)}
-                          className={selectClass}
+                      {autoTrial && (
+                        <span
+                          title="Currently on a front-end offer/intro pass — auto-detected from the Onboarding pipeline"
+                          className="shrink-0 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 border border-violet-500/20"
                         >
-                          <option value="">Not set</option>
-                          {packages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          <option value={ADD_PACKAGE_VALUE}>+ Add new…</option>
-                        </select>
-                      )
+                          Trial
+                        </span>
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="px-3 py-2.5 text-gray-600" onClick={(e) => e.stopPropagation()}>
+                    <select
+                      value={caseloadSelectValue(c)}
+                      onChange={(e) => updateCaseload(c.id, caseloadPayloadFor(e.target.value))}
+                      className={selectClass}
+                    >
+                      <option value="">Unassigned</option>
+                      <option value={GROUP_VALUE}>Group Program</option>
+                      {staffList.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                    </select>
+                  </td>
+
+                  <td className="px-3 py-2.5 text-gray-600" onClick={(e) => e.stopPropagation()}>
+                    {addingPackageForId === c.id ? (
+                      <form onSubmit={(e) => submitNewPackage(e, c.id)} className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="New package"
+                          value={newPackageName}
+                          onChange={(e) => setNewPackageName(e.target.value)}
+                          className="w-28 rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-xs text-gray-900"
+                        />
+                        <button type="submit" className="rounded-lg bg-emerald-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-emerald-500">Save</button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setAddingPackageForId(null); }} className="rounded-lg bg-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-300">✕</button>
+                      </form>
                     ) : (
-                      packageNameById[c.package_id] || '—'
+                      <select
+                        value={c.package_id || ''}
+                        onChange={(e) => handlePackageChange(c.id, e.target.value)}
+                        className={selectClass}
+                      >
+                        <option value="">Not set</option>
+                        {packages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        {isManager && <option value={ADD_PACKAGE_VALUE}>+ Add new…</option>}
+                      </select>
                     )}
                   </td>
 
-                  <td className="px-3 py-2.5 text-gray-600" onClick={(e) => isManager && e.stopPropagation()}>
-                    {isManager ? (
+                  <td className="px-3 py-2.5 text-gray-600" onClick={(e) => e.stopPropagation()}>
+                    {!c.assigned_group && (
                       <input
                         type="date"
                         value={c.next_program_due || ''}
                         onChange={(e) => updateDueDate(c.id, e.target.value)}
                         className={selectClass}
                       />
-                    ) : (
-                      c.next_program_due ? format(parseISO(c.next_program_due), 'd MMM yyyy') : '—'
                     )}
                   </td>
 
