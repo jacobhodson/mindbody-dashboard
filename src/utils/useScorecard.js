@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient.js';
 import { periodEndFor } from './periods.js';
+import { onMetricActualsChanged } from './metricActuals.js';
 
 /**
  * Task-completion history for one period (day/week/month), plus whatever
@@ -17,6 +18,10 @@ export function useScorecard(cadence, periodStart) {
   const [actuals, setActuals]         = useState([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
+  const [actualsVersion, setActualsVersion] = useState(0);
+
+  // Re-query when progress is logged elsewhere (e.g. a linked task).
+  useEffect(() => onMetricActualsChanged(() => setActualsVersion((v) => v + 1)), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,7 +54,7 @@ export function useScorecard(cadence, periodStart) {
     }).finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [cadence, periodStart]);
+  }, [cadence, periodStart, actualsVersion]);
 
   // Sum of this period's daily metric_actuals rows for a target's metric_key
   // — correct for both attendance and revenue, which are naturally additive

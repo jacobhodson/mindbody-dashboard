@@ -10,6 +10,18 @@ import { supabase } from '../lib/supabaseClient.js';
  * *partial* index (20260901000004_metric_actuals_uniqueness_fix.sql), which
  * PostgREST can't target as a native upsert onConflict arbiter.
  */
+// Fired after every write below. Progress is logged from one component (a
+// task checklist, an "Update metric" button) but shown in others (Win the
+// Week / Scoreboard cards, the Scorecard), each holding its own copy of the
+// rows — without this, a logged task only appeared on the targets after a
+// page reload. Readers subscribe via onMetricActualsChanged().
+const CHANGED_EVENT = 'metric-actuals-changed';
+
+export function onMetricActualsChanged(callback) {
+  window.addEventListener(CHANGED_EVENT, callback);
+  return () => window.removeEventListener(CHANGED_EVENT, callback);
+}
+
 export async function addMetricProgress(metricKey, delta, source = 'manual') {
   if (!metricKey || !delta) return;
   const today = format(new Date(), 'yyyy-MM-dd');
@@ -34,4 +46,5 @@ export async function addMetricProgress(metricKey, delta, source = 'manual') {
       .insert({ metric_key: metricKey, metric_date: today, value: delta, staff_id: null, source });
     if (error) throw new Error(error.message);
   }
+  window.dispatchEvent(new Event(CHANGED_EVENT));
 }

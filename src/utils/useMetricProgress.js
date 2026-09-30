@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient.js';
 import { periodStartFor, periodEndFor } from './periods.js';
-import { addMetricProgress } from './metricActuals.js';
+import { addMetricProgress, onMetricActualsChanged } from './metricActuals.js';
 
 /**
  * Computes progress for a set of `targets` rows against EACH row's own
@@ -43,6 +43,8 @@ export function useMetricProgress(rows) {
   }, [metricKeysKey, earliestStart, latestEnd]);
 
   useEffect(() => { load(); }, [load]);
+  // Reload when progress is logged anywhere else (e.g. a linked task).
+  useEffect(() => onMetricActualsChanged(load), [load]);
 
   const rangeFor = (cadence) => ranges.find((r) => r.cadence === cadence);
 
@@ -65,8 +67,7 @@ export function useMetricProgress(rows) {
   }, [actuals, ranges.map((r) => `${r.cadence}:${r.start}:${r.end}`).join(',')]);
 
   const logProgress = useCallback(async (metricKey, delta) => {
-    await addMetricProgress(metricKey, delta, 'manual');
-    await load();
+    await addMetricProgress(metricKey, delta, 'manual'); // reloads via onMetricActualsChanged
   }, [load]);
 
   return { actualFor, lastUpdatedFor, logProgress, loading, error, reload: load };
