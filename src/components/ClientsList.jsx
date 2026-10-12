@@ -47,6 +47,7 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
   const [dueFilter, setDueFilter]           = useState('all');    // 'all' | 'overdue' | 'due_week' | 'due_month' | 'not_set'
   const [visitFilter, setVisitFilter]       = useState('all');    // 'all' | 'this_week' | '1_2_weeks' | '2_4_weeks' | '28_plus' | 'never'
   const [startersOnly, setStartersOnly]     = useState(false);
+  const [sortBy, setSortBy]                 = useState('name');   // 'name' | 'due_asc' | 'due_desc'
   const [addingPackageForId, setAddingPackageForId] = useState(null);
   const [newPackageName, setNewPackageName]         = useState('');
 
@@ -54,7 +55,7 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return clientsList.filter((c) => {
+    const rows = clientsList.filter((c) => {
       if (search && !(
         `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase().includes(q) ||
         c.email?.toLowerCase().includes(q) ||
@@ -76,7 +77,21 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
 
       return true;
     });
-  }, [clientsList, search, statusFilter, assignedFilter, dueFilter, visitFilter, startersOnly, today, pipelineIds]);
+
+    // 'name' keeps useAllClients' last_name order. Due-date sorts put clients
+    // with no date (incl. Group Program, which never has one) last either way;
+    // 'yyyy-MM-dd' strings compare correctly as plain strings.
+    if (sortBy === 'name') return rows;
+    const dir = sortBy === 'due_desc' ? -1 : 1;
+    const dueOf = (c) => (c.assigned_group ? null : c.next_program_due);
+    return [...rows].sort((a, b) => {
+      const da = dueOf(a), db = dueOf(b);
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return da.localeCompare(db) * dir;
+    });
+  }, [clientsList, search, statusFilter, assignedFilter, dueFilter, visitFilter, startersOnly, sortBy, today, pipelineIds]);
 
   const handlePackageChange = (clientId, value) => {
     if (value === ADD_PACKAGE_VALUE) { setAddingPackageForId(clientId); setNewPackageName(''); return; }
@@ -143,6 +158,12 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
             <option value="2_4_weeks">2-4 weeks ago</option>
             <option value="28_plus">28+ days</option>
             <option value="never">Never visited</option>
+          </select>
+
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className={`${selectClass} py-1.5`}>
+            <option value="name">Sort: Name</option>
+            <option value="due_asc">Sort: Programme due (soonest first)</option>
+            <option value="due_desc">Sort: Programme due (latest first)</option>
           </select>
 
           <label className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 cursor-pointer">
