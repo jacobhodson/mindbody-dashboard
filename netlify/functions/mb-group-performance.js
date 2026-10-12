@@ -41,7 +41,7 @@ import {
 //     product, not group classes — confirmed excluded (also nearly all $0
 //     in practice, bundled free with other purchases in this account)
 //   - "Individual Coaching & Open Gym Access" — "Individual", not group
-//   - "Kick Starter"/"3 session pass"/"14 Day Pass"/"Strong Dad/Mum
+//   - "Kick Starter"/"PT Kickstart"/"3 session pass"/"14 Day Pass"/"Strong Dad/Mum
 //     Transformation" — onboarding trial passes, a different pipeline
 // If any of these should actually count, this is the one place to widen.
 const GROUP_MEMBERSHIP_KEYWORDS = ['newstrength unlimited', 'newstrength 2x week', 'newstrength single session'];

@@ -9,6 +9,7 @@
  *   "3 Session Pass" | "14 Day Pass" | "Kick Starter" (the 4-week product's real
  *   Mindbody name — "4 Week Kickstarter" never appears in sales)
  *   "Strong Dad Transformation" | "Strong Mum Transformation"
+ *   "PT Kickstart" (partial match — any product name containing it)
  *
  * PLUS a third pathway that isn't a sales-product match at all:
  * "straight-in" members who joined directly onto a full membership with no
@@ -25,6 +26,9 @@
  * manually corrected via `onboarding_start_overrides` — a coach fixing a
  * mis-logged sale, or pushing a client's effective start later because they
  * were extended/started late. See getStartOverrides() below.
+ *
+ * Sessions = signed-in class visits PLUS appointments (PT/SP etc.) that have
+ * already started and weren't cancelled/no-showed — see getAppointments().
  *
  * Week 1–4 is bucketed by real Monday–Sunday calendar weeks (differenceInCalendarWeeks,
  * weekStartsOn: 1) rather than a rolling exact-7-day window from the start
@@ -51,6 +55,7 @@ const ONBOARDING_KEYWORDS = [
   'kick starter',
   'strong dad transformation',
   'strong mum transformation',
+  'pt kickstart',
 ];
 
 function isOnboardingProduct(name = '') {
@@ -62,6 +67,7 @@ function shortProduct(name = '') {
   const lower = name.toLowerCase();
   if (lower.includes('strong dad'))                            return 'Strong Dad';
   if (lower.includes('strong mum'))                            return 'Strong Mum';
+  if (lower.includes('pt kickstart'))                          return 'PT Kickstart'; // before 4-Week — "PT Kickstarter" would otherwise match 'kickstarter'
   if (lower.includes('4 week') || lower.includes('kickstarter') || lower.includes('kick starter')) return '4-Week';
   if (lower.includes('14 day'))                                return '14-Day';
   if (lower.includes('3 session'))                             return '3-Session';
@@ -99,6 +105,29 @@ async function getClasses(token, start, end) {
     const classes = (data.Classes || []).filter((c) => (c.TotalBooked || 0) > 0);
     all = all.concat(classes);
     if ((data.Classes || []).length < 200 || offset >= 1800) break;
+    offset += 200;
+  }
+  return all;
+}
+
+// Any appointment type counts (PT, SP, consults…). Status isn't required to
+// be 'Completed' — coaches don't always sign sessions off — so anything not
+// explicitly skipped counts once its start time has passed (same SKIP_STATUS
+// set as mb-pt-analytics.js).
+const APPT_SKIP_STATUS = new Set(['NoShow', 'LateCancelled', 'Cancelled']);
+
+async function getAppointments(token, start, end) {
+  let all = [], offset = 0;
+  while (true) {
+    const data = await mbGet('/appointment/staffappointments', token, {
+      StartDate: start,
+      EndDate:   end,
+      Limit:  200,
+      Offset: offset,
+    });
+    const appts = data.Appointments || [];
+    all = all.concat(appts);
+    if (appts.length < 200 || offset >= 1800) break;
     offset += 200;
   }
   return all;
@@ -197,16 +226,17 @@ export const handler = async (event) => {
     const fetchStart  = format(windowStart, "yyyy-MM-dd'T'00:00:00");
     const fetchEnd    = format(now,         "yyyy-MM-dd'T'23:59:59");
 
-    // Fetch sales, clients, classes, and start-date overrides in parallel to
-    // minimise wall-clock time
+    // Fetch sales, clients, classes, appointments, and start-date overrides
+    // in parallel to minimise wall-clock time
     console.log('[mb-onboarding] Starting parallel fetch…');
-    const [allSales, clientMap, allClasses, startOverrides] = await Promise.all([
+    const [allSales, clientMap, allClasses, allAppointments, startOverrides] = await Promise.all([
       getSales(token, fetchStart, fetchEnd),
       getAllClients(token),
       getClasses(token, fetchStart, fetchEnd),
+      getAppointments(token, fetchStart, fetchEnd),
       getStartOverrides(),
     ]);
-    console.log(`[mb-onboarding] Got ${allSales.length} sales, ${Object.keys(clientMap).length} clients, ${allClasses.length} classes, ${Object.keys(startOverrides).length} start overrides`);
+    console.log(`[mb-onboarding] Got ${allSales.length} sales, ${Object.keys(clientMap).length} clients, ${allClasses.length} classes, ${allAppointments.length} appointments, ${Object.keys(startOverrides).length} start overrides`);
 
     // ── Identify onboarding clients from sales ────────────────────────────
     const onboardingMap = {};  // clientId → { startDate, product, shortProduct }
@@ -307,6 +337,17 @@ export const handler = async (event) => {
           }
         }
       });
+    }
+
+    // ── Add appointments (PT/SP etc.) to the same per-client visit list ──
+    for (const appt of allAppointments) {
+      const id = String(appt.ClientId || '');
+      if (!id || !onboardingSet.has(id)) continue;
+      if (APPT_SKIP_STATUS.has(appt.Status) || !appt.StartDateTime) continue;
+      const apptDate = parseISO(appt.StartDateTime);
+      if (apptDate > now) continue; // booked but not happened yet
+      if (!visitsByClient[id]) visitsByClient[id] = [];
+      visitsByClient[id].push(apptDate);
     }
 
     // ── Count sessions per onboarding week (relative to each client's start date) ─

@@ -26,7 +26,7 @@ export function effectiveStatus(client) {
 //
 // `pipelineIds` (optional, a Set of `clients.mindbody_id`) is the set of
 // clients currently on a front-end offer/intro pass — 3-Session Pass,
-// 14-Day Pass, 4-Week Kickstarter, Strong Dad/Mum — per the Onboarding tab's
+// 14-Day Pass, 4-Week Kickstarter, PT Kickstart, Strong Dad/Mum — per the Onboarding tab's
 // own pipeline detection (see mb-onboarding.js; straight-in members are
 // deliberately excluded there, since they joined straight onto a full
 // membership and are correctly 'Active' already). Passed in by Dashboard.jsx
