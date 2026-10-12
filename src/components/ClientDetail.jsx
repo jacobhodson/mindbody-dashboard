@@ -1,15 +1,16 @@
 import { useState, useMemo } from 'react';
 import {
   ArrowLeft, Phone, Mail, Cake, MapPin, AlertTriangle, CalendarDays,
-  MessageSquare, ClipboardList, Trash2, Dumbbell, Activity,
+  MessageSquare, ClipboardList, Trash2, Dumbbell, Activity, Target,
 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, startOfDay } from 'date-fns';
 import { useClientDetail } from '../utils/useClientDetail.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useMembershipPackages } from '../utils/useMembershipPackages.js';
 import { renderFormatted } from '../utils/richText.js';
 import { GROUP_VALUE, caseloadSelectValue as caseloadValueFor, caseloadPayloadFor } from '../utils/caseload.js';
 import { SIMPLE_STATUSES, simplifiedStatus, hasStatusOverride } from '../utils/clientStatus.js';
+import { STRATEGY_FOLLOWUP_DAYS, strategyStatus } from '../utils/strategySessions.js';
 import RichTextField from './RichTextField.jsx';
 import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
 
@@ -45,8 +46,9 @@ function Field({ label, value, Icon }) {
 
 export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds, onBack }) {
   const {
-    client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, loading, error,
+    client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, strategySessions, loading, error,
     updateCaseload, updatePackage, updateNextProgramDue, updateStatusOverride, addNote, deleteNote,
+    addStrategySession, deleteStrategySession,
   } = useClientDetail(mindbodyId);
   const { staffList } = useAllStaff();
   const { packages, createPackage } = useMembershipPackages();
@@ -56,6 +58,11 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
   const [newPackageName, setNewPackageName] = useState('');
   const [visitsExpanded, setVisitsExpanded] = useState(false);
   const [contactLogsExpanded, setContactLogsExpanded] = useState(false);
+  const [strategyOpen, setStrategyOpen]       = useState(false);
+  const [strategyDate, setStrategyDate]       = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [strategyNotes, setStrategyNotes]     = useState('');
+  const [savingStrategy, setSavingStrategy]   = useState(false);
+  const [strategyExpanded, setStrategyExpanded] = useState(false);
 
   const staffNameById = useMemo(() => {
     const m = {};
@@ -87,6 +94,19 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
     setSavingNote(false);
   };
 
+  const submitStrategySession = async (e) => {
+    e.preventDefault();
+    if (!staff || !strategyDate) return;
+    setSavingStrategy(true);
+    const saved = await addStrategySession(staff.id, strategyDate, strategyNotes);
+    setSavingStrategy(false);
+    if (saved) {
+      setStrategyNotes('');
+      setStrategyDate(format(new Date(), 'yyyy-MM-dd'));
+      setStrategyOpen(false);
+    }
+  };
+
   const handleCaseloadChange = (value) => updateCaseload(caseloadPayloadFor(value));
 
   const handlePackageChange = async (value) => {
@@ -109,6 +129,8 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
   const scorecardStatus = scorecardStatusFor(avgWeekly);
   const visibleVisits = visitsExpanded ? visits : visits.slice(0, 10);
   const visibleContactLogs = contactLogsExpanded ? contactLogs : contactLogs.slice(0, 3);
+  const strategy = strategyStatus(client.last_strategy_session, startOfDay(new Date()));
+  const visibleStrategySessions = strategyExpanded ? strategySessions : strategySessions.slice(0, 3);
   const status = simplifiedStatus(client, pipelineIds);
   const overridden = hasStatusOverride(client);
   const autoTrial = !overridden && status === 'Trial';
@@ -274,6 +296,108 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
           <p className="text-xs text-gray-500">Avg 4wk: <span className="font-medium text-gray-800">{avgWeekly}</span> sessions/week</p>
         </div>
         <WeeklyAttendancePanel client={{ weeklyAttendance }} status={scorecardStatus} />
+      </div>
+
+      {/* Strategy sessions */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5">
+        <div className="flex items-start justify-between flex-wrap gap-2 mb-3">
+          <div>
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+              <Target className="h-4 w-4 text-gray-400" /> Strategy sessions
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {strategy.never
+                ? 'No strategy session logged yet'
+                : <>Last session {fmtDate(client.last_strategy_session)} · {strategy.days === 0 ? 'today' : `${strategy.days} day${strategy.days === 1 ? '' : 's'} ago`}</>}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {strategy.due && (
+              <span
+                title={`Over ${STRATEGY_FOLLOWUP_DAYS} days since the last strategy session (or never had one)`}
+                className="flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 border border-red-500/20"
+              >
+                <AlertTriangle className="h-3 w-3" /> Follow-up due
+              </span>
+            )}
+            {staff && !strategyOpen && (
+              <button
+                onClick={() => setStrategyOpen(true)}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 transition-colors"
+              >
+                Log strategy session
+              </button>
+            )}
+          </div>
+        </div>
+
+        {strategyOpen && (
+          <form onSubmit={submitStrategySession} className="space-y-2 mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <label className="flex items-center gap-2 text-xs text-gray-600">
+              Date completed
+              <input
+                type="date"
+                value={strategyDate}
+                max={format(new Date(), 'yyyy-MM-dd')}
+                onChange={(e) => setStrategyDate(e.target.value)}
+                className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </label>
+            <RichTextField value={strategyNotes} onChange={setStrategyNotes} placeholder="Session notes — goals, plan, next steps…" multiline />
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={savingStrategy || !strategyDate}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+              >
+                {savingStrategy ? 'Saving…' : 'Save session'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setStrategyOpen(false); setStrategyNotes(''); }}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+
+        {strategySessions.length > 0 && (
+          <ul className="space-y-3">
+            {visibleStrategySessions.map((s) => (
+              <li key={s.id} className="rounded-lg bg-gray-50 border border-gray-200 p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-medium text-gray-700">
+                    {fmtDate(s.session_date)} · {staffNameById[s.staff_id] || 'Staff'}
+                  </p>
+                  {(isManager || s.staff_id === staff?.id) && (
+                    <button
+                      onClick={() => { if (window.confirm('Delete this strategy session?')) deleteStrategySession(s.id); }}
+                      title="Delete session"
+                      className="text-gray-300 hover:text-red-600"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                {s.notes
+                  ? <p className="text-sm text-gray-800 whitespace-pre-wrap">{renderFormatted(s.notes)}</p>
+                  : <p className="text-xs text-gray-400">No notes</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {!strategyExpanded && strategySessions.length > 3 && (
+          <button onClick={() => setStrategyExpanded(true)} className="mt-3 text-xs font-medium text-emerald-600 hover:text-emerald-700">
+            Show all {strategySessions.length} sessions
+          </button>
+        )}
+        {strategyExpanded && strategySessions.length > 3 && (
+          <button onClick={() => setStrategyExpanded(false)} className="mt-3 text-xs font-medium text-gray-500 hover:text-gray-700">
+            Show fewer
+          </button>
+        )}
       </div>
 
       {/* Notes */}

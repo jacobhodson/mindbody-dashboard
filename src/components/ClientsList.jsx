@@ -7,6 +7,7 @@ import { useMembershipPackages } from '../utils/useMembershipPackages.js';
 import { GROUP_VALUE, caseloadSelectValue, caseloadPayloadFor } from '../utils/caseload.js';
 import { SIMPLE_STATUSES, simplifiedStatus, hasStatusOverride } from '../utils/clientStatus.js';
 import { isStarter } from '../utils/starters.js';
+import { STRATEGY_FOLLOWUP_DAYS, strategyStatus } from '../utils/strategySessions.js';
 
 const ADD_PACKAGE_VALUE = '__add__';
 
@@ -46,9 +47,10 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
   const [assignedFilter, setAssignedFilter] = useState('all');    // 'all' | 'unassigned' | 'group' | <staff id>
   const [packageFilter, setPackageFilter]   = useState('all');    // 'all' | 'none' | <package id>
   const [dueFilter, setDueFilter]           = useState('all');    // 'all' | 'overdue' | 'due_week' | 'due_month' | 'not_set'
+  const [strategyFilter, setStrategyFilter] = useState('all');    // 'all' | 'due' | 'recent' | 'never'
   const [visitFilter, setVisitFilter]       = useState('all');    // 'all' | 'this_week' | '1_2_weeks' | '2_4_weeks' | '28_plus' | 'never'
   const [startersOnly, setStartersOnly]     = useState(false);
-  const [sortBy, setSortBy]                 = useState('name');   // 'name' | 'due_asc' | 'due_desc'
+  const [sortBy, setSortBy]                 = useState('name');   // 'name' | 'due_asc' | 'due_desc' | 'strategy_asc' | 'strategy_desc'
   const [addingPackageForId, setAddingPackageForId] = useState(null);
   const [newPackageName, setNewPackageName]         = useState('');
 
@@ -75,6 +77,12 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
       // Group Program clients don't get individual programmes, so they have no
       // next-programme-due and never match a due bucket.
       if (dueFilter !== 'all' && (c.assigned_group || dueBucketFor(c.next_program_due, today) !== dueFilter)) return false;
+      if (strategyFilter !== 'all') {
+        const st = strategyStatus(c.last_strategy_session, today);
+        if (strategyFilter === 'due' && !st.due) return false;       // 90+ days or never
+        if (strategyFilter === 'recent' && st.due) return false;
+        if (strategyFilter === 'never' && !st.never) return false;
+      }
       if (visitFilter !== 'all' && visitBucketFor(c.last_visit_date, today) !== visitFilter) return false;
 
       if (startersOnly && !isStarter(c, today)) return false;
@@ -86,6 +94,21 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
     // with no date (incl. Group Program, which never has one) last either way;
     // 'yyyy-MM-dd' strings compare correctly as plain strings.
     if (sortBy === 'name') return rows;
+
+    // Strategy sorts: 'strategy_asc' = longest since last session first, with
+    // never-had-one at the very top (most overdue); 'strategy_desc' = most
+    // recent first, never-had-one last.
+    if (sortBy === 'strategy_asc' || sortBy === 'strategy_desc') {
+      const asc = sortBy === 'strategy_asc';
+      return [...rows].sort((a, b) => {
+        const da = a.last_strategy_session, db = b.last_strategy_session;
+        if (!da && !db) return 0;
+        if (!da) return asc ? -1 : 1;
+        if (!db) return asc ? 1 : -1;
+        return asc ? da.localeCompare(db) : db.localeCompare(da);
+      });
+    }
+
     const dir = sortBy === 'due_desc' ? -1 : 1;
     const dueOf = (c) => (c.assigned_group ? null : c.next_program_due);
     return [...rows].sort((a, b) => {
@@ -95,7 +118,7 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
       if (!db) return -1;
       return da.localeCompare(db) * dir;
     });
-  }, [clientsList, search, statusFilter, assignedFilter, packageFilter, dueFilter, visitFilter, startersOnly, sortBy, today, pipelineIds]);
+  }, [clientsList, search, statusFilter, assignedFilter, packageFilter, dueFilter, strategyFilter, visitFilter, startersOnly, sortBy, today, pipelineIds]);
 
   const handlePackageChange = (clientId, value) => {
     if (value === ADD_PACKAGE_VALUE) { setAddingPackageForId(clientId); setNewPackageName(''); return; }
@@ -161,6 +184,13 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
             <option value="not_set">Not set</option>
           </select>
 
+          <select value={strategyFilter} onChange={(e) => setStrategyFilter(e.target.value)} className={`${selectClass} py-1.5`}>
+            <option value="all">Strategy session: All</option>
+            <option value="due">Strategy: Due (90+ days or never)</option>
+            <option value="recent">Strategy: Within 90 days</option>
+            <option value="never">Strategy: Never</option>
+          </select>
+
           <select value={visitFilter} onChange={(e) => setVisitFilter(e.target.value)} className={`${selectClass} py-1.5`}>
             <option value="all">Last visit: All</option>
             <option value="this_week">This week</option>
@@ -174,6 +204,8 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
             <option value="name">Sort: Name</option>
             <option value="due_asc">Sort: Programme due (soonest first)</option>
             <option value="due_desc">Sort: Programme due (latest first)</option>
+            <option value="strategy_asc">Sort: Strategy session (oldest first)</option>
+            <option value="strategy_desc">Sort: Strategy session (most recent first)</option>
           </select>
 
           <label className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 cursor-pointer">
@@ -192,16 +224,17 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
               <th className="px-3 py-2 font-medium">Assigned to</th>
               <th className="px-3 py-2 font-medium">Package</th>
               <th className="px-3 py-2 font-medium">Next programme due</th>
+              <th className="px-3 py-2 font-medium">Last strategy session</th>
               <th className="px-3 py-2 font-medium">Last visit</th>
               <th className="w-8"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200/60">
             {loading && (
-              <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-400">Loading clients…</td></tr>
+              <tr><td colSpan={8} className="px-5 py-8 text-center text-gray-400">Loading clients…</td></tr>
             )}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-400">No clients match these filters</td></tr>
+              <tr><td colSpan={8} className="px-5 py-8 text-center text-gray-400">No clients match these filters</td></tr>
             )}
             {!loading && filtered.map((c) => {
               const needsPackage = isStarter(c, today) && !c.package_id;
@@ -306,6 +339,10 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
                   </td>
 
                   <td className="px-3 py-2.5 text-gray-600">
+                    <StrategyCell lastDate={c.last_strategy_session} today={today} />
+                  </td>
+
+                  <td className="px-3 py-2.5 text-gray-600">
                     {c.last_visit_date ? format(parseISO(c.last_visit_date), 'd MMM yyyy') : '—'}
                   </td>
                   <td className="px-3 py-2.5 text-gray-400">
@@ -318,5 +355,25 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
         </table>
       </div>
     </div>
+  );
+}
+
+function StrategyCell({ lastDate, today }) {
+  const st = strategyStatus(lastDate, today);
+  if (st.never) {
+    return <span className="text-xs text-red-600" title="No strategy session logged — follow-up due">Never</span>;
+  }
+  return (
+    <span className="flex items-center gap-1.5 whitespace-nowrap">
+      {format(parseISO(lastDate), 'd MMM yyyy')}
+      {st.due && (
+        <span
+          title={`${st.days} days ago — over ${STRATEGY_FOLLOWUP_DAYS} days, follow-up due`}
+          className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-600 border border-red-500/20"
+        >
+          {st.days}d
+        </span>
+      )}
+    </span>
   );
 }

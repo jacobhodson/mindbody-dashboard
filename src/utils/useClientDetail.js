@@ -38,6 +38,7 @@ export function useClientDetail(mindbodyId) {
   const [avgWeekly, setAvgWeekly]     = useState(0);
   const [notes, setNotes]             = useState([]);
   const [contactLogs, setContactLogs] = useState([]);
+  const [strategySessions, setStrategySessions] = useState([]); // desc by session_date
   const [linkedTasks, setLinkedTasks] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
@@ -54,22 +55,25 @@ export function useClientDetail(mindbodyId) {
 
       if (!clientRow) {
         setVisits([]); setWeeklyAttendance({ w1: 0, w2: 0, w3: 0, w4: 0 }); setAvgWeekly(0);
-        setNotes([]); setContactLogs([]); setLinkedTasks([]);
+        setNotes([]); setContactLogs([]); setLinkedTasks([]); setStrategySessions([]);
         return;
       }
 
-      const [classRes, apptRes, notesRes, contactRes, tasksRes] = await Promise.all([
+      const [classRes, apptRes, notesRes, contactRes, tasksRes, strategyRes] = await Promise.all([
         supabase.from('client_class_visits').select('*').eq('client_id', clientRow.id).order('class_date', { ascending: false }),
         supabase.from('client_appointment_visits').select('*').eq('client_id', clientRow.id).order('appointment_date', { ascending: false }),
         supabase.from('client_notes').select('*').eq('client_id', clientRow.id).order('created_at', { ascending: false }),
         supabase.from('contact_log').select('*').eq('client_id', clientRow.id).order('contacted_at', { ascending: false }),
         supabase.from('task_templates').select('*').eq('client_id', clientRow.id).order('created_at', { ascending: false }),
+        supabase.from('strategy_sessions').select('*').eq('client_id', clientRow.id)
+          .order('session_date', { ascending: false }).order('created_at', { ascending: false }),
       ]);
       if (classRes.error) throw classRes.error;
       if (apptRes.error) throw apptRes.error;
       if (notesRes.error) throw notesRes.error;
       if (contactRes.error) throw contactRes.error;
       if (tasksRes.error) throw tasksRes.error;
+      if (strategyRes.error) throw strategyRes.error;
 
       const merged = [
         ...(classRes.data || []).map((v) => ({
@@ -89,6 +93,7 @@ export function useClientDetail(mindbodyId) {
       setNotes(notesRes.data || []);
       setContactLogs(contactRes.data || []);
       setLinkedTasks(tasksRes.data || []);
+      setStrategySessions(strategyRes.data || []);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -156,8 +161,37 @@ export function useClientDetail(mindbodyId) {
     return true;
   }, []);
 
+  // Strategy sessions (see 20261012010000_strategy_sessions.sql). The DB
+  // trigger keeps clients.last_strategy_session current; mirror that locally
+  // so the profile's due flag updates without a reload.
+  const applyStrategySessions = useCallback((next) => {
+    const sorted = [...next].sort((a, b) =>
+      b.session_date.localeCompare(a.session_date) || b.created_at.localeCompare(a.created_at));
+    setStrategySessions(sorted);
+    setClient((prev) => (prev ? { ...prev, last_strategy_session: sorted[0]?.session_date || null } : prev));
+  }, []);
+
+  const addStrategySession = useCallback(async (staffId, sessionDate, notes) => {
+    if (!client) return null;
+    const { data, error: insErr } = await supabase
+      .from('strategy_sessions')
+      .insert({ client_id: client.id, staff_id: staffId, session_date: sessionDate, notes: notes?.trim() || null })
+      .select().single();
+    if (insErr) { setError(insErr.message); return null; }
+    applyStrategySessions([data, ...strategySessions]);
+    return data;
+  }, [client, strategySessions, applyStrategySessions]);
+
+  const deleteStrategySession = useCallback(async (id) => {
+    const { error: delErr } = await supabase.from('strategy_sessions').delete().eq('id', id);
+    if (delErr) { setError(delErr.message); return false; }
+    applyStrategySessions(strategySessions.filter((s) => s.id !== id));
+    return true;
+  }, [strategySessions, applyStrategySessions]);
+
   return {
-    client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, loading, error,
-    updateCaseload, updatePackage, updateNextProgramDue, updateStatusOverride, addNote, deleteNote, reload: load,
+    client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, strategySessions, loading, error,
+    updateCaseload, updatePackage, updateNextProgramDue, updateStatusOverride, addNote, deleteNote,
+    addStrategySession, deleteStrategySession, reload: load,
   };
 }
