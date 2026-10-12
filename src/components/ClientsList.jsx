@@ -44,6 +44,7 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
   const [statusFilter, setStatusFilter]     = useState('Active'); // 'Active' | 'Inactive' | 'Trial' | 'all'
 
   const [assignedFilter, setAssignedFilter] = useState('all');    // 'all' | 'unassigned' | 'group' | <staff id>
+  const [packageFilter, setPackageFilter]   = useState('all');    // 'all' | 'none' | <package id>
   const [dueFilter, setDueFilter]           = useState('all');    // 'all' | 'overdue' | 'due_week' | 'due_month' | 'not_set'
   const [visitFilter, setVisitFilter]       = useState('all');    // 'all' | 'this_week' | '1_2_weeks' | '2_4_weeks' | '28_plus' | 'never'
   const [startersOnly, setStartersOnly]     = useState(false);
@@ -68,6 +69,9 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
       if (assignedFilter === 'group' && !c.assigned_group) return false;
       if (assignedFilter !== 'all' && assignedFilter !== 'unassigned' && assignedFilter !== 'group' && c.assigned_staff_id !== assignedFilter) return false;
 
+      if (packageFilter === 'none' && c.package_id) return false;
+      if (packageFilter !== 'all' && packageFilter !== 'none' && c.package_id !== packageFilter) return false;
+
       // Group Program clients don't get individual programmes, so they have no
       // next-programme-due and never match a due bucket.
       if (dueFilter !== 'all' && (c.assigned_group || dueBucketFor(c.next_program_due, today) !== dueFilter)) return false;
@@ -91,7 +95,7 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
       if (!db) return -1;
       return da.localeCompare(db) * dir;
     });
-  }, [clientsList, search, statusFilter, assignedFilter, dueFilter, visitFilter, startersOnly, sortBy, today, pipelineIds]);
+  }, [clientsList, search, statusFilter, assignedFilter, packageFilter, dueFilter, visitFilter, startersOnly, sortBy, today, pipelineIds]);
 
   const handlePackageChange = (clientId, value) => {
     if (value === ADD_PACKAGE_VALUE) { setAddingPackageForId(clientId); setNewPackageName(''); return; }
@@ -141,6 +145,12 @@ export default function ClientsList({ onSelect, initialSearch, isManager, pipeli
             <option value="unassigned">Assigned to: Unassigned</option>
             <option value="group">Assigned to: Group Program</option>
             {staffList.map((s) => <option key={s.id} value={s.id}>Assigned to: {s.full_name}</option>)}
+          </select>
+
+          <select value={packageFilter} onChange={(e) => setPackageFilter(e.target.value)} className={`${selectClass} py-1.5`}>
+            <option value="all">Package: All</option>
+            <option value="none">Package: None</option>
+            {packages.map((p) => <option key={p.id} value={p.id}>Package: {p.name}</option>)}
           </select>
 
           <select value={dueFilter} onChange={(e) => setDueFilter(e.target.value)} className={`${selectClass} py-1.5`}>
