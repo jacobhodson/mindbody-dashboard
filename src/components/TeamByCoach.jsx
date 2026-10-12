@@ -33,6 +33,7 @@ export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, 
     const r = hasActivity(raw) ? raw : null;
     return {
       key, label,
+      activeClients: raw?.active_clients ?? null, // not gated on hasActivity — see valueForMetric
       ler:          r?.ler != null ? Number(r.ler) : null,
       ptRevenue:    r ? Number(r.pt_revenue) : null,
       ptSessions:   r ? r.pt_sessions : null,
@@ -61,6 +62,7 @@ export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, 
       key, label, isAvg: true,
       ler: avg('ler'), ptRevenue: avg('ptRevenue'), ptSessions: avg('ptSessions'),
       groupRevenue: avg('groupRevenue'), groupClasses: avg('groupClasses'), totalRevenue: avg('totalRevenue'), wages: avg('wages'),
+      activeClients: avg('activeClients'),
       source: null,
     };
   };
@@ -120,6 +122,7 @@ export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, 
               <th className="px-3 py-2 font-medium">Total Revenue</th>
               <th className="px-3 py-2 font-medium">Wages</th>
               <th className="px-3 py-2 font-medium">LER</th>
+              <th className="px-3 py-2 font-medium">Active Clients</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200/60">
@@ -135,6 +138,7 @@ export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, 
                   {fmtAUD(r.wages)}<span className="text-[10px] text-amber-600">{sourceMark(r.source)}</span>
                 </td>
                 <td className={`px-3 py-2 font-semibold tabular-nums ${lerTone(r.ler) || 'text-gray-900'}`}>{fmtLer(r.ler)}</td>
+                <td className="px-3 py-2 text-gray-600 tabular-nums">{r.activeClients != null ? (r.isAvg ? r.activeClients.toFixed(1) : r.activeClients) : '–'}</td>
               </tr>
             ))}
           </tbody>

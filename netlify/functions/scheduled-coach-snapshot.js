@@ -41,9 +41,14 @@
  * functions (same reasoning as scheduled-daily-refresh.js — a chain of
  * HTTP calls between scheduled functions risks a timeout chain).
  *
+ *  - Active clients: clients assigned to the coach on the Clients tab
+ *    (clients.assigned_staff_id) whose effective status is Active or
+ *    Trial — see activeClientsByStaff. Nightly run only: it's a point-in-
+ *    time count with no history behind it, so ?months= backfills leave it
+ *    alone (null for months before 2026-10).
+ *
  * Coach matching across sources: first-name substring against staff
- * full_name, same as LERTable.jsx always did (revisit if two coaches ever
- * share a first name).
+ * full_name (revisit if two coaches ever share a first name).
  */
 import { createClient } from '@supabase/supabase-js';
 // Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
@@ -349,6 +354,25 @@ async function loadStaffAndOverrides() {
   return { staffList, overrideFor };
 }
 
+// Active clients per coach, as of now. "Active" matches the Team tab's
+// Client Caseload total — src/utils/clientStatus.js's simplifiedStatus()
+// anything but 'Inactive': a manager override of Active/Trial counts, any
+// other override doesn't, and without one the Mindbody status must be
+// 'Active' (front-end-offer clients the UI shows as Trial are Mindbody-
+// Active, so they count here too).
+async function activeClientsByStaff() {
+  const { data, error } = await supabase
+    .from('clients').select('assigned_staff_id, status, status_override')
+    .not('assigned_staff_id', 'is', null).eq('assigned_group', false);
+  if (error) throw new Error(`clients: ${error.message}`);
+  const out = {};
+  for (const c of data || []) {
+    const active = c.status_override ? ['Active', 'Trial'].includes(c.status_override) : c.status === 'Active';
+    if (active) out[c.assigned_staff_id] = (out[c.assigned_staff_id] || 0) + 1;
+  }
+  return out;
+}
+
 async function safeRuns(windowStart, windowEnd) {
   try { return await loadPayRuns(windowStart, windowEnd); }
   catch (e) {
@@ -364,14 +388,16 @@ async function runNightly(token, now) {
   const prevStart  = startOfMonth(subMonths(now, 1));
   const bundleStart = [prevStart, subDays(now, RATE_WINDOW_DAYS), rollStart].reduce((a, b) => (a < b ? a : b));
 
-  const [{ staffList, overrideFor }, bundle, runs] = await Promise.all([
+  const [{ staffList, overrideFor }, bundle, runs, caseload] = await Promise.all([
     loadStaffAndOverrides(),
     buildBundle(token, bundleStart, now),
     safeRuns(rollStart < monthStart ? rollStart : monthStart, endOfMonth(now)),
+    activeClientsByStaff(),
   ]);
 
-  const monthRows   = buildMonthRows({ staffList, bundle, runs, overrideFor, monthStart, asOf: now });
-  const rollingRows = buildRollingRows({ staffList, bundle, runs, overrideFor, now });
+  const withCaseload = (row) => ({ ...row, active_clients: caseload[row.staff_id] || 0 });
+  const monthRows   = buildMonthRows({ staffList, bundle, runs, overrideFor, monthStart, asOf: now }).map(withCaseload);
+  const rollingRows = buildRollingRows({ staffList, bundle, runs, overrideFor, now }).map(withCaseload);
 
   const [m, r] = await Promise.all([
     supabase.from('ler_monthly').upsert(monthRows, { onConflict: 'staff_id,month' }),

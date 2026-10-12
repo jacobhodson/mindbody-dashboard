@@ -272,7 +272,17 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         )}
 
         {/* ─ Team ─ */}
-        {tab === 'team' && isManager && <TeamTab isManager={isManager} currentStaffId={staff?.id} />}
+        {tab === 'team' && isManager && (
+          <TeamTab
+            isManager={isManager}
+            currentStaffId={staff?.id}
+            ptData={data.pt}
+            ptLoading={loading.pt}
+            ptError={errors.pt}
+            pipelineIds={tradeOnboardingIds}
+            onViewClient={onViewClient}
+          />
+        )}
 
         {/* ─ Scorecard ─ */}
         {tab === 'scorecard' && <Scorecard staff={staff} isManager={isManager} />}

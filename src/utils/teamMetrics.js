@@ -8,6 +8,7 @@ export const TEAM_METRICS = [
   { key: 'groupRevenue', label: 'Group Revenue',    format: (n) => (n == null ? '–' : `$${Math.round(n).toLocaleString('en-AU')}`) },
   { key: 'groupClasses', label: 'Group Classes',    format: (n) => (n == null ? '–' : Math.round(n).toLocaleString('en-AU')) },
   { key: 'grossRevenue', label: 'Total Revenue',    format: (n) => (n == null ? '–' : `$${Math.round(n).toLocaleString('en-AU')}`) },
+  { key: 'activeClients', label: 'Active Clients',  format: (n) => (n == null ? '–' : (Math.round(n * 10) / 10).toLocaleString('en-AU')) },
   { key: 'taskRate',     label: 'Task Completion',  format: (n) => (n == null ? '–' : `${Math.round(n)}%`) },
 ];
 
@@ -45,6 +46,10 @@ export function hasActivity(row) {
 // everything except 'taskRate', which isn't in that table (see
 // useTeamTaskStats.js instead).
 export function valueForMetric(metricKey, snapshotRow) {
+  // Caseload is its own thing — a coach can have clients assigned in a month
+  // with no revenue yet — so it skips the hasActivity gate. Null for months
+  // before caseload snapshots began (2026-10).
+  if (metricKey === 'activeClients') return snapshotRow?.active_clients ?? null;
   if (!snapshotRow || !hasActivity(snapshotRow)) return null;
   switch (metricKey) {
     case 'ler':          return snapshotRow.ler;

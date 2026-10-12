@@ -2,7 +2,6 @@ import PTRedsList          from './PTRedsList.jsx';
 import OpenGymList         from './OpenGymList.jsx';
 import UncheckedSessionsList from './UncheckedSessionsList.jsx';
 import SessionCreditsList  from './SessionCreditsList.jsx';
-import CoachPerformanceTable from './CoachPerformanceTable.jsx';
 
 // ── Stats table ────────────────────────────────────────────────────────────
 function StatCell({ value, loading }) {
@@ -81,9 +80,6 @@ export default function PersonalTrainingTab({ data, loading, error, contactLog, 
     <div className="space-y-6">
       {/* Stats table */}
       <PTStatsTable stats={data?.stats} loading={loading} />
-
-      {/* Coach performance — signed-off sessions, hours, $ value */}
-      <CoachPerformanceTable data={data} loading={loading} error={error} isManager={isManager} />
 
       {/* PT Reds */}
       <PTRedsList data={data} loading={loading} error={error} contactLog={contactLog} onViewClient={onViewClient} />

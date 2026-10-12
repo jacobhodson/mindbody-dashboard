@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, LayoutGrid, UserRound, Wallet, CalendarDays } from 'lucide-react';
+import { Users, LayoutGrid, UserRound, Wallet, CalendarDays, Dumbbell, Contact } from 'lucide-react';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useCoachMonthlySnapshots } from '../utils/useCoachMonthlySnapshots.js';
 import { useCoachRolling30 } from '../utils/useCoachRolling30.js';
@@ -9,6 +9,8 @@ import TeamByMetric from './TeamByMetric.jsx';
 import TeamByCoach from './TeamByCoach.jsx';
 import TeamWages from './TeamWages.jsx';
 import GroupPerformanceTable from './GroupPerformanceTable.jsx';
+import CoachPerformanceTable from './CoachPerformanceTable.jsx';
+import ClientCaseload from './ClientCaseload.jsx';
 
 /**
  * Manager-only Team tab — coach performance in one place: LER, group class
@@ -21,6 +23,11 @@ import GroupPerformanceTable from './GroupPerformanceTable.jsx';
  *   - Group Classes (GroupPerformanceTable.jsx): live group-class $ value and
  *     session counts per coach for this/last week and month (moved here from
  *     the Finances tab, 2026-10-13)
+ *   - PT Sessions (CoachPerformanceTable.jsx): signed-off PT/semi-private
+ *     $ value and session counts per coach (moved here from the Personal
+ *     Training tab, 2026-10-13 — fed by the same mb-pt-analytics data)
+ *   - Client Caseload (ClientCaseload.jsx): active clients assigned to each
+ *     coach on the Clients tab
  *   - Wages (TeamWages.jsx): the wage LER uses per coach per month, with
  *     manual per-month overrides, plus each coach's Xero mapping and standing
  *     wage (moved here from the Finances tab's LER table, 2026-10-13)
@@ -32,9 +39,9 @@ import GroupPerformanceTable from './GroupPerformanceTable.jsx';
  * comes from task_completions directly (useTeamTaskStats.js) for the same
  * date range — it's already historical on its own, no snapshot needed.
  */
-export default function TeamTab({ isManager, currentStaffId }) {
+export default function TeamTab({ isManager, currentStaffId, ptData, ptLoading, ptError, pipelineIds, onViewClient }) {
   const year = new Date().getFullYear();
-  const [mode, setMode]     = useState('coach'); // 'coach' | 'metric' | 'group' | 'wages'
+  const [mode, setMode]     = useState('coach'); // 'coach' | 'metric' | 'group' | 'pt' | 'caseload' | 'wages'
   const [period, setPeriod] = useState(monthKeyFor(new Date())); // 'm:yyyy-MM' (By Coach's month)
 
   const { staffList, loading: staffLoading, reload: reloadStaff } = useAllStaff();
@@ -58,7 +65,7 @@ export default function TeamTab({ isManager, currentStaffId }) {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex rounded-lg border border-gray-300 overflow-hidden text-xs">
+          <div className="flex flex-wrap rounded-lg border border-gray-300 overflow-hidden text-xs">
             <button
               onClick={() => setMode('coach')}
               className={`flex items-center gap-1 px-3 py-1.5 font-medium transition-colors ${
@@ -84,6 +91,22 @@ export default function TeamTab({ isManager, currentStaffId }) {
               <CalendarDays className="h-3.5 w-3.5" /> Group Classes
             </button>
             <button
+              onClick={() => setMode('pt')}
+              className={`flex items-center gap-1 px-3 py-1.5 font-medium transition-colors ${
+                mode === 'pt' ? 'bg-emerald-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Dumbbell className="h-3.5 w-3.5" /> PT Sessions
+            </button>
+            <button
+              onClick={() => setMode('caseload')}
+              className={`flex items-center gap-1 px-3 py-1.5 font-medium transition-colors ${
+                mode === 'caseload' ? 'bg-emerald-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Contact className="h-3.5 w-3.5" /> Client Caseload
+            </button>
+            <button
               onClick={() => setMode('wages')}
               className={`flex items-center gap-1 px-3 py-1.5 font-medium transition-colors ${
                 mode === 'wages' ? 'bg-emerald-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
@@ -93,7 +116,7 @@ export default function TeamTab({ isManager, currentStaffId }) {
             </button>
           </div>
 
-          {/* By Metric and Wages show every month at once, and Group Classes has its own period tabs, so only By Coach needs a period */}
+          {/* By Metric and Wages show every month at once, Group Classes / PT Sessions have their own period tabs, and Caseload is a live count, so only By Coach needs a period */}
           {mode === 'coach' && (
             <select
               value={period}
@@ -109,6 +132,8 @@ export default function TeamTab({ isManager, currentStaffId }) {
       {mode === 'metric' && <TeamByMetric {...shared} />}
       {mode === 'coach' && <TeamByCoach {...shared} />}
       {mode === 'group' && <GroupPerformanceTable isManager={isManager} />}
+      {mode === 'pt' && <CoachPerformanceTable data={ptData} loading={ptLoading} error={ptError} isManager={isManager} />}
+      {mode === 'caseload' && <ClientCaseload staffList={staffList} pipelineIds={pipelineIds} onViewClient={onViewClient} />}
       {mode === 'wages' && (
         <TeamWages
           {...shared}
