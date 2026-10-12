@@ -11,8 +11,7 @@ export const TEAM_METRICS = [
   { key: 'taskRate',     label: 'Task Completion',  format: (n) => (n == null ? '–' : `${Math.round(n)}%`) },
 ];
 
-// LER colour bands, used everywhere an LER figure is shown (Finance LER table,
-// Team tab): 3x or more is green, 2.5x up to 3x is orange, under 2.5x is red.
+// LER colour bands, used everywhere an LER figure is shown (Team tab): 3x or more is green, 2.5x up to 3x is orange, under 2.5x is red.
 // Judged on the real value, not the rounded display, so 2.96x reads orange.
 export const LER_GREEN_AT  = 3;
 export const LER_ORANGE_AT = 2.5;

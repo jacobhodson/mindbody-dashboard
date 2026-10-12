@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, LayoutGrid, UserRound, Wallet } from 'lucide-react';
+import { Users, LayoutGrid, UserRound, Wallet, CalendarDays } from 'lucide-react';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useCoachMonthlySnapshots } from '../utils/useCoachMonthlySnapshots.js';
 import { useCoachRolling30 } from '../utils/useCoachRolling30.js';
@@ -8,6 +8,7 @@ import { monthKeyFor, monthOptions } from '../utils/snapshotPeriods.js';
 import TeamByMetric from './TeamByMetric.jsx';
 import TeamByCoach from './TeamByCoach.jsx';
 import TeamWages from './TeamWages.jsx';
+import GroupPerformanceTable from './GroupPerformanceTable.jsx';
 
 /**
  * Manager-only Team tab — coach performance in one place: LER, group class
@@ -17,8 +18,12 @@ import TeamWages from './TeamWages.jsx';
  *   - By Coach (TeamByCoach.jsx): pick one coach, see their whole year
  *   - By Metric (TeamByMetric.jsx): pick one metric, compare every coach —
  *     year average, last-3-months average and every month in one table
+ *   - Group Classes (GroupPerformanceTable.jsx): live group-class $ value and
+ *     session counts per coach for this/last week and month (moved here from
+ *     the Finances tab, 2026-10-13)
  *   - Wages (TeamWages.jsx): the wage LER uses per coach per month, with
- *     manual per-month overrides that feed LER here and on Finance
+ *     manual per-month overrides, plus each coach's Xero mapping and standing
+ *     wage (moved here from the Finances tab's LER table, 2026-10-13)
  *
  * By Coach's period is a calendar month (ler_monthly — a real per-coach-per-
  * month snapshot, every month of the year, wage overrides applied); By Metric
@@ -27,12 +32,12 @@ import TeamWages from './TeamWages.jsx';
  * comes from task_completions directly (useTeamTaskStats.js) for the same
  * date range — it's already historical on its own, no snapshot needed.
  */
-export default function TeamTab({ isManager }) {
+export default function TeamTab({ isManager, currentStaffId }) {
   const year = new Date().getFullYear();
-  const [mode, setMode]     = useState('coach'); // 'coach' | 'metric' | 'wages'
+  const [mode, setMode]     = useState('coach'); // 'coach' | 'metric' | 'group' | 'wages'
   const [period, setPeriod] = useState(monthKeyFor(new Date())); // 'm:yyyy-MM' (By Coach's month)
 
-  const { staffList, loading: staffLoading } = useAllStaff();
+  const { staffList, loading: staffLoading, reload: reloadStaff } = useAllStaff();
   const { rows: monthlyRows, loading: monthlyLoading, reload: reloadMonthly } = useCoachMonthlySnapshots(isManager, year);
   const { latest: rollingLatest, loading: rollingLoading, reload: reloadRolling } = useCoachRolling30(isManager);
   const { statsFor, loading: tasksLoading } = useTeamTaskStats(isManager);
@@ -71,6 +76,14 @@ export default function TeamTab({ isManager }) {
               <LayoutGrid className="h-3.5 w-3.5" /> By Metric
             </button>
             <button
+              onClick={() => setMode('group')}
+              className={`flex items-center gap-1 px-3 py-1.5 font-medium transition-colors ${
+                mode === 'group' ? 'bg-emerald-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <CalendarDays className="h-3.5 w-3.5" /> Group Classes
+            </button>
+            <button
               onClick={() => setMode('wages')}
               className={`flex items-center gap-1 px-3 py-1.5 font-medium transition-colors ${
                 mode === 'wages' ? 'bg-emerald-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
@@ -80,7 +93,7 @@ export default function TeamTab({ isManager }) {
             </button>
           </div>
 
-          {/* By Metric and Wages show every month at once, so only By Coach needs a period */}
+          {/* By Metric and Wages show every month at once, and Group Classes has its own period tabs, so only By Coach needs a period */}
           {mode === 'coach' && (
             <select
               value={period}
@@ -95,8 +108,16 @@ export default function TeamTab({ isManager }) {
 
       {mode === 'metric' && <TeamByMetric {...shared} />}
       {mode === 'coach' && <TeamByCoach {...shared} />}
+      {mode === 'group' && <GroupPerformanceTable isManager={isManager} />}
       {mode === 'wages' && (
-        <TeamWages {...shared} isManager={isManager} reloadMonthly={reloadMonthly} reloadRolling={reloadRolling} />
+        <TeamWages
+          {...shared}
+          isManager={isManager}
+          currentStaffId={currentStaffId}
+          reloadStaff={reloadStaff}
+          reloadMonthly={reloadMonthly}
+          reloadRolling={reloadRolling}
+        />
       )}
     </div>
   );

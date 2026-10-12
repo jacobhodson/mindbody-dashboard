@@ -71,8 +71,7 @@ export default function TeamByMetric({ staffList, monthlyRows, rollingLatest, st
 
   // Team LER — total revenue ÷ total wages across every coach, NOT an average
   // of the coaches' own LERs. A period covering several months (year / last 3)
-  // pools those months' totals the same way. Same maths as the Finance LER
-  // table's Team Total, so the two always agree for a given month.
+  // pools those months' totals the same way.
   const teamLerFor = (keys) => {
     let revenue = 0, wages = 0, any = false;
     for (const key of keys) {

@@ -37,7 +37,7 @@ function Row({ person, available, employeesReady, onMapped }) {
     const { error: err } = await supabase.from('staff').update({ xero_employee_id: selected }).eq('id', person.id);
     if (err) { setError(err.message); setSaving(false); return; }
     // Re-run the snapshot in the background so their wages fill in now rather
-    // than at the nightly run (same as mapping from the Finance LER table).
+    // than at the nightly run (same as mapping from Team → Wages).
     fetch('/api/scheduled-coach-snapshot').catch(() => {});
     onMapped();
   };
@@ -113,7 +113,7 @@ function Panel({ unmapped, takenIds, onMapped }) {
 
       {loadError && (
         <p className="text-xs text-red-600 mb-3">
-          Couldn't load Xero employees ({loadError}) — check Xero is connected on the Finance tab, then map them from Finance → LER.
+          Couldn't load Xero employees ({loadError}) — check Xero is connected on the Finance tab, then map them from Team → Wages.
         </p>
       )}
       {!employees && !loadError && <p className="text-xs text-gray-400 mb-3">Loading Xero employees…</p>}
@@ -133,7 +133,7 @@ function Notice() {
 
   if (loading || overridesLoading) return null;
 
-  // Same idea as the "not mapped" badge on the Finance LER table: a coach with
+  // Same idea as the "not mapped" badge on Team → Wages: a coach with
   // neither a Xero mapping nor a standing wage override has no wages at all.
   const unmapped = staffList.filter((s) => s.active !== false && s.is_coach !== false && !s.xero_employee_id && !overrides[s.id]);
   if (unmapped.length === 0) return null;
