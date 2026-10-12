@@ -151,6 +151,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
           atRiskCount={atRiskCount}
           mobileOpen={mobileNavOpen}
           onCloseMobile={() => setMobileNavOpen(false)}
+          isManager={isManager}
         />
 
         {/* ── Tab content ── */}

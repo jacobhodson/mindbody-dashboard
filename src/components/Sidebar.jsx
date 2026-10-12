@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ChevronsLeft, ChevronsRight, X } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, ChevronDown, ExternalLink, Link2, Plus, Trash2, X } from 'lucide-react';
+import { useQuickLinks } from '../utils/useQuickLinks.js';
 
 /**
  * Two independent responsive behaviors:
@@ -9,7 +10,7 @@ import { ChevronsLeft, ChevronsRight, X } from 'lucide-react';
  *  - Desktop (>= md): inline in the layout as before, with its own
  *    collapse-to-icons toggle (persisted locally per browser).
  */
-export default function Sidebar({ tabs, activeTab, onSelect, atRiskCount, mobileOpen, onCloseMobile }) {
+export default function Sidebar({ tabs, activeTab, onSelect, atRiskCount, mobileOpen, onCloseMobile, isManager }) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('sidebar-collapsed') === '1'; } catch { return false; }
   });
@@ -67,6 +68,12 @@ export default function Sidebar({ tabs, activeTab, onSelect, atRiskCount, mobile
               )}
             </button>
           ))}
+
+          <QuickLinks
+            collapsed={collapsed}
+            onExpandSidebar={() => setCollapsed(false)}
+            isManager={isManager}
+          />
         </div>
 
         <button
@@ -77,5 +84,127 @@ export default function Sidebar({ tabs, activeTab, onSelect, atRiskCount, mobile
         </button>
       </nav>
     </>
+  );
+}
+
+/**
+ * Expandable "Quick links" section under the tabs. Open/closed is remembered
+ * per browser like the collapse toggle. Managers get add/remove controls.
+ * In the collapsed (icons-only) desktop sidebar, clicking the icon expands
+ * the sidebar and opens the list rather than trying to fit links into 64px.
+ */
+function QuickLinks({ collapsed, onExpandSidebar, isManager }) {
+  const { links, addLink, removeLink } = useQuickLinks();
+  const [open, setOpen] = useState(() => {
+    try { return localStorage.getItem('quick-links-open') === '1'; } catch { return false; }
+  });
+  const [adding, setAdding] = useState(false);
+  const [label, setLabel]   = useState('');
+  const [url, setUrl]       = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem('quick-links-open', open ? '1' : '0'); } catch { /* ignore */ }
+  }, [open]);
+
+  const toggle = () => {
+    if (collapsed) { onExpandSidebar(); setOpen(true); return; }
+    setOpen((o) => !o);
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!label.trim() || !url.trim()) return;
+    setSaving(true);
+    const added = await addLink(label, url);
+    setSaving(false);
+    if (added) { setLabel(''); setUrl(''); setAdding(false); }
+  };
+
+  const remove = (link) => {
+    if (window.confirm(`Remove "${link.label}" from Quick links?`)) removeLink(link.id);
+  };
+
+  const inputClass = 'w-full rounded-md border border-gray-300 bg-gray-50 px-2 py-1 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500';
+
+  return (
+    <div className="mt-3 border-t border-gray-200 pt-3">
+      <button
+        onClick={toggle}
+        title={collapsed ? 'Quick links' : undefined}
+        aria-expanded={open && !collapsed}
+        className={`flex w-full items-center gap-2.5 rounded-lg border-l-2 border-transparent px-3 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 ${
+          collapsed ? 'md:justify-center' : ''
+        }`}
+      >
+        <Link2 className="h-4 w-4 shrink-0" />
+        <span className={`flex-1 text-left ${collapsed ? 'md:hidden' : ''}`}>Quick links</span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''} ${collapsed ? 'md:hidden' : ''}`} />
+      </button>
+
+      {open && (
+        <div className={`mt-1 space-y-0.5 pl-3 ${collapsed ? 'md:hidden' : ''}`}>
+          {links.length === 0 && !adding && (
+            <p className="px-3 py-1.5 text-xs text-gray-400">
+              {isManager ? 'No links yet — add one below.' : 'No links yet.'}
+            </p>
+          )}
+
+          {links.map((link) => (
+            <div key={link.id} className="group flex items-center rounded-lg hover:bg-gray-100">
+              <a
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={link.url}
+                className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
+              >
+                <span className="truncate">{link.label}</span>
+                <ExternalLink className="h-3 w-3 shrink-0 text-gray-400" />
+              </a>
+              {isManager && (
+                <button
+                  onClick={() => remove(link)}
+                  title="Remove link"
+                  className="mr-1 rounded p-1 text-gray-400 opacity-0 transition-opacity hover:text-red-600 focus:opacity-100 group-hover:opacity-100"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          ))}
+
+          {isManager && (adding ? (
+            <form onSubmit={submit} className="space-y-1.5 px-3 py-2">
+              <input autoFocus value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Display text, e.g. Newstrength Website" aria-label="Display text" className={inputClass} />
+              <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Link, e.g. www.newstrength.com.au" aria-label="Link" className={inputClass} />
+              <div className="flex gap-1.5">
+                <button
+                  type="submit"
+                  disabled={saving || !label.trim() || !url.trim()}
+                  className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {saving ? 'Adding…' : 'Add'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAdding(false); setLabel(''); setUrl(''); }}
+                  className="rounded-md px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              className="flex w-full items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-500/10"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add link
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
