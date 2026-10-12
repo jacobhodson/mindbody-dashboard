@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Check, X as XIcon } from 'lucide-react';
 import { useScorecard } from '../utils/useScorecard.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
-import { periodStartForOffset, periodLabel } from '../utils/periods.js';
+import { format } from 'date-fns';
+import { periodStartForOffset, periodEndFor, periodLabel } from '../utils/periods.js';
 import WinTheWeek from './WinTheWeek.jsx';
 import Scoreboard from './Scoreboard.jsx';
 
@@ -16,6 +17,11 @@ export default function Scorecard({ staff, isManager }) {
   const [cadence, setCadence] = useState('weekly');
   const [offset, setOffset]   = useState(0);
   const periodStart = periodStartForOffset(cadence, offset);
+  // The Scoreboard follows this navigator: it anchors on the selected
+  // period's last day (or today, while that period is still in progress).
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const periodEnd = periodEndFor(cadence, periodStart);
+  const scoreboardAnchor = periodEnd < today ? periodEnd : today;
 
   const { staffList } = useAllStaff();
   const staffNameById = useMemo(() => {
@@ -134,7 +140,12 @@ export default function Scorecard({ staff, isManager }) {
             )}
           </div>
 
-          <Scoreboard staff={staff} isManager={isManager} />
+          <Scoreboard
+            staff={staff}
+            isManager={isManager}
+            anchor={scoreboardAnchor}
+            defaultView={cadence === 'monthly' ? 'monthly' : 'weekly'}
+          />
 
           <WinTheWeek staff={staff} isManager={isManager} />
         </>

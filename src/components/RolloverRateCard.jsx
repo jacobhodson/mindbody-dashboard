@@ -23,7 +23,11 @@ export default function RolloverRateCard({ cadenceLabel, rollovers, decided, pct
 
       <div className="mt-2.5">
         {decided === 0 ? (
-          <p className="text-xs text-gray-400 py-1.5">No rollover decisions {cadenceLabel === 'This week' ? 'this week' : 'this month'} yet</p>
+          <p className="text-xs text-gray-400 py-1.5">
+            {cadenceLabel === 'This week' ? 'No rollover decisions this week yet'
+              : cadenceLabel === 'This month' ? 'No rollover decisions this month yet'
+              : 'No rollover decisions in this period'}
+          </p>
         ) : (
           <>
             <div className="flex items-baseline justify-between">

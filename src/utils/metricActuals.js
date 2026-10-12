@@ -22,9 +22,12 @@ export function onMetricActualsChanged(callback) {
   return () => window.removeEventListener(CHANGED_EVENT, callback);
 }
 
-export async function addMetricProgress(metricKey, delta, source = 'manual') {
+// `date` (yyyy-MM-dd, default today) lets the Scoreboard log into a past
+// week/month — it passes that period's last day (or today, if the period is
+// still in progress).
+export async function addMetricProgress(metricKey, delta, source = 'manual', date = null) {
   if (!metricKey || !delta) return;
-  const today = format(new Date(), 'yyyy-MM-dd');
+  const today = date || format(new Date(), 'yyyy-MM-dd');
 
   const { data: existing, error: selErr } = await supabase
     .from('metric_actuals').select('id, value')
@@ -45,6 +48,49 @@ export async function addMetricProgress(metricKey, delta, source = 'manual') {
     const { error } = await supabase.from('metric_actuals')
       .insert({ metric_key: metricKey, metric_date: today, value: delta, staff_id: null, source });
     if (error) throw new Error(error.message);
+  }
+  window.dispatchEvent(new Event(CHANGED_EVENT));
+}
+
+/**
+ * Sets a metric's total for [start, end] (yyyy-MM-dd, inclusive) to
+ * `newTotal` — the Scoreboard table's manager edit. metric_actuals is a
+ * daily ledger that weeks/months are summed from, so this adjusts daily
+ * rows rather than storing a period total: an increase goes on the
+ * period's last day (or today, if still in progress); a decrease is taken
+ * off the most recent days first, never pushing a day below zero. Because
+ * months are summed from the same days, editing a week also moves the
+ * month it sits in (and vice versa) — which is what keeps them consistent.
+ */
+export async function setMetricTotal(metricKey, start, end, newTotal) {
+  const target = Math.max(0, Number(newTotal) || 0);
+  const { data: rows, error: selErr } = await supabase
+    .from('metric_actuals').select('id, value, metric_date')
+    .eq('metric_key', metricKey).is('staff_id', null)
+    .gte('metric_date', start).lte('metric_date', end)
+    .order('metric_date', { ascending: false });
+  if (selErr) throw new Error(selErr.message);
+
+  const current = (rows || []).reduce((sum, r) => sum + Number(r.value), 0);
+  const delta = target - current;
+  if (!delta) return;
+
+  if (delta > 0) {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    await addMetricProgress(metricKey, delta, 'manual', end < today ? end : today);
+    return;
+  }
+
+  let remaining = -delta;
+  for (const row of rows) {
+    if (remaining <= 0) break;
+    const take = Math.min(Number(row.value), remaining);
+    if (take <= 0) continue;
+    const { error } = await supabase.from('metric_actuals')
+      .update({ value: Number(row.value) - take, source: 'manual', synced_at: new Date().toISOString() })
+      .eq('id', row.id);
+    if (error) throw new Error(error.message);
+    remaining -= take;
   }
   window.dispatchEvent(new Event(CHANGED_EVENT));
 }

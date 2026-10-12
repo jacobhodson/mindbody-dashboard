@@ -51,5 +51,17 @@ export function useRolloverStats() {
     return { rollovers, decided, pct };
   }, [decisions]);
 
-  return { statsFor, loading, reload: load };
+  // Same, for an arbitrary [start, end] (yyyy-MM-dd, inclusive) — the
+  // Scoreboard's past periods and rolling-30-day windows.
+  const statsForRange = useCallback((start, end) => {
+    const inRange = decisions.filter((d) => {
+      const day = format(parseISO(d.decided_at), 'yyyy-MM-dd');
+      return day >= start && day <= end;
+    });
+    const rollovers = inRange.filter((d) => d.decision === 'rollover').length;
+    const decided   = inRange.length;
+    return { rollovers, decided, pct: decided > 0 ? Math.round((rollovers / decided) * 100) : null };
+  }, [decisions]);
+
+  return { statsFor, statsForRange, loading, reload: load };
 }

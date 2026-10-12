@@ -83,11 +83,13 @@ function ProgressRow({ cadenceLabel, target, actual, lastUpdated, canUpdate, onL
 export default function MetricTargetCard({
   metricKey, label, weeklyTarget, monthlyTarget, direction, owners, activeCadence, compact,
   staffList, isManager, staff, actualFor, lastUpdatedFor, onLog, onEdit, onArchive,
-  showManageControls = true,
+  showManageControls = true, periodLabel, managerOnlyUpdates = false,
 }) {
   const isMindbody = MINDBODY_METRIC_KEYS.has(metricKey);
   const ownerNames = owners.map((id) => staffList.find((s) => s.id === id)?.full_name).filter(Boolean).join('/');
-  const canUpdate = !isMindbody && (isManager || owners.includes(staff?.id));
+  // managerOnlyUpdates: the Scoreboard sets this when viewing a past period,
+  // so only managers can change history; owners still log the current one.
+  const canUpdate = !isMindbody && (isManager || (!managerOnlyUpdates && owners.includes(staff?.id)));
 
   const primaryTarget = compact ? (weeklyTarget || monthlyTarget) : null;
   const primaryLabel  = compact ? (primaryTarget === weeklyTarget ? 'This week' : 'This month') : null;
@@ -99,8 +101,8 @@ export default function MetricTargetCard({
   const rows = compact
     ? [primaryTarget ? { cadenceLabel: primaryLabel, target: primaryTarget } : null].filter((r) => r?.target)
     : [
-        !activeCadence || activeCadence === 'weekly'  ? { cadenceLabel: 'This week',  target: weeklyTarget }  : null,
-        !activeCadence || activeCadence === 'monthly' ? { cadenceLabel: 'This month', target: monthlyTarget } : null,
+        !activeCadence || activeCadence === 'weekly'  ? { cadenceLabel: periodLabel || 'This week',  target: weeklyTarget }  : null,
+        !activeCadence || activeCadence === 'monthly' ? { cadenceLabel: periodLabel || 'This month', target: monthlyTarget } : null,
       ].filter((r) => r?.target);
 
   // Nothing to show for the tab that's currently selected (this metric only
