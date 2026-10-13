@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { periodStartForOffset, periodEndFor, periodLabel } from '../utils/periods.js';
 import WinTheWeek from './WinTheWeek.jsx';
 import Scoreboard from './Scoreboard.jsx';
+import LeadMetrics from './LeadMetrics.jsx';
 
 const CADENCES = [
   { key: 'daily',   label: 'Daily' },
@@ -146,6 +147,8 @@ export default function Scorecard({ staff, isManager }) {
             anchor={scoreboardAnchor}
             defaultView={cadence === 'monthly' ? 'monthly' : 'weekly'}
           />
+
+          <LeadMetrics />
 
           <WinTheWeek staff={staff} isManager={isManager} />
         </>

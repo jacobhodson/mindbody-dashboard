@@ -6,6 +6,7 @@ import Sidebar             from './Sidebar.jsx';
 import Home                from './Home.jsx';
 import Scorecard           from './Scorecard.jsx';
 import StatsGrid          from './StatsGrid.jsx';
+import ClientMixSnapshot  from './ClientMixSnapshot.jsx';
 import AttendanceChart    from './AttendanceChart.jsx';
 import NoShowsList        from './NoShowsList.jsx';
 import SuspensionsList    from './SuspensionsList.jsx';
@@ -170,6 +171,12 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             <StatsGrid
               attendance={data.attendance}
               clientAnalytics={data.clientAnalytics}
+              loading={loading}
+            />
+            <ClientMixSnapshot
+              clientAnalytics={data.clientAnalytics}
+              onboarding={data.onboarding}
+              decisions={decisions}
               loading={loading}
             />
             <AttendanceChart />
