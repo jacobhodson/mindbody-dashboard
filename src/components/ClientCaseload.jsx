@@ -31,6 +31,7 @@ export default function ClientCaseload({ staffList, pipelineIds, onViewClient })
     buckets.get(key)[status === 'Trial' ? 'trial' : 'active'].push(c);
   }
   const bucketFor = (key) => buckets.get(key) || { active: [], trial: [] };
+  const total = (r) => r.active.length + r.trial.length;
 
   // Every active coach, plus anyone else who still has active clients
   // assigned (e.g. a staff member who's since been marked inactive).
@@ -46,7 +47,6 @@ export default function ClientCaseload({ staffList, pipelineIds, onViewClient })
     { key: UNASSIGNED, label: 'Unassigned', muted: true, ...bucketFor(UNASSIGNED) },
   ];
 
-  const total = (r) => r.active.length + r.trial.length;
   const coachActive = coachRows.reduce((n, r) => n + total(r), 0);
   const coachTrial  = coachRows.reduce((n, r) => n + r.trial.length, 0);
   const coachCount  = coachRows.filter((r) => staffList.find((s) => s.id === r.key && s.active !== false && s.is_coach !== false)).length;
