@@ -4,6 +4,7 @@ import { Users2 } from 'lucide-react';
 import OnboardingBoard   from './OnboardingBoard.jsx';
 import OnboardingReds    from './OnboardingReds.jsx';
 import OnboardingRemoved from './OnboardingRemoved.jsx';
+import OnboardingActionsManager from './OnboardingActionsManager.jsx';
 import { useOnboardingTasks } from '../utils/useOnboardingTasks.js';
 import { useOnboardingTaskTemplates } from '../utils/useOnboardingTaskTemplates.js';
 import { useOnboardingStartOverrides } from '../utils/useOnboardingStartOverrides.js';
@@ -34,7 +35,7 @@ export default function OnboardingTab({
   isManager,
   refreshOnboarding,
 }) {
-  const { templates: taskTemplates, tasksByWeek } = useOnboardingTaskTemplates();
+  const { templates: taskTemplates, tasksByWeek, reload: reloadTemplates } = useOnboardingTaskTemplates();
   const { isComplete, toggleTask } = useOnboardingTasks(staff, taskTemplates);
   const { clientsList, updateCaseload } = useAllClients();
   const { staffList } = useAllStaff();
@@ -238,6 +239,9 @@ export default function OnboardingTab({
       {removedClients.length > 0 && (
         <OnboardingRemoved clients={removedClients} setDecision={setDecision} />
       )}
+
+      {/* Manager-only editor for the per-week checklist itself */}
+      <OnboardingActionsManager isManager={isManager} onChanged={reloadTemplates} />
     </div>
   );
 }
