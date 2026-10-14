@@ -66,6 +66,10 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
   const [playbookPageId, setPlaybookPageId] = useState(null);
   const openPlaybookPage = useCallback((id) => { setPlaybookPageId(id); setTab('playbook'); }, []);
 
+  // Which rock's full page is open (lifted so Meetings' Rock Review can link to one).
+  const [openRockId, setOpenRockId] = useState(null);
+  const openRock = useCallback((id) => { setOpenRockId(id || null); setTab('rocks'); }, []);
+
   // All onboarding clients (from each week column)
   const allOnboardingClients = useMemo(() => [
     ...(data.onboarding?.week1 || []),
@@ -161,7 +165,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         <Sidebar
           tabs={TABS.filter((t) => !t.managerOnly || isManager)}
           activeTab={tab}
-          onSelect={setTab}
+          onSelect={(key) => { if (key === 'rocks') setOpenRockId(null); setTab(key); }}
           atRiskCount={atRiskCount}
           mobileOpen={mobileNavOpen}
           onCloseMobile={() => setMobileNavOpen(false)}
@@ -311,10 +315,10 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         {tab === 'scorecard' && <Scorecard staff={staff} isManager={isManager} />}
 
         {/* ─ Rocks ─ */}
-        {tab === 'rocks' && <RocksTab staff={staff} isManager={isManager} />}
+        {tab === 'rocks' && <RocksTab staff={staff} isManager={isManager} openRockId={openRockId} onOpenRockChange={setOpenRockId} />}
 
         {/* ─ Meetings ─ */}
-        {tab === 'meetings' && <MeetingsTab staff={staff} isManager={isManager} onOpenRocks={() => setTab('rocks')} />}
+        {tab === 'meetings' && <MeetingsTab staff={staff} isManager={isManager} onOpenRocks={openRock} />}
 
         {/* ─ Playbook ─ */}
         {tab === 'playbook' && (

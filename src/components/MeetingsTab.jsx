@@ -330,7 +330,11 @@ function RockReview({ staff, staffList, isManager, onOpenRocks }) {
               const editable = canEditRock(rock, staff, isManager);
               return (
                 <tr key={rock.id}>
-                  <td className="py-2 pr-3 text-gray-900">{rock.title}</td>
+                  <td className="py-2 pr-3">
+                    {onOpenRocks
+                      ? <button onClick={() => onOpenRocks(rock.id)} className="text-left text-gray-900 hover:text-emerald-700 hover:underline">{rock.title}</button>
+                      : <span className="text-gray-900">{rock.title}</span>}
+                  </td>
                   <td className="py-2 pr-3 text-gray-600">{nameById[rock.owner_staff_id] || '—'}</td>
                   <td className="py-2 pr-3 tabular-nums text-gray-600">{p.done}/{p.total}</td>
                   <td className="py-2 pr-2">
@@ -362,7 +366,7 @@ function RockReview({ staff, staffList, isManager, onOpenRocks }) {
         </table>
       </div>
       {onOpenRocks && (
-        <button onClick={onOpenRocks} className="mt-3 flex items-center gap-1 text-xs text-emerald-700 hover:underline">
+        <button onClick={() => onOpenRocks(null)} className="mt-3 flex items-center gap-1 text-xs text-emerald-700 hover:underline">
           Open Rocks <ExternalLink className="h-3 w-3" />
         </button>
       )}

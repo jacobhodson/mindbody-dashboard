@@ -104,6 +104,7 @@ function TaskRow({ task, done, canToggle, canEdit, assigneeName, source, staffLi
       <div className="min-w-0 flex-1">
         <p className={`text-sm ${done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{task.label}</p>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
+          {!done && task.board_status === 'doing' && <span className="rounded bg-sky-50 px-1.5 py-0.5 font-medium text-sky-700">Doing</span>}
           <span>{assigneeName || 'Unassigned'}</span>
           {task.due_date && (
             <span className={overdue ? 'font-medium text-red-600' : ''}>
@@ -142,7 +143,7 @@ function TaskRow({ task, done, canToggle, canEdit, assigneeName, source, staffLi
   );
 }
 
-export function TaskForm({ staffList, initial, submitLabel, onSubmit, onCancel }) {
+export function TaskForm({ staffList, initial, submitLabel, onSubmit, onCancel, stacked = false }) {
   const [label, setLabel]       = useState(initial.label);
   const [assignee, setAssignee] = useState(initial.assignee);
   const [dueDate, setDueDate]   = useState(initial.due_date || '');
@@ -158,7 +159,7 @@ export function TaskForm({ staffList, initial, submitLabel, onSubmit, onCancel }
   };
 
   return (
-    <form onSubmit={submit} className="mt-2 flex flex-col gap-1.5 sm:flex-row sm:items-center">
+    <form onSubmit={submit} className={`mt-2 flex flex-col gap-1.5 ${stacked ? '' : 'sm:flex-row sm:items-center'}`}>
       <input
         autoFocus
         value={label}
@@ -179,7 +180,7 @@ export function TaskForm({ staffList, initial, submitLabel, onSubmit, onCancel }
         aria-label="Due date"
         className={inputClass}
       />
-      <PlaybookPicker value={playbookPageId} onChange={setPlaybookPageId} className={`${inputClass} sm:max-w-[10rem]`} />
+      <PlaybookPicker value={playbookPageId} onChange={setPlaybookPageId} className={`${inputClass} ${stacked ? '' : 'sm:max-w-[10rem]'}`} />
       <div className="flex gap-1.5">
         <button
           type="submit"

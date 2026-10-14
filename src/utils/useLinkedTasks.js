@@ -58,8 +58,11 @@ export function useLinkedTasks(column, ids, staff, isManager) {
     isManager || !task.assigned_staff_id || task.assigned_staff_id === staff?.id
   ), [isManager, staff]);
 
+  // Unassigned rock tasks are communal — anyone can edit/move them (RLS
+  // "staff edit unassigned rock tasks").
   const canEdit = useCallback((task) => (
     isManager || task.owner_staff_id === staff?.id || task.assigned_staff_id === staff?.id
+    || (!!task.rock_id && !task.assigned_staff_id && !!staff)
   ), [isManager, staff]);
 
   // fields: { label, assignee, due_date, rock_id?, meeting_id?, issue_id?, playbook_page_id? }
@@ -121,6 +124,22 @@ export function useLinkedTasks(column, ids, staff, isManager) {
     return data;
   }, [completionFor]);
 
+  // Board view: 'todo' | 'doing' | 'done'. Done is the completion row
+  // (same as ticking); To Do / Doing is task_templates.board_status.
+  const columnFor = useCallback((task) => (
+    completionFor(task) ? 'done' : task.board_status === 'doing' ? 'doing' : 'todo'
+  ), [completionFor]);
+
+  const moveTask = useCallback(async (task, column) => {
+    const from = columnFor(task);
+    if (from === column) return;
+    if (column === 'done' || from === 'done') await toggle(task);
+    if (column !== 'done') {
+      const status = column === 'doing' ? 'doing' : null;
+      if ((task.board_status || null) !== status) await updateTask(task, { board_status: status });
+    }
+  }, [columnFor, toggle, updateTask]);
+
   const deleteTask = useCallback(async (id) => {
     const { error: err } = await supabase.from('task_templates').delete().eq('id', id);
     if (err) { setError(err.message); return false; }
@@ -128,5 +147,5 @@ export function useLinkedTasks(column, ids, staff, isManager) {
     return true;
   }, []);
 
-  return { tasks, loading, error, completionFor, canToggle, canEdit, addTask, toggle, updateTask, deleteTask, reload: load };
+  return { tasks, loading, error, completionFor, canToggle, canEdit, addTask, toggle, updateTask, deleteTask, columnFor, moveTask, reload: load };
 }

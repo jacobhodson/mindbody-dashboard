@@ -51,3 +51,13 @@ export function useRocks() {
 export function canEditRock(rock, staff, isManager) {
   return isManager || (!!staff && rock.owner_staff_id === staff.id);
 }
+
+/** Upload a rock cover photo; returns its public URL. */
+export async function uploadRockCover(file) {
+  if (file.size > 8 * 1024 * 1024) throw new Error('That image is over 8 MB — try a smaller one.');
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const path = `${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from('rock-covers').upload(path, file, { contentType: file.type });
+  if (error) throw error;
+  return supabase.storage.from('rock-covers').getPublicUrl(path).data.publicUrl;
+}
