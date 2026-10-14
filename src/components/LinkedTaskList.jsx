@@ -3,6 +3,7 @@ import { Check, Plus, Pencil, Trash2, X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useTaskNotes } from '../utils/useTaskNotes.js';
 import { TaskNotesToggle, TaskNotesPanel } from './TaskNotes.jsx';
+import { PlaybookChip, PlaybookPicker } from '../utils/playbookLink.jsx';
 
 const inputClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
@@ -76,11 +77,11 @@ function TaskRow({ task, done, canToggle, canEdit, assigneeName, source, staffLi
       <li className="py-2">
         <TaskForm
           staffList={staffList}
-          initial={{ label: task.label, assignee: task.assigned_staff_id || '', due_date: task.due_date }}
+          initial={{ label: task.label, assignee: task.assigned_staff_id || '', due_date: task.due_date, playbook_page_id: task.playbook_page_id }}
           submitLabel="Save"
           onCancel={() => setEditing(false)}
-          onSubmit={async ({ label, assignee, due_date }) => {
-            const saved = await onUpdate({ label, assigned_staff_id: assignee || null, due_date });
+          onSubmit={async ({ label, assignee, due_date, playbook_page_id }) => {
+            const saved = await onUpdate({ label, assigned_staff_id: assignee || null, due_date, playbook_page_id });
             if (saved) setEditing(false);
           }}
         />
@@ -110,6 +111,7 @@ function TaskRow({ task, done, canToggle, canEdit, assigneeName, source, staffLi
             </span>
           )}
           {source && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">{source}</span>}
+          <PlaybookChip pageId={task.playbook_page_id} />
           <TaskNotesToggle
             count={notes.taskNotes.notesFor(task.id).length}
             open={notesOpen}
@@ -144,13 +146,14 @@ export function TaskForm({ staffList, initial, submitLabel, onSubmit, onCancel }
   const [label, setLabel]       = useState(initial.label);
   const [assignee, setAssignee] = useState(initial.assignee);
   const [dueDate, setDueDate]   = useState(initial.due_date || '');
+  const [playbookPageId, setPlaybookPageId] = useState(initial.playbook_page_id || null);
   const [busy, setBusy]         = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
     if (!label.trim() || !dueDate) return;
     setBusy(true);
-    await onSubmit({ label: label.trim(), assignee, due_date: dueDate });
+    await onSubmit({ label: label.trim(), assignee, due_date: dueDate, playbook_page_id: playbookPageId });
     setBusy(false);
   };
 
@@ -176,6 +179,7 @@ export function TaskForm({ staffList, initial, submitLabel, onSubmit, onCancel }
         aria-label="Due date"
         className={inputClass}
       />
+      <PlaybookPicker value={playbookPageId} onChange={setPlaybookPageId} className={`${inputClass} sm:max-w-[10rem]`} />
       <div className="flex gap-1.5">
         <button
           type="submit"

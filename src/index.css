@@ -12,3 +12,30 @@
   .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
   .scrollbar-thin::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
 }
+
+/* ── Playbook pages (Tiptap content) ───────────────────────────────────── */
+.playbook-prose .ProseMirror { outline: none; color: theme('colors.gray.800'); font-size: 0.9375rem; line-height: 1.65; }
+.playbook-editing .ProseMirror { min-height: 16rem; }
+.playbook-prose .ProseMirror > * + * { margin-top: 0.75em; }
+.playbook-prose h2 { font-size: 1.25rem; font-weight: 600; color: theme('colors.gray.900'); margin-top: 1.5em; }
+.playbook-prose h3 { font-size: 1.05rem; font-weight: 600; color: theme('colors.gray.900'); margin-top: 1.25em; }
+.playbook-prose .ProseMirror > h2:first-child, .playbook-prose .ProseMirror > h3:first-child { margin-top: 0; }
+.playbook-prose ul { list-style: disc; padding-left: 1.5em; }
+.playbook-prose ol { list-style: decimal; padding-left: 1.5em; }
+.playbook-prose li > p { margin: 0.15em 0; }
+.playbook-prose ul[data-type="taskList"] { list-style: none; padding-left: 0.25em; }
+.playbook-prose ul[data-type="taskList"] li { display: flex; gap: 0.5em; align-items: flex-start; }
+.playbook-prose ul[data-type="taskList"] li > label { margin-top: 0.3em; user-select: none; }
+.playbook-prose ul[data-type="taskList"] li > label input { accent-color: theme('colors.emerald.600'); width: 1rem; height: 1rem; }
+.playbook-prose ul[data-type="taskList"] li > div { flex: 1; }
+.playbook-prose blockquote { border-left: 3px solid theme('colors.emerald.400'); background: theme('colors.emerald.50'); padding: 0.6em 1em; border-radius: 0 0.5rem 0.5rem 0; color: theme('colors.gray.700'); }
+.playbook-prose a { color: theme('colors.emerald.700'); text-decoration: underline; text-underline-offset: 2px; }
+.playbook-prose hr { border: 0; border-top: 1px solid theme('colors.gray.200'); margin: 1.5em 0; }
+.playbook-prose img { max-width: 100%; height: auto; border-radius: 0.5rem; border: 1px solid theme('colors.gray.200'); }
+.playbook-prose img.ProseMirror-selectednode, .playbook-prose .playbook-embed.ProseMirror-selectednode { outline: 2px solid theme('colors.emerald.500'); }
+.playbook-prose code { background: theme('colors.gray.100'); padding: 0.1em 0.35em; border-radius: 0.25rem; font-size: 0.875em; }
+.playbook-prose pre { background: theme('colors.gray.900'); color: theme('colors.gray.100'); padding: 0.75em 1em; border-radius: 0.5rem; overflow-x: auto; }
+.playbook-prose pre code { background: none; padding: 0; }
+.playbook-prose .playbook-embed { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 0.5rem; overflow: hidden; background: theme('colors.gray.100'); }
+.playbook-prose .playbook-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
+.playbook-prose p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: theme('colors.gray.400'); float: left; height: 0; pointer-events: none; }

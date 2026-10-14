@@ -12,6 +12,7 @@ import AddProgress from './AddProgress.jsx';
 import { useRocks } from '../utils/useRocks.js';
 import { useTaskNotes } from '../utils/useTaskNotes.js';
 import { TaskNotesToggle, TaskNotesPanel } from './TaskNotes.jsx';
+import { PlaybookChip, PlaybookPicker } from '../utils/playbookLink.jsx';
 
 // Rock tasks and meeting to-dos (see useLinkedTasks.js) are edited where
 // they live — the Rocks / Meetings tabs — not with this page's TaskForm,
@@ -122,6 +123,7 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
   const [targetType, setTargetType]   = useState(initial?.target_type || 'boolean');
   const [targetValue, setTargetValue] = useState(initial?.target_type === 'count' ? initial.target_value : '');
   const [unit, setUnit]               = useState(initial?.unit || '');
+  const [playbookPageId, setPlaybookPageId] = useState(initial?.playbook_page_id || '');
   const [busy, setBusy]               = useState(false);
   const { staffList } = useAllStaff();
   const { clientsList, resolve: resolveClientId } = useClientNameLookup();
@@ -159,6 +161,7 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
       client_id: clientName.trim() ? resolveClientId(clientName.trim()) : null,
       linked_target_id: linkedTarget?.id || null,
       linked_metric_key: linkedTarget?.metric_key || null,
+      playbook_page_id: playbookPageId || null,
     });
     setBusy(false);
     onClose();
@@ -277,6 +280,11 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
             ))}
           </select>
         )}
+        <PlaybookPicker
+          value={playbookPageId}
+          onChange={(v) => setPlaybookPageId(v || '')}
+          className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900"
+        />
       </div>
       <button
         type="submit"
@@ -313,6 +321,7 @@ function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onU
             target_type: template.target_type,
             target_value: template.target_value,
             unit: template.unit || '',
+            playbook_page_id: template.playbook_page_id || '',
             ...assignStateFor(template),
           }}
           isManager={isManager}
@@ -394,8 +403,9 @@ function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onU
           {template.description && (
             <p className="text-xs text-gray-500 mt-0.5">{renderFormatted(template.description)}</p>
           )}
-          {(sourceTag || notes) && (
+          {(sourceTag || notes || template.playbook_page_id) && (
             <div className="mt-1 flex flex-wrap items-center gap-2">
+              <PlaybookChip pageId={template.playbook_page_id} />
               {sourceTag && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">{sourceTag}</span>}
               {notes && (
                 <TaskNotesToggle
@@ -534,6 +544,7 @@ export default function TaskChecklist({ user, staff, isManager }) {
       client_id: fields.client_id || null,
       linked_target_id: fields.linked_target_id || null,
       linked_metric_key: fields.linked_metric_key || null,
+      playbook_page_id: fields.playbook_page_id || null,
       ...resolveAssignmentFields({ isManager, assignMode: fields.assignMode, assignee: fields.assignee, staffId: staff.id }),
     });
   };

@@ -62,8 +62,8 @@ export function useLinkedTasks(column, ids, staff, isManager) {
     isManager || task.owner_staff_id === staff?.id || task.assigned_staff_id === staff?.id
   ), [isManager, staff]);
 
-  // fields: { label, assignee, due_date, rock_id?, meeting_id?, issue_id? }
-  const addTask = useCallback(async ({ label, assignee, due_date, rock_id, meeting_id, issue_id }) => {
+  // fields: { label, assignee, due_date, rock_id?, meeting_id?, issue_id?, playbook_page_id? }
+  const addTask = useCallback(async ({ label, assignee, due_date, rock_id, meeting_id, issue_id, playbook_page_id }) => {
     if (!staff || !label?.trim() || !due_date) return null;
     const row = {
       key:               `${column}-${staff.id}-${Date.now()}`,
@@ -76,6 +76,7 @@ export function useLinkedTasks(column, ids, staff, isManager) {
       rock_id:           rock_id || null,
       meeting_id:        meeting_id || null,
       issue_id:          issue_id || null,
+      playbook_page_id:  playbook_page_id || null,
     };
     const { data, error: err } = await supabase.from('task_templates').insert(row).select().single();
     if (err) { setError(err.message); return null; }

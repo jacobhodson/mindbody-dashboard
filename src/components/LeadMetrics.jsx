@@ -34,7 +34,7 @@ export default function LeadMetrics() {
           <h2 className="font-semibold text-gray-900">Lead Metrics</h2>
         </div>
         <p className="text-xs text-gray-500 mt-0.5">
-          Active clients, membership mix, onboarding pipeline and Red % — snapshotted weekly (Mon–Sun). Live figures are on the Operations tab.
+          Active clients, membership mix, onboarding pipeline and Red % — snapshotted weekly (Mon–Sun). Live figures are on the Group Training tab.
         </p>
       </div>
 

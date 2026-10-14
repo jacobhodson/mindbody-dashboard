@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ListChecks, ChevronDown, Plus, Lock, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
+import { PlaybookPicker } from '../utils/playbookLink.jsx';
 import { supabase } from '../lib/supabaseClient.js';
 
 const WEEKS = [1, 2, 3, 4];
@@ -26,6 +27,7 @@ function ActionForm({ action, completions, onSave, onDelete, onCancel }) {
   const [active, setActive]           = useState(action.active ?? false);
   const [description, setDescription] = useState(action.description || '');
   const [script, setScript]           = useState(action.script || '');
+  const [playbookPageId, setPlaybookPageId] = useState(action.playbook_page_id || null);
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState(null);
   const isNew = !action.id;
@@ -33,7 +35,7 @@ function ActionForm({ action, completions, onSave, onDelete, onCancel }) {
   const save = async () => {
     if (!label.trim()) { setError('Give the action a name.'); return; }
     setSaving(true); setError(null);
-    const msg = await onSave({ label: label.trim(), week: Number(week), active, description, script });
+    const msg = await onSave({ label: label.trim(), week: Number(week), active, description, script, playbook_page_id: playbookPageId });
     setSaving(false);
     if (msg) setError(msg);
   };
@@ -75,6 +77,11 @@ function ActionForm({ action, completions, onSave, onDelete, onCancel }) {
         <span className="mt-1 block text-[11px] text-gray-400">
           Use [Name] for the client's first name and {'{{BUSINESS_NAME}}'} for the gym's name. Line breaks are kept.
         </span>
+      </label>
+
+      <label className="block">
+        <span className="text-gray-500">Playbook guide</span>
+        <PlaybookPicker value={playbookPageId} onChange={setPlaybookPageId} className={`${inputClass} mt-1`} />
       </label>
 
       {error && <p className="text-red-600">{error}</p>}

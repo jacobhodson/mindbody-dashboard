@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Copy, CheckCircle } from 'lucide-react';
+import { PlaybookChip } from '../utils/playbookLink.jsx';
 
 export default function OnboardingTaskModal({ task, onClose }) {
   const [copied, setCopied] = useState(false);
@@ -44,6 +45,7 @@ export default function OnboardingTaskModal({ task, onClose }) {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">What & Why</p>
             <p className="text-sm text-gray-700 leading-relaxed">{task.description}</p>
+            {task.playbook_page_id && <PlaybookChip pageId={task.playbook_page_id} className="mt-2" />}
           </div>
 
           {/* Script */}

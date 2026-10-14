@@ -24,6 +24,33 @@ export default function Sidebar({ tabs, activeTab, onSelect, atRiskCount, mobile
     onCloseMobile?.();
   };
 
+  // Consecutive tabs sharing a `group` become one section; ungrouped tabs
+  // are their own one-item section.
+  const sections = [];
+  for (const tab of tabs) {
+    const last = sections[sections.length - 1];
+    if (tab.group && last?.group === tab.group) last.tabs.push(tab);
+    else sections.push({ group: tab.group || null, tabs: [tab] });
+  }
+
+  // Groups are open by default; remember which ones someone has closed.
+  const [closedGroups, setClosedGroups] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sidebar-closed-groups') || '[]'); } catch { return []; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('sidebar-closed-groups', JSON.stringify(closedGroups)); } catch { /* ignore */ }
+  }, [closedGroups]);
+  const toggleGroup = (group) => setClosedGroups((prev) => (
+    prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]
+  ));
+  // Never hide the tab you're on.
+  const activeGroup = tabs.find((t) => t.key === activeTab)?.group;
+  useEffect(() => {
+    if (activeGroup) setClosedGroups((prev) => (prev.includes(activeGroup) ? prev.filter((g) => g !== activeGroup) : prev));
+  }, [activeGroup]);
+
+  const itemProps = { activeTab, collapsed, atRiskCount, onSelect: handleSelect };
+
   return (
     <>
       {/* Backdrop — mobile drawer only */}
@@ -46,28 +73,32 @@ export default function Sidebar({ tabs, activeTab, onSelect, atRiskCount, mobile
         </button>
 
         <div className="flex-1 space-y-1 overflow-y-auto">
-          {tabs.map(({ key, label, Icon }) => (
-            <button
-              key={key}
-              onClick={() => handleSelect(key)}
-              title={collapsed ? label : undefined}
-              className={`flex w-full items-center gap-2.5 rounded-lg border-l-2 px-3 py-2 text-sm font-medium transition-colors ${
-                collapsed ? 'md:justify-center' : ''
-              } ${
-                activeTab === key
-                  ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span className={`flex-1 text-left ${collapsed ? 'md:hidden' : ''}`}>{label}</span>
-              {key === 'onboarding' && atRiskCount > 0 && (
-                <span className={`rounded-full border border-red-500/30 bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-600 ${collapsed ? 'md:hidden' : ''}`}>
-                  {atRiskCount}
-                </span>
-              )}
-            </button>
-          ))}
+          {sections.map((section) => {
+            if (!section.group) {
+              return <NavItem key={section.tabs[0].key} tab={section.tabs[0]} {...itemProps} />;
+            }
+            const open = !closedGroups.includes(section.group);
+            const groupBadge = section.tabs.some((t) => t.key === 'onboarding') && atRiskCount > 0;
+            return (
+              <div key={section.group} className="pt-2">
+                {/* Desktop icons-only mode: no headings, just a divider between groups */}
+                <div className={`mx-2 mb-1 hidden border-t border-gray-200 ${collapsed ? 'md:block' : ''}`} />
+                <button
+                  onClick={() => toggleGroup(section.group)}
+                  aria-expanded={open}
+                  className={`flex w-full items-center gap-1.5 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 hover:text-gray-600 ${collapsed ? 'md:hidden' : ''}`}
+                >
+                  <span className="flex-1 text-left">{section.group}</span>
+                  {!open && groupBadge && <span className="h-1.5 w-1.5 rounded-full bg-red-500" />}
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? '' : '-rotate-90'}`} />
+                </button>
+                {/* Collapsed groups still show their icons in icons-only mode */}
+                <div className={`space-y-1 ${open ? '' : `hidden ${collapsed ? 'md:block' : ''}`}`}>
+                  {section.tabs.map((tab) => <NavItem key={tab.key} tab={tab} {...itemProps} />)}
+                </div>
+              </div>
+            );
+          })}
 
           <QuickLinks
             collapsed={collapsed}
@@ -84,6 +115,30 @@ export default function Sidebar({ tabs, activeTab, onSelect, atRiskCount, mobile
         </button>
       </nav>
     </>
+  );
+}
+
+function NavItem({ tab: { key, label, Icon }, activeTab, collapsed, atRiskCount, onSelect }) {
+  return (
+    <button
+      onClick={() => onSelect(key)}
+      title={collapsed ? label : undefined}
+      className={`flex w-full items-center gap-2.5 rounded-lg border-l-2 px-3 py-2 text-sm font-medium transition-colors ${
+        collapsed ? 'md:justify-center' : ''
+      } ${
+        activeTab === key
+          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700'
+          : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100'
+      }`}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className={`flex-1 text-left ${collapsed ? 'md:hidden' : ''}`}>{label}</span>
+      {key === 'onboarding' && atRiskCount > 0 && (
+        <span className={`rounded-full border border-red-500/30 bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-600 ${collapsed ? 'md:hidden' : ''}`}>
+          {atRiskCount}
+        </span>
+      )}
+    </button>
   );
 }
 

@@ -176,7 +176,7 @@ export function useTeamTasks(user, staff) {
   // of this server-side too). assignMode is 'personal' | 'team' | 'assigned'.
   const createTask = useCallback(async ({
     label, description, cadence, target_type, target_value, unit, task_type, isManager, assignMode, assignee, due_date, due_day, client_id,
-    linked_target_id, linked_metric_key,
+    linked_target_id, linked_metric_key, playbook_page_id,
   }) => {
     if (!staff) return null;
     const row = {
@@ -193,6 +193,7 @@ export function useTeamTasks(user, staff) {
       client_id:          client_id || null,
       linked_target_id:   linked_target_id || null,
       linked_metric_key:  linked_metric_key || null,
+      playbook_page_id:   playbook_page_id || null,
       ...resolveAssignmentFields({ isManager, assignMode, assignee, staffId: staff.id }),
     };
     const { data, error: insErr } = await supabase.from('task_templates').insert(row).select().single();
