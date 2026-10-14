@@ -17,6 +17,15 @@ export function resolveAssignmentFields({ isManager, assignMode, assignee, staff
   };
 }
 
+// Whose completion row a task's tick lives on: team tasks share one row
+// (null); a task assigned to someone is theirs, whoever ticks it (so a
+// manager, the rock page and the assignee all see the same tick); otherwise
+// it's the viewer's own.
+export function completionStaffId(template, staff) {
+  if (template.scope === 'team') return null;
+  return template.assigned_staff_id || staff?.id;
+}
+
 /**
  * Loads active task templates (RLS already scopes personal-vs-team
  * visibility) and this period's completions for the given staff member;
@@ -69,14 +78,14 @@ export function useTeamTasks(user, staff) {
     return completions.find((c) =>
       c.template_id === template.id &&
       c.period_start === periodStart &&
-      (template.scope === 'team' ? c.staff_id === null : c.staff_id === staff?.id)
+      c.staff_id === completionStaffId(template, staff)
     );
   }, [completions, staff]);
 
   const markDone = useCallback(async (template, value) => {
     const row = {
       template_id:  template.id,
-      staff_id:     template.scope === 'team' ? null : staff.id,
+      staff_id:     completionStaffId(template, staff),
       completed_by: staff.id,
       period_start: periodStartForTemplate(template),
       period_type:  template.cadence,

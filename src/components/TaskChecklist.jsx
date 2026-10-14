@@ -9,6 +9,14 @@ import { dueDateFor } from '../utils/periods.js';
 import { format, parseISO } from 'date-fns';
 import RichTextField from './RichTextField.jsx';
 import AddProgress from './AddProgress.jsx';
+import { useRocks } from '../utils/useRocks.js';
+import { useTaskNotes } from '../utils/useTaskNotes.js';
+import { TaskNotesToggle, TaskNotesPanel } from './TaskNotes.jsx';
+
+// Rock tasks and meeting to-dos (see useLinkedTasks.js) are edited where
+// they live — the Rocks / Meetings tabs — not with this page's TaskForm,
+// whose personal/team/assigned model would strip their assignment.
+const isLinkedTask = (t) => Boolean(t.rock_id || t.meeting_id);
 
 const CADENCE_LABEL = { daily: 'Today', weekly: 'This week', monthly: 'This month', once: 'One-off tasks' };
 const CADENCE_ORDER = ['daily', 'weekly', 'monthly', 'once'];
@@ -281,7 +289,8 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
   );
 }
 
-function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onUpdate, onDelete, assignedName, isManager, staff, canEdit, linkedClientName, linkedTargetLabel }) {
+function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onUpdate, onDelete, assignedName, isManager, staff, canEdit, linkedClientName, linkedTargetLabel, sourceTag, notes }) {
+  const [notesOpen, setNotesOpen] = useState(false);
   const isCount = template.target_type === 'count';
   const countValue = completion?.value ?? 0;
   const done = isCount ? countValue >= template.target_value : Boolean(completion);
@@ -385,6 +394,27 @@ function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onU
           {template.description && (
             <p className="text-xs text-gray-500 mt-0.5">{renderFormatted(template.description)}</p>
           )}
+          {(sourceTag || notes) && (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {sourceTag && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">{sourceTag}</span>}
+              {notes && (
+                <TaskNotesToggle
+                  count={notes.taskNotes.notesFor(template.id).length}
+                  open={notesOpen}
+                  onClick={() => setNotesOpen((o) => !o)}
+                />
+              )}
+            </div>
+          )}
+          {notes && notesOpen && (
+            <TaskNotesPanel
+              templateId={template.id}
+              taskNotes={notes.taskNotes}
+              staff={staff}
+              isManager={isManager}
+              nameById={notes.nameById}
+            />
+          )}
           {isCount && (
             <div className="mt-1.5 max-w-xs">
               <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden">
@@ -462,10 +492,26 @@ export default function TaskChecklist({ user, staff, isManager }) {
   // What this list actually shows — everyone (non-managers, always, via
   // RLS) sees team-scope tasks plus whatever's theirs (owned or assigned);
   // a manager viewing 'team' sees every template RLS hands them, unfiltered.
+  // Rock tasks / meeting to-dos show for their assignee only (or whoever
+  // added them, if unassigned) — whoever delegated one tracks it on the rock
+  // or in the meeting rather than having it clutter their own list.
   const visibleTemplates = useMemo(() => {
     if (isManager && viewScope === 'team') return templates;
-    return templates.filter((t) => t.scope === 'team' || t.owner_staff_id === staff?.id || t.assigned_staff_id === staff?.id);
+    return templates.filter((t) => {
+      if (isLinkedTask(t)) return t.assigned_staff_id ? t.assigned_staff_id === staff?.id : t.owner_staff_id === staff?.id;
+      return t.scope === 'team' || t.owner_staff_id === staff?.id || t.assigned_staff_id === staff?.id;
+    });
   }, [templates, isManager, viewScope, staff]);
+
+  const { rocks } = useRocks();
+  const rockTitleById = useMemo(() => Object.fromEntries(rocks.map((r) => [r.id, r.title])), [rocks]);
+  const linkedIds = useMemo(() => visibleTemplates.filter(isLinkedTask).map((t) => t.id), [visibleTemplates]);
+  const taskNotes = useTaskNotes(linkedIds);
+  const sourceTagFor = (t) => {
+    if (t.rock_id) return `Rock: ${rockTitleById[t.rock_id] || '…'}`;
+    if (t.meeting_id) return t.issue_id ? 'Meeting to-do (IDS)' : 'Meeting to-do';
+    return null;
+  };
 
   const grouped = useMemo(() => {
     const g = { daily: [], weekly: [], monthly: [], once: [] };
@@ -577,7 +623,9 @@ export default function TaskChecklist({ user, staff, isManager }) {
                   onDelete={handleDelete}
                   isManager={isManager}
                   staff={staff}
-                  canEdit={isManager || template.owner_staff_id === staff?.id}
+                  canEdit={!isLinkedTask(template) && (isManager || template.owner_staff_id === staff?.id)}
+                  sourceTag={sourceTagFor(template)}
+                  notes={isLinkedTask(template) ? { taskNotes, nameById: staffNameById } : null}
                   assignedName={
                     isManager && template.assigned_staff_id && template.assigned_staff_id !== staff?.id
                       ? staffNameById[template.assigned_staff_id]

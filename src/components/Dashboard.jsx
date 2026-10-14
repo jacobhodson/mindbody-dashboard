@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact } from 'lucide-react';
+import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact, Mountain, CalendarCheck } from 'lucide-react';
 import logo from '../assets/newstrength-logo.svg';
 import Sidebar             from './Sidebar.jsx';
 import Home                from './Home.jsx';
@@ -22,6 +22,8 @@ import CelebrationsPanel   from './CelebrationsPanel.jsx';
 import ClientsList         from './ClientsList.jsx';
 import ClientDetail        from './ClientDetail.jsx';
 import TeamTab             from './TeamTab.jsx';
+import RocksTab            from './RocksTab.jsx';
+import MeetingsTab         from './MeetingsTab.jsx';
 import { useOnboardingRollover } from '../utils/useOnboardingRollover.js';
 
 const TABS = [
@@ -33,6 +35,8 @@ const TABS = [
   { key: 'clients',           label: 'Clients',           Icon: Contact    },
   { key: 'team',              label: 'Team',              Icon: Users, managerOnly: true },
   { key: 'scorecard',         label: 'Scorecard',         Icon: BarChart3 },
+  { key: 'rocks',             label: 'Rocks',             Icon: Mountain  },
+  { key: 'meetings',          label: 'Meetings',          Icon: CalendarCheck },
 ];
 
 // Short-program products: removed from pipeline on no-rollover
@@ -293,6 +297,12 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
 
         {/* ─ Scorecard ─ */}
         {tab === 'scorecard' && <Scorecard staff={staff} isManager={isManager} />}
+
+        {/* ─ Rocks ─ */}
+        {tab === 'rocks' && <RocksTab staff={staff} isManager={isManager} />}
+
+        {/* ─ Meetings ─ */}
+        {tab === 'meetings' && <MeetingsTab staff={staff} isManager={isManager} onOpenRocks={() => setTab('rocks')} />}
         </main>
       </div>
     </div>
