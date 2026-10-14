@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Trash2, Plus, ArrowRightLeft, ListPlus, Star
 import { format, parseISO, addDays, subDays } from 'date-fns';
 import { periodStartForOffset } from '../utils/periods.js';
 import { MEETING_TYPES, CASCADE_SECTIONS, MEETING_STATUSES } from '../utils/meetingAgendas.js';
+import { useMeetingSections } from '../utils/useMeetingSections.js';
 import { useMeeting, useLeadershipCascade } from '../utils/useMeeting.js';
 import { useIssues } from '../utils/useIssues.js';
 import { useLinkedTasks } from '../utils/useLinkedTasks.js';
@@ -14,6 +15,8 @@ import RichTextField from './RichTextField.jsx';
 import LinkedTaskList, { TaskForm } from './LinkedTaskList.jsx';
 import Scoreboard from './Scoreboard.jsx';
 import { rockProgress } from './RocksTab.jsx';
+import BuildModeToggle from './BuildModeToggle.jsx';
+import AgendaBuilder from './AgendaBuilder.jsx';
 
 /**
  * Weekly meetings — the Monday Team Meeting (everyone) and the Leadership
@@ -26,8 +29,11 @@ import { rockProgress } from './RocksTab.jsx';
 export default function MeetingsTab({ staff, isManager, onOpenRocks }) {
   const [type, setType]     = useState('team');
   const [offset, setOffset] = useState(0);
+  const [building, setBuilding] = useState(false);
   const meetingDate = periodStartForOffset('weekly', offset);
   const config = MEETING_TYPES[type];
+  const agenda = useMeetingSections(type);
+  const sections = useMemo(() => agenda.sectionsFor(meetingDate), [agenda, meetingDate]);
 
   const { staffList } = useAllStaff();
   const nameById = useMemo(() => Object.fromEntries(staffList.map((s) => [s.id, s.full_name])), [staffList]);
@@ -44,11 +50,21 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-gray-900">Meetings</h1>
-        <p className="text-sm text-gray-500">
-          This week's meeting opens automatically — add your bits to each section before or during it.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-gray-900">Meetings</h1>
+          <p className="text-sm text-gray-500">
+            This week's meeting opens automatically — add your bits to each section before or during it.
+          </p>
+        </div>
+        {isManager && (
+          <BuildModeToggle
+            on={building}
+            onChange={setBuilding}
+            disabled={agenda.fallback}
+            disabledReason="The editable agenda isn't set up in the database yet."
+          />
+        )}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -91,7 +107,9 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks }) {
 
       {(mtg.error || todos.error) && <p className="text-xs text-red-600">{mtg.error || todos.error}</p>}
 
-      {mtg.loading ? (
+      {building ? (
+        <AgendaBuilder key={type} label={config.label} type={type} agenda={agenda} />
+      ) : mtg.loading || agenda.loading ? (
         <p className="text-sm text-gray-500">Loading…</p>
       ) : !meeting ? (
         <p className="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">
@@ -114,14 +132,14 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks }) {
             </select>
           </div>
 
-          {config.sections.map((section, i) => (
+          {sections.map((section, i) => (
             // Keyed by meeting too, so per-section state (drafts, your rating)
             // resets when you switch week or meeting type.
             <section key={`${meeting.id}-${section.key}`} className="rounded-xl border border-gray-200 bg-white p-4">
               <div className="mb-3">
                 <h3 className="text-sm font-semibold text-gray-900">
                   {i + 1}. {section.title}
-                  {section.minutes && <span className="ml-1.5 font-normal text-gray-400">({section.minutes} min)</span>}
+                  {section.minutes != null && <span className="ml-1.5 font-normal text-gray-400">({section.minutes} min)</span>}
                 </h3>
                 {section.hint && <p className="mt-0.5 text-xs text-gray-500">{section.hint}</p>}
               </div>

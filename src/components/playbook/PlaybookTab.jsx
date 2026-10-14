@@ -7,12 +7,14 @@ import { formatDistanceToNow } from 'date-fns';
 import { childrenOf, pathTo } from '../../utils/usePlaybook.js';
 import { useAllStaff } from '../../utils/useAllStaff.js';
 import PlaybookEditor, { PlaybookContent } from './PlaybookEditor.jsx';
+import BuildModeToggle from '../BuildModeToggle.jsx';
 
 /**
  * The Playbook hub — the team's SOPs and handbooks. One sidebar entry; the
  * hub has its own contents menu (sections → pages, any depth) on the left.
  * Everyone reads; managers create, edit, reorder, hide (managers-only) and
- * delete. `playbook` is the usePlaybook() result, owned by Dashboard so task
+ * delete — once they unlock the hub with the build-mode toggle (it opens
+ * locked, so managers read it the way everyone else does). `playbook` is the usePlaybook() result, owned by Dashboard so task
  * "How to" links can share it.
  */
 export default function PlaybookTab({ playbook, isManager, pageId, onSelectPage }) {
@@ -21,6 +23,9 @@ export default function PlaybookTab({ playbook, isManager, pageId, onSelectPage 
   const nameById = useMemo(() => Object.fromEntries(staffList.map((s) => [s.id, s.full_name])), [staffList]);
   const [menuOpen, setMenuOpen] = useState(false);     // mobile only
   const [editNewId, setEditNewId] = useState(null);    // a just-created page opens in edit mode
+  const [building, setBuilding]   = useState(false);   // managers' build mode (unlocked)
+  const [pageEditing, setPageEditing] = useState(false);
+  const canBuild = isManager && building;
   const dirtyRef = useRef(false);
 
   // Unsaved-edit guard for moving around inside the hub (and leaving the site).
@@ -55,19 +60,29 @@ export default function PlaybookTab({ playbook, isManager, pageId, onSelectPage 
           <h1 className="flex items-center gap-2 text-lg font-semibold text-gray-900"><BookOpen className="h-5 w-5" /> Playbook</h1>
           <p className="text-sm text-gray-500">Our SOPs, playbooks and handbooks — how we do things at Newstrength.</p>
         </div>
-        <button
-          onClick={() => setMenuOpen((o) => !o)}
-          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 md:hidden"
-        >
-          {menuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />} Contents
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {isManager && (
+            <BuildModeToggle
+              on={building}
+              onChange={setBuilding}
+              disabled={pageEditing}
+              disabledReason="Save or cancel the page you're editing first."
+            />
+          )}
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 md:hidden"
+          >
+            {menuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />} Contents
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-xs text-red-600">{error}</p>}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[15rem_1fr]">
         <aside className={`${menuOpen ? 'block' : 'hidden'} md:block`}>
-          <PlaybookMenu pages={pages} activeId={page?.id} isManager={isManager} onSelect={select} onAddSection={() => addPage(null)} />
+          <PlaybookMenu pages={pages} activeId={page?.id} canBuild={canBuild} onSelect={select} onAddSection={() => addPage(null)} />
         </aside>
 
         <main className="min-w-0">
@@ -79,7 +94,9 @@ export default function PlaybookTab({ playbook, isManager, pageId, onSelectPage 
               page={page}
               playbook={playbook}
               isManager={isManager}
+              canBuild={canBuild}
               nameById={nameById}
+              onEditingChange={setPageEditing}
               startEditing={editNewId === page.id}
               dirtyRef={dirtyRef}
               onSelect={select}
@@ -87,7 +104,7 @@ export default function PlaybookTab({ playbook, isManager, pageId, onSelectPage 
               onEdited={() => setEditNewId(null)}
             />
           ) : (
-            <HubHome pages={pages} isManager={isManager} nameById={nameById} onSelect={select} onAddSection={() => addPage(null)} />
+            <HubHome pages={pages} isManager={isManager} canBuild={canBuild} nameById={nameById} onSelect={select} onAddSection={() => addPage(null)} />
           )}
         </main>
       </div>
@@ -97,7 +114,7 @@ export default function PlaybookTab({ playbook, isManager, pageId, onSelectPage 
 
 // ── Contents menu ──────────────────────────────────────────────────────────
 
-function PlaybookMenu({ pages, activeId, isManager, onSelect, onAddSection }) {
+function PlaybookMenu({ pages, activeId, canBuild, onSelect, onAddSection }) {
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState(() => new Set());
 
@@ -170,7 +187,7 @@ function PlaybookMenu({ pages, activeId, isManager, onSelect, onAddSection }) {
             <BookOpen className="h-4 w-4" /> Playbook home
           </button>
           <MenuLevel pages={pages} parentId={null} depth={0} activeId={activeId} expanded={expanded} onToggle={toggle} onSelect={onSelect} />
-          {isManager && (
+          {canBuild && (
             <button onClick={onAddSection} className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-500/10">
               <Plus className="h-3.5 w-3.5" /> New section
             </button>
@@ -226,7 +243,7 @@ function descendantCount(pages, id) {
   return kids.reduce((n, k) => n + 1 + descendantCount(pages, k.id), 0);
 }
 
-function HubHome({ pages, isManager, nameById, onSelect, onAddSection }) {
+function HubHome({ pages, isManager, canBuild, nameById, onSelect, onAddSection }) {
   const sections = childrenOf(pages, null);
   const recent = useMemo(
     () => [...pages].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 6),
@@ -238,10 +255,12 @@ function HubHome({ pages, isManager, nameById, onSelect, onAddSection }) {
       <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center">
         <BookOpen className="mx-auto h-8 w-8 text-gray-300" />
         <p className="mt-2 text-sm text-gray-600">The Playbook is empty.</p>
-        {isManager ? (
+        {canBuild ? (
           <button onClick={onAddSection} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500">
             <Plus className="h-4 w-4" /> Create the first section
           </button>
+        ) : isManager ? (
+          <p className="mt-1 text-xs text-gray-400">Turn on build mode (top right) to add the first section.</p>
         ) : (
           <p className="mt-1 text-xs text-gray-400">A manager will add SOPs here soon.</p>
         )}
@@ -287,7 +306,7 @@ function HubHome({ pages, isManager, nameById, onSelect, onAddSection }) {
 
 // ── A page ─────────────────────────────────────────────────────────────────
 
-function PageView({ page, playbook, isManager, nameById, startEditing, dirtyRef, onSelect, onAddChild, onEdited }) {
+function PageView({ page, playbook, isManager, canBuild, nameById, startEditing, dirtyRef, onSelect, onAddChild, onEdited, onEditingChange }) {
   const [full, setFull]         = useState(null);
   const [editing, setEditing]   = useState(false);
   const [draft, setDraft]       = useState(null);
@@ -318,6 +337,8 @@ function PageView({ page, playbook, isManager, nameById, startEditing, dirtyRef,
   );
   useEffect(() => { dirtyRef.current = !!isDirty; }, [isDirty, dirtyRef]);
   useEffect(() => () => { dirtyRef.current = false; }, [dirtyRef]);
+  useEffect(() => { onEditingChange(editing); }, [editing, onEditingChange]);
+  useEffect(() => () => onEditingChange(false), [onEditingChange]);
 
   const save = async () => {
     if (!draft.title.trim()) return;
@@ -390,7 +411,7 @@ function PageView({ page, playbook, isManager, nameById, startEditing, dirtyRef,
         </div>
       )}
 
-      {isManager && !editing && (
+      {canBuild && !editing && (
         <div className="flex flex-wrap gap-1.5">
           <button onClick={() => full && beginEdit(full)} disabled={!full} className={iconBtn}><Pencil className="h-3.5 w-3.5" /> Edit</button>
           <button onClick={onAddChild} className={iconBtn}><Plus className="h-3.5 w-3.5" /> Add page inside</button>
@@ -425,7 +446,7 @@ function PageView({ page, playbook, isManager, nameById, startEditing, dirtyRef,
       ) : (
         !kids.length && (
           <p className="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">
-            This page is empty{isManager ? ' — click Edit to write it.' : '.'}
+            This page is empty{canBuild ? ' — click Edit to write it.' : isManager ? ' — turn on build mode to write it.' : '.'}
           </p>
         )
       )}

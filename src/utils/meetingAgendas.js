@@ -1,5 +1,8 @@
 // The two weekly meeting agendas, mirroring the Notion templates they
-// replace (MONDAY TEAM MEETING and Leadership Huddle). `kind` picks which
+// replace (MONDAY TEAM MEETING and Leadership Huddle). The live agendas are
+// the `meeting_sections` table (editable in the Meetings tab's build mode —
+// see useMeetingSections.js); the `sections` below are the original seed,
+// used only as a fallback if that table can't be read. `kind` picks which
 // component renders the section in MeetingsTab.jsx:
 //   items       — free-form entries people add (stored in meeting_items under `key`)
 //   cascade_in  — the Leadership Huddle's agreed message for this week (read-only)
@@ -62,6 +65,20 @@ export const MEETING_TYPES = {
     ],
   },
 };
+
+// Section types a manager can add in build mode. `once` = only one per
+// agenda (a second copy would just repeat the same content).
+export const SECTION_KINDS = [
+  { kind: 'items',       label: 'List — people add entries', once: false },
+  { kind: 'scorecard',   label: 'Scorecard',                 once: true },
+  { kind: 'rocks',       label: 'Rock review',               once: true },
+  { kind: 'ids',         label: 'IDS board',                 once: true },
+  { kind: 'last_todos',  label: "Last week's to-dos",        once: true },
+  { kind: 'todos',       label: 'New to-dos',                once: true },
+  { kind: 'rating',      label: 'Meeting rating',            once: true },
+  { kind: 'cascade_in',  label: 'Cascade from Leadership',   once: true, types: ['team'] },
+  { kind: 'cascade_out', label: 'Cascading message',         once: true, types: ['leadership'] },
+];
 
 export const CASCADE_SECTIONS = [
   { key: 'cascade_hears',   title: 'What the team hears' },
