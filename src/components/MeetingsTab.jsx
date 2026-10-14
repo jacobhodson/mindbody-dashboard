@@ -8,7 +8,7 @@ import { useIssues } from '../utils/useIssues.js';
 import { useLinkedTasks } from '../utils/useLinkedTasks.js';
 import { useRocks, canEditRock } from '../utils/useRocks.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
-import { ROCK_STATUSES, ROCK_STAGES } from '../utils/rocks.js';
+import { ROCK_STATUSES } from '../utils/rocks.js';
 import { renderFormatted } from '../utils/richText.js';
 import RichTextField from './RichTextField.jsx';
 import LinkedTaskList, { TaskForm } from './LinkedTaskList.jsx';
@@ -320,7 +320,6 @@ function RockReview({ staff, staffList, isManager, onOpenRocks }) {
               <th className="pb-2 font-medium">Owner</th>
               <th className="pb-2 font-medium">Tasks</th>
               <th className="pb-2 font-medium">Status</th>
-              <th className="pb-2 font-medium">Stage</th>
               <th className="pb-2 font-medium">Track</th>
             </tr>
           </thead>
@@ -340,12 +339,6 @@ function RockReview({ staff, staffList, isManager, onOpenRocks }) {
                   <td className="py-2 pr-2">
                     <select disabled={!editable} value={rock.status} onChange={(e) => updateRock(rock.id, { status: e.target.value })} className={selectClass}>
                       {ROCK_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                    </select>
-                  </td>
-                  <td className="py-2 pr-2">
-                    <select disabled={!editable} value={rock.stage || ''} onChange={(e) => updateRock(rock.id, { stage: e.target.value || null })} className={selectClass}>
-                      <option value="">—</option>
-                      {ROCK_STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                     </select>
                   </td>
                   <td className="py-2">

@@ -48,7 +48,7 @@ export const MEETING_TYPES = {
       { key: 'scorecard', title: 'Scorecard Review', minutes: 8, kind: 'scorecard',
         hint: 'On / off track only. Off-track drops to IDS.' },
       { key: 'rocks', title: 'Rock Review', minutes: 5, kind: 'rocks',
-        hint: "Status + Craft Cycle stage only (Build / Braintrust / Close). Never the craft content itself — that's the Braintrust's job." },
+        hint: "Status + on/off track only. Never the craft content itself — that's the Braintrust's job." },
       { key: 'ids', title: 'IDS — Identify, Discuss, Solve', minutes: 8, kind: 'ids', board: 'leadership',
         hint: "Off-track scorecards + leadership-only issues. Solve leadership's; sort the rest — move what the team should IDS itself to the Team board." },
       { key: 'cascade', title: 'Cascading Message', minutes: 2, kind: 'cascade_out',

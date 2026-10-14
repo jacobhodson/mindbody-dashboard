@@ -1,5 +1,5 @@
-// Rock status / Craft Cycle stage options — values match the check
-// constraints in 20261014000000_rocks_and_meetings.sql.
+// Rock status options — values match the check constraint in
+// 20261014000000_rocks_and_meetings.sql.
 
 export const ROCK_STATUSES = [
   { key: 'doing',    label: 'Doing',    badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -10,14 +10,6 @@ export const ROCK_STATUSES = [
 ];
 
 export const ROCK_STATUS_BY_KEY = Object.fromEntries(ROCK_STATUSES.map((s) => [s.key, s]));
-
-export const ROCK_STAGES = [
-  { key: 'build',      label: 'Build' },
-  { key: 'braintrust', label: 'Braintrust' },
-  { key: 'close',      label: 'Close' },
-];
-
-export const ROCK_STAGE_LABEL = Object.fromEntries(ROCK_STAGES.map((s) => [s.key, s.label]));
 
 // Cover presets for rocks without a photo. Stored on rocks.cover as
 // 'gradient:<key>'; class strings are written out in full so Tailwind

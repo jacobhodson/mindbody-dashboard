@@ -9,7 +9,7 @@ import { useLinkedTasks } from '../utils/useLinkedTasks.js';
 import { useRockNotes } from '../utils/useRockNotes.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import {
-  ROCK_STATUSES, ROCK_STATUS_BY_KEY, ROCK_STAGES, ROCK_STAGE_LABEL, ROCK_GRADIENTS, gradientClassFor,
+  ROCK_STATUSES, ROCK_STATUS_BY_KEY, ROCK_GRADIENTS, gradientClassFor,
 } from '../utils/rocks.js';
 import { renderFormatted } from '../utils/richText.js';
 import RichTextField from './RichTextField.jsx';
@@ -21,7 +21,7 @@ const ACTIVE_ORDER = ['planned', 'doing', 'ongoing', 'on_hold'];
 /**
  * Rocks — the company's bigger projects (replaces the Notion ROCKS database).
  * A gallery of cards grouped by status, Notion-style: cover photo or
- * gradient, and the key facts (owner, deadline, stage, on/off track, task
+ * gradient, and the key facts (owner, deadline, on/off track, task
  * progress). Clicking a card opens the rock as a full page with its
  * properties, "done" definition, tasks (regular dashboard tasks — they also
  * show in the assignee's Home checklist) and notes.
@@ -231,7 +231,6 @@ function RockCard({ rock, progress, ownerName, onOpen }) {
               {rock.on_track ? 'On track' : 'Off track'}
             </span>
           )}
-          {rock.stage && <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">{ROCK_STAGE_LABEL[rock.stage]}</span>}
         </div>
         {progress.total > 0 && (
           <div className="mt-auto pt-1">
@@ -441,12 +440,6 @@ function Properties({ rock, staffList, isManager, canEdit, progress, onUpdate })
     )],
     ['Deadline', (
       <input type="date" disabled={!canEdit} value={rock.due_date || ''} onChange={(e) => onUpdate({ due_date: e.target.value || null })} className={selectClass} />
-    )],
-    ['Stage', (
-      <select disabled={!canEdit} value={rock.stage || ''} onChange={(e) => onUpdate({ stage: e.target.value || null })} className={selectClass}>
-        <option value="">—</option>
-        {ROCK_STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-      </select>
     )],
     ['Track', (
       <select disabled={!canEdit} value={rock.on_track ? 'on' : 'off'} onChange={(e) => onUpdate({ on_track: e.target.value === 'on' })} className={selectClass}>
