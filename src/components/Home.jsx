@@ -8,6 +8,8 @@ import PipelineClientsToAllocate from './PipelineClientsToAllocate.jsx';
 import MyPipelineTasks from './MyPipelineTasks.jsx';
 import MissingRolloverDecisions from './MissingRolloverDecisions.jsx';
 import HomeReminders from './HomeReminders.jsx';
+import LeaveApprovalsCard from './hr/LeaveApprovalsCard.jsx';
+import MyLeaveCard from './hr/MyLeaveCard.jsx';
 import HomeAutomationsPanel from './HomeAutomationsPanel.jsx';
 import { useReminders } from '../utils/useReminders.js';
 import { useAllClients } from '../utils/useAllClients.js';
@@ -15,7 +17,7 @@ import { useAllClients } from '../utils/useAllClients.js';
 export default function Home({
   user, staff, isManager, onViewClient,
   onboardingData, pipelineIds,
-  week4Clients, decisions, setDecision,
+  week4Clients, decisions, setDecision, onOpenHR,
 }) {
   const rem = useReminders();
   const { clientsList } = useAllClients();
@@ -35,6 +37,8 @@ export default function Home({
         rem={rem} clients={clientsList} pipelineIds={pipelineIds}
         staff={staff} isManager={isManager} onViewClient={onViewClient}
       />
+      {isManager && on('leave_approvals') && <LeaveApprovalsCard isManager={isManager} onOpenHR={onOpenHR} />}
+      {on('my_leave') && <MyLeaveCard staff={staff} onOpenHR={onOpenHR} />}
       {on('xero_mapping') && <StaffNeedingXeroMapping isManager={isManager} />}
       {on('new_clients') && <NewClientsToAllocate onViewClient={onViewClient} />}
       {on('pipeline_clients') && <PipelineClientsToAllocate pipelineIds={pipelineIds} isManager={isManager} onViewClient={onViewClient} />}

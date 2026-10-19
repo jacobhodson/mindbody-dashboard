@@ -8,6 +8,8 @@ import {
 
 // The built-in Home pop-ups — keys match home_card_settings and Home.jsx.
 export const HOME_CARDS = [
+  { key: 'leave_approvals',   label: 'Leave to approve',             when: 'A leave request is waiting on a decision', who: 'Managers' },
+  { key: 'my_leave',          label: 'My leave updates',             when: 'Your leave is awaiting approval, or was approved/declined in the last 7 days', who: 'Each person, their own only' },
   { key: 'xero_mapping',      label: 'Staff needing Xero mapping',   when: 'A staff member has no matching Xero employee', who: 'Managers' },
   { key: 'new_clients',       label: 'New clients to allocate',      when: 'A client who started in the last 30 days has no coach', who: 'Everyone' },
   { key: 'pipeline_clients',  label: 'Pipeline clients to allocate', when: 'A front-end-offer client is missing a coach (or a package — managers)', who: 'Everyone' },

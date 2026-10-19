@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact, Mountain, CalendarCheck, BookOpen } from 'lucide-react';
+import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact, Mountain, CalendarCheck, BookOpen, Plane } from 'lucide-react';
 import logo from '../assets/newstrength-logo.svg';
 import Sidebar             from './Sidebar.jsx';
 import Home                from './Home.jsx';
@@ -22,6 +22,7 @@ import TeamTab             from './TeamTab.jsx';
 import RocksTab            from './RocksTab.jsx';
 import MeetingsTab         from './MeetingsTab.jsx';
 import PlaybookTab         from './playbook/PlaybookTab.jsx';
+import HRTab               from './hr/HRTab.jsx';
 import { usePlaybook }     from '../utils/usePlaybook.js';
 import { PlaybookLinkProvider } from '../utils/playbookLink.jsx';
 import { useOnboardingRollover } from '../utils/useOnboardingRollover.js';
@@ -39,6 +40,7 @@ const TABS = [
   { key: 'team',              label: 'Team',              Icon: Users,         group: 'Business', managerOnly: true },
   { key: 'rocks',             label: 'Rocks',             Icon: Mountain,      group: 'Business' },
   { key: 'meetings',          label: 'Meetings',          Icon: CalendarCheck, group: 'Business' },
+  { key: 'hr',                label: 'HR',                Icon: Plane,         group: 'Business' },
   { key: 'playbook',          label: 'Playbook',          Icon: BookOpen  },
 ];
 
@@ -179,6 +181,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             user={user} staff={staff} isManager={isManager} onViewClient={onViewClient}
             onboardingData={data.onboarding} pipelineIds={tradeOnboardingIds}
             week4Clients={data.onboarding?.week4} decisions={decisions} setDecision={setDecision}
+            onOpenHR={() => setTab('hr')}
           />
         )}
 
@@ -313,6 +316,9 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             }}
           />
         )}
+
+        {/* ─ HR (Leave Planner) ─ */}
+        {tab === 'hr' && <HRTab staff={staff} isManager={isManager} />}
 
         {/* ─ Playbook ─ */}
         {tab === 'playbook' && (
