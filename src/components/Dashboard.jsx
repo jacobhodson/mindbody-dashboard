@@ -23,6 +23,7 @@ import RocksTab            from './RocksTab.jsx';
 import MeetingsTab         from './MeetingsTab.jsx';
 import PlaybookTab         from './playbook/PlaybookTab.jsx';
 import HRTab               from './hr/HRTab.jsx';
+import NotificationBell    from './NotificationBell.jsx';
 import { usePlaybook }     from '../utils/usePlaybook.js';
 import { PlaybookLinkProvider } from '../utils/playbookLink.jsx';
 import { useOnboardingRollover } from '../utils/useOnboardingRollover.js';
@@ -137,6 +138,11 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               <span className="hidden sm:block text-xs text-gray-500">
                 Data from {isToday(lastRefresh) ? format(lastRefresh, 'h:mm a') : format(lastRefresh, 'EEE d MMM, h:mm a')}
               </span>
+            )}
+            {user && (
+              <NotificationBell
+                onNavigate={(key, linkId) => { if (key === 'rocks' && linkId) openRock(linkId); else setTab(key); }}
+              />
             )}
             <button
               onClick={onRefresh}
