@@ -1,7 +1,24 @@
 import { CreditCard, CheckCircle } from 'lucide-react';
 
-export default function DeclinedList({ data, loading, error }) {
-  const clients = data?.declinedClients || [];
+// Anyone with a payment issue marked Reconciled in the last 30 days (the
+// Failed Payments window) drops off — Mindbody keeps them 'Declined' until
+// the contract itself is fixed, so status alone can't tell us it's handled.
+// Keys are clientId|... (failed) or onaccount-clientId|... (on account).
+const RECONCILED_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+function reconciledClientIds(resolved) {
+  const cutoff = Date.now() - RECONCILED_WINDOW_MS;
+  const ids = new Set();
+  for (const [key, r] of Object.entries(resolved || {})) {
+    if (r.status !== 'reconciled' || new Date(r.at).getTime() < cutoff) continue;
+    ids.add(key.replace(/^onaccount-/, '').split('|')[0]);
+  }
+  return ids;
+}
+
+export default function DeclinedList({ data, loading, error, resolved }) {
+  const reconciled = reconciledClientIds(resolved);
+  const clients = (data?.declinedClients || []).filter((c) => !reconciled.has(String(c.id)));
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white flex flex-col">

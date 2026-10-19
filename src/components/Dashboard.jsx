@@ -12,10 +12,7 @@ import NoShowsList        from './NoShowsList.jsx';
 import SuspensionsList    from './SuspensionsList.jsx';
 import RedsList           from './RedsList.jsx';
 import FringeClientsTable from './FringeClientsTable.jsx';
-import RevenueCards       from './RevenueCards.jsx';
-import PaymentIssuesTable from './PaymentIssuesTable.jsx';
-import DeclinedList       from './DeclinedList.jsx';
-import XeroConnection      from './XeroConnection.jsx';
+import FinancesTab        from './FinancesTab.jsx';
 import OnboardingTab          from './OnboardingTab.jsx';
 import PersonalTrainingTab    from './PersonalTrainingTab.jsx';
 import CelebrationsPanel   from './CelebrationsPanel.jsx';
@@ -235,24 +232,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
 
         {/* ─ Finances ─ */}
         {tab === 'finances' && isManager && (
-          <>
-            <XeroConnection isManager={isManager} />
-            <RevenueCards
-              data={data.revenue}
-              loading={loading.revenue}
-              error={errors.revenue}
-            />
-            <DeclinedList
-              data={data.clientAnalytics}
-              loading={loading.clientAnalytics}
-              error={errors.clientAnalytics}
-            />
-            <PaymentIssuesTable
-              data={data.payments}
-              loading={loading.payments}
-              error={errors.payments}
-            />
-          </>
+          <FinancesTab data={data} loading={loading} errors={errors} isManager={isManager} />
         )}
 
         {/* ─ Onboarding ─ */}

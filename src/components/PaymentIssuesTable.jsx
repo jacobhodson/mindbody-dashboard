@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { CreditCard, Wallet, AlertTriangle, CheckCircle, RefreshCw, ChevronDown, ChevronUp, Undo2 } from 'lucide-react';
-import { usePaymentResolutions } from '../utils/usePaymentResolutions.js';
 
 function fmtAUD(n) {
   return `$${Number(n || 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -20,11 +19,11 @@ const STATUS_COLORS = {
 // payment retried for a different amount would.
 const onAccountKey = (b) => `onaccount-${b.clientId}|${Math.round((b.balance || 0) * 100)}`;
 
-export default function PaymentIssuesTable({ data, loading, error }) {
+export default function PaymentIssuesTable({ data, loading, error, resolutions }) {
   const [tab, setTab]                             = useState('failed');
   const [showResolved, setShowResolved]           = useState(false);
   const [showResolvedOnAccount, setShowResolvedOnAccount] = useState(false);
-  const { resolved, mark, unmark }  = usePaymentResolutions();
+  const { resolved, mark, unmark }  = resolutions;
 
   const failed    = data?.failedPayments || [];
   const onAccount = data?.onAccount || [];
