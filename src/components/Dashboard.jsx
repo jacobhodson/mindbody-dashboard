@@ -37,7 +37,7 @@ const TABS = [
   { key: 'onboarding',        label: 'Onboarding',        Icon: Users2,        group: 'Coaching' },
   { key: 'personalTraining',  label: 'Personal Training', Icon: Dumbbell,      group: 'Coaching' },
   { key: 'operations',        label: 'Group Training',    Icon: Activity,      group: 'Coaching' },
-  { key: 'finances',          label: 'Finances',          Icon: DollarSign,    group: 'Business' },
+  { key: 'finances',          label: 'Finances',          Icon: DollarSign,    group: 'Business', managerOnly: true },
   { key: 'scorecard',         label: 'Scorecard',         Icon: BarChart3,     group: 'Business' },
   { key: 'team',              label: 'Team',              Icon: Users,         group: 'Business', managerOnly: true },
   { key: 'rocks',             label: 'Rocks',             Icon: Mountain,      group: 'Business' },
@@ -234,7 +234,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         )}
 
         {/* ─ Finances ─ */}
-        {tab === 'finances' && (
+        {tab === 'finances' && isManager && (
           <>
             <XeroConnection isManager={isManager} />
             <RevenueCards
