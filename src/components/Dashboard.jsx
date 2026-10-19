@@ -298,7 +298,21 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         {tab === 'rocks' && <RocksTab staff={staff} isManager={isManager} openRockId={openRockId} onOpenRockChange={setOpenRockId} />}
 
         {/* ─ Meetings ─ */}
-        {tab === 'meetings' && <MeetingsTab staff={staff} isManager={isManager} onOpenRocks={openRock} />}
+        {tab === 'meetings' && (
+          <MeetingsTab
+            staff={staff}
+            isManager={isManager}
+            onOpenRocks={openRock}
+            reds={{
+              data: data.clientAnalytics,
+              loading: loading.clientAnalytics,
+              error: errors.clientAnalytics,
+              contactLog,
+              onboardingIds,
+              onViewClient,
+            }}
+          />
+        )}
 
         {/* ─ Playbook ─ */}
         {tab === 'playbook' && (

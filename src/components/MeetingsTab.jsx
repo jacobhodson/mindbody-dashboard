@@ -17,6 +17,7 @@ import Scoreboard from './Scoreboard.jsx';
 import { rockProgress } from './RocksTab.jsx';
 import BuildModeToggle from './BuildModeToggle.jsx';
 import AgendaBuilder from './AgendaBuilder.jsx';
+import RedsList from './RedsList.jsx';
 
 /**
  * Weekly meetings — the Monday Team Meeting (everyone) and the Leadership
@@ -26,7 +27,7 @@ import AgendaBuilder from './AgendaBuilder.jsx';
  * week to week until solved; to-dos are regular tasks (they land in the
  * assignee's Home checklist) and roll into next week's "Last week's to-dos".
  */
-export default function MeetingsTab({ staff, isManager, onOpenRocks }) {
+export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
   const [type, setType]     = useState('team');
   const [offset, setOffset] = useState(0);
   const [building, setBuilding] = useState(false);
@@ -46,7 +47,7 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks }) {
   );
   const todos = useLinkedTasks('meeting_id', todoMeetingIds, staff, isManager);
 
-  const ctx = { staff, isManager, staffList, nameById, meeting, meetingDate, mtg, todos, type };
+  const ctx = { staff, isManager, staffList, nameById, meeting, meetingDate, mtg, todos, type, reds };
 
   return (
     <div className="space-y-6">
@@ -228,12 +229,46 @@ function SectionBody({ section, ctx, onOpenRocks }) {
       );
     }
 
+    case 'reds':
+      return <RedsSection sectionKey={section.key} ctx={ctx} />;
+
     case 'rating':
       return <Ratings ratings={mtg.ratings} staff={staff} nameById={nameById} onSave={mtg.saveRating} />;
 
     default:
       return null;
   }
+}
+
+// ── Client reach-outs: the live Red's List ─────────────────────────────────
+// Same list (and contact log) as the Group Training tab, so a call logged here
+// shows there too. Entries typed in before this was a live list stay visible,
+// read-only, on the weeks they were written.
+function RedsSection({ sectionKey, ctx }) {
+  const { mtg, nameById, reds } = ctx;
+  const notes = mtg.items.filter((i) => i.section === sectionKey);
+
+  return (
+    <div className="space-y-3">
+      {reds ? <RedsList {...reds} /> : <p className="text-sm text-gray-500">Red's List isn't available.</p>}
+      {notes.length > 0 && (
+        <div>
+          <h4 className="mb-1 text-xs font-semibold text-gray-500">Notes from this meeting</h4>
+          <ul className="space-y-1.5">
+            {notes.map((item) => (
+              <li key={item.id} className="flex items-start gap-2 text-sm">
+                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-300" />
+                <div className="min-w-0 flex-1">
+                  <span className="whitespace-pre-wrap text-gray-800">{renderFormatted(item.body)}</span>
+                  <span className="ml-2 text-[11px] text-gray-400">— {nameById[item.staff_id] || 'Someone'}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Free-form entries ──────────────────────────────────────────────────────

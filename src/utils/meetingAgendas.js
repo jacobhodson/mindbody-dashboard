@@ -13,6 +13,7 @@
 //   last_todos  — to-dos from previous meetings of this type
 //   todos       — to-dos created in this meeting
 //   rating      — 1–10 rating + one improvement
+//   reds        — the live Group Training Red's List, contactable in place
 
 export const MEETING_TYPES = {
   team: {
@@ -28,7 +29,7 @@ export const MEETING_TYPES = {
         hint: 'Review everyone in the pipeline to hit 80% rollovers. 🟢 on track = skip · 🟠🔴 = discuss + assign.' },
       { key: 'headlines', title: 'Client Headlines', kind: 'items',
         hint: 'Any significant client information from the past week.' },
-      { key: 'reach_outs', title: 'Client Reach-outs', kind: 'items',
+      { key: 'reach_outs', title: 'Client Reach-outs', kind: 'reds',
         hint: "Red's List — who needs a call or message this week." },
       { key: 'last_todos', title: "Last Week's To-Dos", minutes: 5, kind: 'last_todos',
         hint: 'Done or not done — no discussion. Anything stuck goes to IDS.' },
@@ -76,6 +77,7 @@ export const SECTION_KINDS = [
   { kind: 'last_todos',  label: "Last week's to-dos",        once: true },
   { kind: 'todos',       label: 'New to-dos',                once: true },
   { kind: 'rating',      label: 'Meeting rating',            once: true },
+  { kind: 'reds',        label: "Red's List (Group Training)", once: true, types: ['team'] },
   { kind: 'cascade_in',  label: 'Cascade from Leadership',   once: true, types: ['team'] },
   { kind: 'cascade_out', label: 'Cascading message',         once: true, types: ['leadership'] },
 ];
