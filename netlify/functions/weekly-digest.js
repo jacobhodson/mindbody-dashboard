@@ -8,6 +8,7 @@
  *      whatever daylight saving is doing). &force=1 skips the time check.
  *      Everyone active with an email who hasn't switched it off gets one;
  *      digest_sends (unique per person per week) stops double sends.
+ *      &test_for=<staff id> instead emails just that person a preview.
  *  - Preview:      POST /api/weekly-digest?mode=preview  (Authorization: Bearer <Supabase JWT>)
  *      Returns { subject, html } for the caller's own digest — managers can
  *      pass &for=<staff id> to see someone else's. &send=1 also emails it to
@@ -108,6 +109,17 @@ export const handler = async (event) => {
 
     const secret = process.env.DIGEST_CRON_SECRET;
     if (!secret || qs.key !== secret) return err('Forbidden', 403);
+    // &test_for=<staff id>: email that one person their own digest as a
+    // preview (not logged, ignores the Sunday gate and their on/off setting).
+    if (qs.test_for) {
+      const win = digestWindows(sydneyNow().date);
+      const data = await loadDigestData(supabase, win);
+      const person = data.staff.find((s) => s.id === qs.test_for);
+      if (!person?.email) return err('No such team member with an email', 404);
+      const mail = renderDigest(digestContent(person, data, win), win, { preview: true });
+      const id = await sendEmail({ to: person.email, subject: `[Preview] ${mail.subject}`, html: mail.html, text: mail.text });
+      return ok({ sent: true, to: person.email, resend_id: id });
+    }
     return ok(await runWeeklySend({ force: qs.force === '1' }));
   } catch (e) {
     console.error('weekly-digest:', e);
