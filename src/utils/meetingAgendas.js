@@ -6,7 +6,7 @@
 // component renders the section in MeetingsTab.jsx:
 //   items       — free-form entries people add (stored in meeting_items under `key`)
 //   cascade_in  — the Leadership Huddle's agreed message for this week (read-only)
-//   cascade_out — the three cascade lists the huddle fills in
+//   cascade_out — the two cascade lists the huddle fills in
 //   scorecard   — the live Scoreboard for the week before the meeting
 //   rocks       — rock review (status / stage / on-track)
 //   ids         — the IDS issues board for `board`
@@ -84,7 +84,6 @@ export const SECTION_KINDS = [
 
 export const CASCADE_SECTIONS = [
   { key: 'cascade_hears',   title: 'What the team hears' },
-  { key: 'cascade_owns',    title: 'What the team owns / must IDS themselves' },
   { key: 'cascade_upskill', title: 'Upskilling focus this week' },
 ];
 
