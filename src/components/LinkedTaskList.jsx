@@ -12,10 +12,12 @@ const inputClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 t
  * relevant slice of useLinkedTasks() in; `extraFields` is merged into every
  * new task (e.g. { rock_id } or { meeting_id }). `sourceLabel(task)` adds a
  * small grey tag per row (e.g. which rock a meeting to-do belongs to).
+ * `rocks` (meeting to-dos only) adds a Rock picker to the add/edit forms so
+ * a to-do can also be linked to a rock — it then shows on that rock's page.
  */
 export default function LinkedTaskList({
   tasks, linked, staff, staffList, isManager, extraFields = {}, defaultDue,
-  emptyText = 'No tasks yet.', addLabel = 'Add task', sourceLabel, canAdd = true,
+  emptyText = 'No tasks yet.', addLabel = 'Add task', sourceLabel, canAdd = true, rocks,
 }) {
   const [adding, setAdding] = useState(false);
   const nameById = Object.fromEntries(staffList.map((s) => [s.id, s.full_name]));
@@ -34,6 +36,8 @@ export default function LinkedTaskList({
             canEdit={linked.canEdit(t)}
             assigneeName={nameById[t.assigned_staff_id]}
             source={sourceLabel?.(t)}
+            rockTag={rocks && t.rock_id ? `Rock: ${rocks.find((rk) => rk.id === t.rock_id)?.title || '…'}` : null}
+            rocks={rocks}
             staffList={staffList}
             notes={{ taskNotes, staff, isManager, nameById }}
             onToggle={() => linked.toggle(t)}
@@ -46,6 +50,7 @@ export default function LinkedTaskList({
         <TaskForm
           staff={staff}
           staffList={staffList}
+          rocks={rocks}
           initial={{ label: '', assignee: staff?.id || '', due_date: defaultDue }}
           submitLabel="Add"
           onCancel={() => setAdding(false)}
@@ -66,7 +71,7 @@ export default function LinkedTaskList({
   );
 }
 
-function TaskRow({ task, done, canToggle, canEdit, assigneeName, source, staffList, notes, onToggle, onUpdate, onDelete }) {
+function TaskRow({ task, done, canToggle, canEdit, assigneeName, source, rockTag, rocks, staffList, notes, onToggle, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const today = format(new Date(), 'yyyy-MM-dd');
@@ -77,11 +82,14 @@ function TaskRow({ task, done, canToggle, canEdit, assigneeName, source, staffLi
       <li className="py-2">
         <TaskForm
           staffList={staffList}
-          initial={{ label: task.label, assignee: task.assigned_staff_id || '', due_date: task.due_date, playbook_page_id: task.playbook_page_id }}
+          rocks={rocks}
+          initial={{ label: task.label, assignee: task.assigned_staff_id || '', due_date: task.due_date, playbook_page_id: task.playbook_page_id, rock_id: task.rock_id }}
           submitLabel="Save"
           onCancel={() => setEditing(false)}
-          onSubmit={async ({ label, assignee, due_date, playbook_page_id }) => {
-            const saved = await onUpdate({ label, assigned_staff_id: assignee || null, due_date, playbook_page_id });
+          onSubmit={async ({ label, assignee, due_date, playbook_page_id, rock_id }) => {
+            const patch = { label, assigned_staff_id: assignee || null, due_date, playbook_page_id };
+            if (rocks) patch.rock_id = rock_id;
+            const saved = await onUpdate(patch);
             if (saved) setEditing(false);
           }}
         />
@@ -112,6 +120,7 @@ function TaskRow({ task, done, canToggle, canEdit, assigneeName, source, staffLi
             </span>
           )}
           {source && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">{source}</span>}
+          {rockTag && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-800">{rockTag}</span>}
           <PlaybookChip pageId={task.playbook_page_id} />
           <TaskNotesToggle
             count={notes.taskNotes.notesFor(task.id).length}
@@ -143,18 +152,23 @@ function TaskRow({ task, done, canToggle, canEdit, assigneeName, source, staffLi
   );
 }
 
-export function TaskForm({ staffList, initial, submitLabel, onSubmit, onCancel, stacked = false }) {
+// `rocks` (optional) shows a Rock picker; the chosen id comes back as
+// rock_id (null for none). Only open rocks are offered, plus the task's
+// current rock if it has since been closed.
+export function TaskForm({ staffList, initial, submitLabel, onSubmit, onCancel, stacked = false, rocks }) {
   const [label, setLabel]       = useState(initial.label);
   const [assignee, setAssignee] = useState(initial.assignee);
   const [dueDate, setDueDate]   = useState(initial.due_date || '');
   const [playbookPageId, setPlaybookPageId] = useState(initial.playbook_page_id || null);
+  const [rockId, setRockId]     = useState(initial.rock_id || '');
+  const rockOptions = (rocks || []).filter((rk) => rk.status !== 'done' || rk.id === initial.rock_id);
   const [busy, setBusy]         = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
     if (!label.trim() || !dueDate) return;
     setBusy(true);
-    await onSubmit({ label: label.trim(), assignee, due_date: dueDate, playbook_page_id: playbookPageId });
+    await onSubmit({ label: label.trim(), assignee, due_date: dueDate, playbook_page_id: playbookPageId, rock_id: rockId || null });
     setBusy(false);
   };
 
@@ -180,6 +194,12 @@ export function TaskForm({ staffList, initial, submitLabel, onSubmit, onCancel, 
         aria-label="Due date"
         className={inputClass}
       />
+      {rocks && (
+        <select value={rockId} onChange={(e) => setRockId(e.target.value)} aria-label="Rock" className={`${inputClass} ${stacked ? '' : 'sm:max-w-[10rem]'}`}>
+          <option value="">No rock</option>
+          {rockOptions.map((rk) => <option key={rk.id} value={rk.id}>{rk.title}</option>)}
+        </select>
+      )}
       <PlaybookPicker value={playbookPageId} onChange={setPlaybookPageId} className={`${inputClass} ${stacked ? '' : 'sm:max-w-[10rem]'}`} />
       <div className="flex gap-1.5">
         <button

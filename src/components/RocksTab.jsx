@@ -319,7 +319,11 @@ function RockTasks({ rock, tasks, linked, staff, staffList, isManager, defaultDu
       </div>
       {view === 'board'
         ? <RockTaskBoard {...props} />
-        : <LinkedTaskList {...props} emptyText="No tasks on this rock yet." />}
+        : <LinkedTaskList
+            {...props}
+            emptyText="No tasks on this rock yet."
+            sourceLabel={(t) => (t.meeting_id ? (t.issue_id ? 'From IDS' : 'Meeting to-do') : null)}
+          />}
     </section>
   );
 }

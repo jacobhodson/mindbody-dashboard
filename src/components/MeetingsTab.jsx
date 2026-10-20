@@ -47,7 +47,9 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
   );
   const todos = useLinkedTasks('meeting_id', todoMeetingIds, staff, isManager);
 
-  const ctx = { staff, isManager, staffList, nameById, meeting, meetingDate, mtg, todos, type, reds };
+  // Meeting to-dos (incl. IDS ones) can be linked to a rock as well.
+  const { rocks } = useRocks();
+  const ctx = { staff, isManager, staffList, nameById, meeting, meetingDate, mtg, todos, type, reds, rocks };
 
   return (
     <div className="space-y-6">
@@ -206,6 +208,7 @@ function SectionBody({ section, ctx, onOpenRocks }) {
           staffList={staffList}
           isManager={isManager}
           canAdd={false}
+          rocks={ctx.rocks}
           emptyText="No to-dos carried over."
           sourceLabel={(t) => (dateById[t.meeting_id] ? `from ${format(parseISO(dateById[t.meeting_id]), 'd MMM')}` : null)}
         />
@@ -222,6 +225,7 @@ function SectionBody({ section, ctx, onOpenRocks }) {
           staffList={staffList}
           isManager={isManager}
           extraFields={{ meeting_id: meeting.id }}
+          rocks={ctx.rocks}
           defaultDue={format(addDays(parseISO(meetingDate), 7), 'yyyy-MM-dd')}
           addLabel="Add to-do"
           emptyText="No to-dos yet this week."
@@ -429,7 +433,7 @@ const ISSUE_STATUSES = [
 ];
 
 function IssuesBoard({ board, voices, ctx }) {
-  const { staff, isManager, staffList, nameById, meeting, meetingDate, todos } = ctx;
+  const { staff, isManager, staffList, nameById, meeting, meetingDate, todos, rocks } = ctx;
   const { issues, loading, error, addIssue, updateIssue, deleteIssue } = useIssues(board);
   const [title, setTitle]       = useState('');
   const [todoFor, setTodoFor]   = useState(null);
@@ -488,6 +492,7 @@ function IssuesBoard({ board, voices, ctx }) {
             {issueTodos.map((t) => (
               <li key={t.id} className={`text-xs ${todos.completionFor(t) ? 'text-gray-400 line-through' : 'text-gray-600'}`}>
                 ↳ {t.label} · {nameById[t.assigned_staff_id] || 'Unassigned'}
+                {t.rock_id && <span className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-800">Rock: {rocks.find((rk) => rk.id === t.rock_id)?.title || '…'}</span>}
               </li>
             ))}
           </ul>
@@ -495,6 +500,7 @@ function IssuesBoard({ board, voices, ctx }) {
         {todoFor === issue.id && (
           <TaskForm
             staffList={staffList}
+            rocks={rocks}
             initial={{ label: issue.title, assignee: staff?.id || '', due_date: format(addDays(parseISO(meetingDate), 7), 'yyyy-MM-dd') }}
             submitLabel="Add to-do"
             onCancel={() => setTodoFor(null)}
