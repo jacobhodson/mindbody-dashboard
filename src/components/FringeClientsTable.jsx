@@ -1,13 +1,52 @@
-import { useState, useEffect } from 'react';
-import { Users, ArrowUp, ArrowDown, ArrowRight, Sparkles, RefreshCw, CheckCircle, ChevronDown, Contact } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Users, ArrowUp, ArrowDown, ArrowRight, Sparkles, RefreshCw, CheckCircle, ChevronDown, Contact, RotateCcw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import ContactModal          from './ContactModal.jsx';
 import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
 
+// calendarWeek is this Mon–Sun to date (it was mislabelled "Last Cal.
+// Week"); lastWeek is the previous full Mon–Sun.
 const PERIODS = [
   { key: '7days',        label: 'Last 7 Days' },
-  { key: 'calendarWeek', label: 'Last Cal. Week' },
+  { key: 'calendarWeek', label: 'This Week' },
+  { key: 'lastWeek',     label: 'Last Week' },
 ];
+
+const SORTS = [
+  { key: 'sessions_desc', label: 'Most sessions' },
+  { key: 'sessions_asc',  label: 'Fewest sessions' },
+  { key: 'trend_up',      label: 'Trending up most' },
+  { key: 'trend_down',    label: 'Trending down most' },
+  { key: 'name',          label: 'Name A–Z' },
+];
+
+// "Back from Red" = recentRed from mb-client-analytics: a week with no
+// classes in the 4 weeks before this window, after attending before it.
+const FILTERS = [
+  { key: 'all',      label: 'All' },
+  { key: 'up',       label: 'Trending up' },
+  { key: 'down',     label: 'Trending down' },
+  { key: 'backFromRed', label: 'Back from Red' },
+];
+
+const delta = (c) => c.trend?.delta ?? 0;
+function sortClients(list, sort) {
+  const byName = (a, b) => (a.name || '').localeCompare(b.name || '');
+  const out = [...list];
+  switch (sort) {
+    case 'sessions_asc':  return out.sort((a, b) => a.sessionsThisWeek - b.sessionsThisWeek || byName(a, b));
+    case 'trend_up':      return out.sort((a, b) => delta(b) - delta(a) || byName(a, b));
+    case 'trend_down':    return out.sort((a, b) => delta(a) - delta(b) || byName(a, b));
+    case 'name':          return out.sort(byName);
+    default:              return out.sort((a, b) => b.sessionsThisWeek - a.sessionsThisWeek || byName(a, b));
+  }
+}
+function matchesFilter(c, filter) {
+  if (filter === 'up') return c.trend?.direction === 'up';
+  if (filter === 'down') return c.trend?.direction === 'down';
+  if (filter === 'backFromRed') return Boolean(c.recentRed);
+  return true;
+}
 
 const SEGMENTS = [
   {
@@ -32,7 +71,7 @@ const SEGMENTS = [
 
 function TrendIndicator({ trend }) {
   if (!trend) return null;
-  const { direction, avg } = trend;
+  const { direction, avg, delta: d } = trend;
   if (direction === 'new') {
     return (
       <span className="flex items-center gap-0.5 text-xs text-blue-600">
@@ -46,7 +85,9 @@ function TrendIndicator({ trend }) {
   return (
     <span className={`flex items-center gap-0.5 text-xs tabular-nums ${color}`}>
       <Icon className="h-3 w-3" />
-      <span className="text-gray-500">{avg}/wk</span>
+      <span className="text-gray-500">
+        {(direction === 'up' || direction === 'down') && d != null ? `${d > 0 ? '+' : ''}${d} vs ` : ''}{avg}/wk
+      </span>
     </span>
   );
 }
@@ -59,6 +100,8 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
   const [activeTab, setActiveTab]   = useState('atRisk');
   const [selected, setSelected]     = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const [sort, setSort]             = useState('sessions_desc');
+  const [filter, setFilter]         = useState('all');
 
   const isContacted   = contactLog?.isContacted  ?? (() => false);
   const logContact    = contactLog?.logContact    ?? null;
@@ -80,8 +123,14 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
   const segments       = data?.fringeSegments || {};
   const currentSeg     = SEGMENTS.find((s) => s.key === activeTab);
   // Exclude onboarding clients — they are tracked on the Onboarding tab
-  const currentClients = (segments[activeTab]?.clients || []).filter((c) => !onboardingIds.has(c.id));
-  const currentCount   = currentClients.length;
+  const segmentClients = (segments[activeTab]?.clients || []).filter((c) => !onboardingIds.has(c.id));
+  const currentClients = useMemo(
+    () => sortClients(segmentClients.filter((c) => matchesFilter(c, filter)), sort),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, activeTab, onboardingIds, filter, sort],
+  );
+  const currentCount   = segmentClients.length;
+  const filterCount = (key) => segmentClients.filter((c) => matchesFilter(c, key)).length;
 
   const toggleExpand = (id) => {
     setExpandedId((prev) => (prev === id ? null : id));
@@ -147,8 +196,30 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
 
       {/* Tab description */}
       {currentSeg && (
-        <div className="px-5 py-2 border-b border-gray-200/60">
-          <p className="text-xs text-gray-500">{currentSeg.desc}</p>
+        <div className="flex flex-wrap items-center gap-2 px-5 py-2 border-b border-gray-200/60">
+          <p className="text-xs text-gray-500 mr-auto">{currentSeg.desc}</p>
+          <div className="flex flex-wrap gap-1">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                title={f.key === 'backFromRed' ? 'Had a week with no classes in the 4 weeks before this one, after attending before that — would have been on Red\'s List' : undefined}
+                className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                  filter === f.key ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {f.label}{!loading && f.key !== 'all' ? ` · ${filterCount(f.key)}` : ''}
+              </button>
+            ))}
+          </div>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            aria-label="Sort clients"
+            className="rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-[11px] text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          >
+            {SORTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
         </div>
       )}
 
@@ -167,7 +238,7 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
         )}
 
         {!loading && !error && currentClients.length === 0 && (
-          <p className="py-10 text-center text-sm text-gray-400">No clients in this segment</p>
+          <p className="py-10 text-center text-sm text-gray-400">{filter === 'all' ? 'No clients in this segment' : 'No clients match this filter'}</p>
         )}
 
         {!loading && !error && currentClients.map((client) => {
@@ -204,6 +275,14 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
                       </span>
                     )}
                     <TrendIndicator trend={client.trend} />
+                    {client.recentRed && (
+                      <span
+                        title={`No classes ${client.recentRed.weeksAgo === 1 ? 'the week' : `${client.recentRed.weeksAgo} weeks`} before this window — back attending now`}
+                        className="shrink-0 flex items-center gap-0.5 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700"
+                      >
+                        <RotateCcw className="h-2.5 w-2.5" /> Back from Red
+                      </span>
+                    )}
                     {wasContacted && (
                       <span className="shrink-0 flex items-center gap-1 text-xs text-emerald-500">
                         <CheckCircle className="h-3 w-3" />
@@ -254,7 +333,7 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
         })}
       </div>
 
-      {!loading && currentCount > currentClients.length && (
+      {!loading && filter !== 'all' && currentCount > currentClients.length && (
         <div className="px-5 py-3 border-t border-gray-200">
           <p className="text-xs text-gray-400">
             Showing {currentClients.length} of {currentCount}

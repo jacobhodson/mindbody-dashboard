@@ -1,7 +1,7 @@
 /**
  * 28-day rolling window, split into 4 weekly buckets.
- * Supports ?period=7days (default, rolling) or ?period=calendarWeek
- * (current Mon–Sun to date)
+ * Supports ?period=7days (default, rolling), ?period=calendarWeek
+ * (current Mon–Sun to date) or ?period=lastWeek (the previous full Mon–Sun)
  *
  * Returns:
  *   reds        – visited W2–W4 but NOT W1 (recent churn), PLUS clients with
@@ -19,7 +19,9 @@
  *                 group classes at all (see mb-pt-analytics.js ptReds for
  *                 their equivalent).
  *   fringe      – visited W1, segmented by count (atRisk/engaged)
- *                 each client carries: sessionsThisWeek, trend, service, isFullyUtilising
+ *                 each client carries: sessionsThisWeek, trend (+ delta vs
+ *                 the 3 prior weeks), service, isFullyUtilising, and
+ *                 recentRed — see recentRedFor()
  *   noShows     – clients with unsigned bookings in W1 window
  *   suspensions – clients with active SuspensionInfo or hold-type status
  *                 (excludes Terminated, Expired, Non Member)
@@ -195,9 +197,22 @@ function trend(w1, w2, w3, w4) {
   if (!nonZero.length) return { avg: 0, direction: 'new' };
   const avg     = prevWeeks.reduce((s, w) => s + w, 0) / 3;
   const rounded = Math.round(avg * 10) / 10;
-  if (w1 > avg + 0.4) return { avg: rounded, direction: 'up' };
-  if (w1 < avg - 0.4) return { avg: rounded, direction: 'down' };
-  return { avg: rounded, direction: 'stable' };
+  const delta   = Math.round((w1 - avg) * 10) / 10; // this window vs the 3-week average
+  if (w1 > avg + 0.4) return { avg: rounded, delta, direction: 'up' };
+  if (w1 < avg - 0.4) return { avg: rounded, delta, direction: 'down' };
+  return { avg: rounded, delta, direction: 'stable' };
+}
+
+// "Back from Red": had a zero-session week in one of the 4 weeks before W1
+// (W2–W5) after attending in at least one of the 3 weeks before *that* —
+// i.e. they'd have been on Red's List then. Inferred from attendance (no
+// per-client Red's List history is stored). `weeksAgo` = how many weeks
+// before W1 the most recent such gap was.
+function recentRedFor(w) {
+  for (let k = 2; k <= 5; k++) {
+    if (w[k] === 0 && (w[k + 1] + w[k + 2] + w[k + 3]) > 0) return { weeksAgo: k - 1 };
+  }
+  return null;
 }
 
 // ─── Handler ────────────────────────────────────────────────────────────────
@@ -212,7 +227,12 @@ export const handler = async (event) => {
 
     // ── W1 window ──────────────────────────────────────────────────────────
     let w1Start, w1End;
-    if (period === 'calendarWeek') {
+    if (period === 'lastWeek') {
+      // The previous full Mon–Sun week.
+      const lastWeek = subWeeks(now, 1);
+      w1Start = startOfWeek(lastWeek, { weekStartsOn: 1 });
+      w1End   = endOfWeek(lastWeek, { weekStartsOn: 1 });
+    } else if (period === 'calendarWeek') {
       // Current week to date (Mon 00:00 → yesterday 23:59:59). This used to
       // be the *previous* completed Mon–Sun week (via subWeeks(now, 1)) from
       // when the toggle was labelled "Last Cal. Week" — but the UI label was
@@ -233,8 +253,11 @@ export const handler = async (event) => {
     const b14 = subDays(w1Start, 7);
     const b21 = subDays(w1Start, 14);
     const b28 = subDays(w1Start, 21);
+    // W5–W8 are fetched only for recentRedFor(); they're tallied separately
+    // (olderWeeks) so every other output still sees exactly the 28-day window.
+    const b56 = subDays(w1Start, 49);
 
-    const startStr = format(b28,   "yyyy-MM-dd'T'00:00:00");
+    const startStr = format(b56,   "yyyy-MM-dd'T'00:00:00");
     const endStr   = format(w1End, "yyyy-MM-dd'T'23:59:59");
 
     const allClasses = await getClasses(token, startStr, endStr);
@@ -244,6 +267,7 @@ export const handler = async (event) => {
     const services      = {};  // id → most-recent service name
     const noShowMap     = {};  // id → [{ className, day, time, staffName }]
     const lastVisitDate = {};  // id → most recent signed-in Date
+    const olderWeeks    = {};  // id → { w5, w6, w7, w8 } (recentRedFor only)
 
     for (let i = 0; i < allClasses.length; i += BATCH) {
       const batch   = allClasses.slice(i, i + BATCH);
@@ -252,6 +276,19 @@ export const handler = async (event) => {
       batch.forEach((cls, idx) => {
         if (results[idx].status !== 'fulfilled') return;
         const classDate = parseISO(cls.StartDateTime);
+
+        // Weeks 5–8: count sign-ins for recentRedFor() and nothing else.
+        if (classDate <= b28) {
+          const wk = classDate > subDays(w1Start, 28) ? 'w5' : classDate > subDays(w1Start, 35) ? 'w6'
+            : classDate > subDays(w1Start, 42) ? 'w7' : 'w8';
+          for (const visit of results[idx].value) {
+            const id = String(visit.ClientId || '');
+            if (!id || visit.SignedIn !== true || visit.LateCancelled) continue;
+            if (!olderWeeks[id]) olderWeeks[id] = { w5: 0, w6: 0, w7: 0, w8: 0 };
+            olderWeeks[id][wk]++;
+          }
+          return;
+        }
 
         // Determine week bucket
         const inW1 = classDate >= w1Start && classDate <= w1End;
@@ -307,7 +344,9 @@ export const handler = async (event) => {
       const isFullyUtil = is2x && (extra.sessionsThisWeek ?? w.w1) >= 2;
       const lastDate          = lastVisitDate[id] ? format(lastVisitDate[id], 'yyyy-MM-dd') : null;
       const weeklyAttendance  = { w1: w.w1, w2: w.w2, w3: w.w3, w4: w.w4 };
-      return { ...c, service: svc, trend: t, is2xMember: is2x, isFullyUtilising: isFullyUtil, lastSessionDate: lastDate, weeklyAttendance, ...extra };
+      const o = olderWeeks[id] || { w5: 0, w6: 0, w7: 0, w8: 0 };
+      const recentRed = recentRedFor([null, w.w1, w.w2, w.w3, w.w4, o.w5, o.w6, o.w7, o.w8]);
+      return { ...c, service: svc, trend: t, is2xMember: is2x, isFullyUtilising: isFullyUtil, lastSessionDate: lastDate, weeklyAttendance, recentRed, ...extra };
     }
 
     // Red's List: visited W2–W4 but NOT W1, active contract only, not suspended
@@ -418,8 +457,10 @@ export const handler = async (event) => {
     const engaged = byCount(3, 99);
 
     const fringeSegments = {
-      atRisk:  { count: atRisk.length,  clients: atRisk.slice(0, 50)  },
-      engaged: { count: engaged.length, clients: engaged.slice(0, 50) },
+      // Uncapped (the mirror makes this free) so the table's sorts and
+      // filters work over everyone, not an arbitrary first 50.
+      atRisk:  { count: atRisk.length,  clients: atRisk  },
+      engaged: { count: engaged.length, clients: engaged },
     };
 
     // No-shows
