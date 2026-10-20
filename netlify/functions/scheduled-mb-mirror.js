@@ -172,6 +172,21 @@ async function syncSessionTypes(token) {
   return (data.SessionTypes || []).length;
 }
 
+// Retail product catalogue — each flavour/size of an item is its own
+// product id; Color/Size carry the flavour name shown in Finances → Retail
+// Sales (retail_sale_lines() reads it). A page or two of calls, nightly.
+// Non-fatal: flavour names are cosmetic, so a failure here mustn't sink the
+// rest of the nightly run.
+async function syncProducts(token) {
+  let products;
+  try { products = await fetchAllPages('/sale/products', token, {}, 'Products'); }
+  catch (e) { return `failed: ${e.message}`; }
+  const { error } = await supabase.from('mb_reference')
+    .upsert({ key: 'products', raw: products, synced_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) throw new Error(`mb_reference: ${error.message}`);
+  return products.length;
+}
+
 // ── Class visits ──────────────────────────────────────────────────────────
 // Only classes with bookings (same filter the endpoints always applied).
 // `force` refetches regardless of visits_final (nightly catch-up of late
@@ -270,8 +285,9 @@ async function runMode(mode, qs, token) {
       return { roster, sales, txns, classes, appts, visits };
     }
     case 'nightly': {
-      const [types, roster, sales, txns, classes, appts] = await Promise.all([
+      const [types, products, roster, sales, txns, classes, appts] = await Promise.all([
         syncSessionTypes(token),
+        syncProducts(token),
         syncRoster(token),
         syncSales(token, localDate(-35), localDate(0)),
         syncTransactions(token, localDate(-31), localDate(0)),
@@ -279,7 +295,7 @@ async function runMode(mode, qs, token) {
         syncAppointments(token, localDate(-35), localDate(1)),
       ]);
       const visits = await syncVisits(token, localDate(-3), localDate(0), { force: true, deadline });
-      return { types, roster, sales, txns, classes, appts, visits };
+      return { types, products, roster, sales, txns, classes, appts, visits };
     }
     case 'contracts':
       return syncPerClient({
@@ -294,8 +310,9 @@ async function runMode(mode, qs, token) {
     case 'backfill': {
       const { from, to } = qs;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(from || '') || !/^\d{4}-\d{2}-\d{2}$/.test(to || '')) throw new Error('backfill needs from/to=YYYY-MM-DD');
-      const [types, roster, sales, classes, appts, txns] = await Promise.all([
+      const [types, products, roster, sales, classes, appts, txns] = await Promise.all([
         syncSessionTypes(token),
+        syncProducts(token),
         syncRoster(token),
         syncSales(token, from, to),
         syncClasses(token, from, to),
@@ -303,7 +320,7 @@ async function runMode(mode, qs, token) {
         syncTransactions(token, from, to),
       ]);
       const visits = qs.visits ? await syncVisits(token, from, to, { force: true, deadline }) : null;
-      return { types, roster, sales, classes, appts, txns, visits };
+      return { types, products, roster, sales, classes, appts, txns, visits };
     }
     default:
       throw new Error(`unknown mode ${mode}`);

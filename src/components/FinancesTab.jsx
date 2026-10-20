@@ -1,5 +1,6 @@
 import XeroConnection     from './XeroConnection.jsx';
 import RevenueCards       from './RevenueCards.jsx';
+import RetailSales        from './RetailSales.jsx';
 import DeclinedList       from './DeclinedList.jsx';
 import PaymentIssuesTable from './PaymentIssuesTable.jsx';
 import { usePaymentResolutions } from '../utils/usePaymentResolutions.js';
@@ -17,6 +18,7 @@ export default function FinancesTab({ data, loading, errors, isManager }) {
         loading={loading.revenue}
         error={errors.revenue}
       />
+      <RetailSales isManager={isManager} />
       <DeclinedList
         data={data.clientAnalytics}
         loading={loading.clientAnalytics}
