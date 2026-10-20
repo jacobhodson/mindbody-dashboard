@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Users, ArrowUp, ArrowDown, ArrowRight, Sparkles, RefreshCw, CheckCircle, ChevronDown, Contact, RotateCcw } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format, parseISO } from 'date-fns';
 import ContactModal          from './ContactModal.jsx';
 import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
 
@@ -20,8 +20,11 @@ const SORTS = [
   { key: 'name',          label: 'Name A–Z' },
 ];
 
-// "Back from Red" = recentRed from mb-client-analytics: a week with no
-// classes in the 4 weeks before this window, after attending before it.
+// "Back from Red": from mb-client-analytics. Once reds_daily has 30 days of
+// history (redHistory.source === 'history') it's wasRedLast30 — actually on
+// Red's List in the last 30 days. Until then it's the inferred recentRed: a
+// week with no classes in the 4 weeks before this window, after attending
+// before it (over-flags around holiday weeks).
 const FILTERS = [
   { key: 'all',      label: 'All' },
   { key: 'up',       label: 'Trending up' },
@@ -41,10 +44,20 @@ function sortClients(list, sort) {
     default:              return out.sort((a, b) => b.sessionsThisWeek - a.sessionsThisWeek || byName(a, b));
   }
 }
-function matchesFilter(c, filter) {
+// Tooltip text when the client is "Back from Red", else null.
+function backFromRed(c, useHistory) {
+  if (useHistory) {
+    return c.wasRedLast30
+      ? `On Red's List ${c.lastRedOn ? format(parseISO(c.lastRedOn), 'd MMM') : 'in the last 30 days'} — back attending now`
+      : null;
+  }
+  if (!c.recentRed) return null;
+  return `No classes ${c.recentRed.weeksAgo === 1 ? 'the week' : `${c.recentRed.weeksAgo} weeks`} before this window — back attending now (inferred from attendance)`;
+}
+function matchesFilter(c, filter, useHistory) {
   if (filter === 'up') return c.trend?.direction === 'up';
   if (filter === 'down') return c.trend?.direction === 'down';
-  if (filter === 'backFromRed') return Boolean(c.recentRed);
+  if (filter === 'backFromRed') return Boolean(backFromRed(c, useHistory));
   return true;
 }
 
@@ -121,16 +134,17 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
   }, [period]);
 
   const segments       = data?.fringeSegments || {};
+  const useRedHistory  = data?.redHistory?.source === 'history';
   const currentSeg     = SEGMENTS.find((s) => s.key === activeTab);
   // Exclude onboarding clients — they are tracked on the Onboarding tab
   const segmentClients = (segments[activeTab]?.clients || []).filter((c) => !onboardingIds.has(c.id));
   const currentClients = useMemo(
-    () => sortClients(segmentClients.filter((c) => matchesFilter(c, filter)), sort),
+    () => sortClients(segmentClients.filter((c) => matchesFilter(c, filter, useRedHistory)), sort),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data, activeTab, onboardingIds, filter, sort],
   );
   const currentCount   = segmentClients.length;
-  const filterCount = (key) => segmentClients.filter((c) => matchesFilter(c, key)).length;
+  const filterCount = (key) => segmentClients.filter((c) => matchesFilter(c, key, useRedHistory)).length;
 
   const toggleExpand = (id) => {
     setExpandedId((prev) => (prev === id ? null : id));
@@ -203,7 +217,11 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
               <button
                 key={f.key}
                 onClick={() => setFilter(f.key)}
-                title={f.key === 'backFromRed' ? 'Had a week with no classes in the 4 weeks before this one, after attending before that — would have been on Red\'s List' : undefined}
+                title={f.key === 'backFromRed'
+                  ? (useRedHistory
+                    ? 'On Red\'s List at some point in the last 30 days'
+                    : 'Had a week with no classes in the 4 weeks before this one, after attending before that — would have been on Red\'s List (inferred until 30 days of Red\'s List history exist)')
+                  : undefined}
                 className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
                   filter === f.key ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100'
                 }`}
@@ -275,9 +293,9 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
                       </span>
                     )}
                     <TrendIndicator trend={client.trend} />
-                    {client.recentRed && (
+                    {backFromRed(client, useRedHistory) && (
                       <span
-                        title={`No classes ${client.recentRed.weeksAgo === 1 ? 'the week' : `${client.recentRed.weeksAgo} weeks`} before this window — back attending now`}
+                        title={backFromRed(client, useRedHistory)}
                         className="shrink-0 flex items-center gap-0.5 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700"
                       >
                         <RotateCcw className="h-2.5 w-2.5" /> Back from Red

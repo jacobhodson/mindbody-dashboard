@@ -21,7 +21,8 @@
  *   fringe      – visited W1, segmented by count (atRisk/engaged)
  *                 each client carries: sessionsThisWeek, trend (+ delta vs
  *                 the 3 prior weeks), service, isFullyUtilising, and
- *                 recentRed — see recentRedFor()
+ *                 recentRed — see recentRedFor() — plus wasRedLast30 /
+ *                 lastRedOn from the reds_daily history (see redHistory())
  *   noShows     – clients with unsigned bookings in W1 window
  *   suspensions – clients with active SuspensionInfo or hold-type status
  *                 (excludes Terminated, Expired, Non Member)
@@ -30,6 +31,9 @@ import { ok, err, CORS, formatPhone } from './utils/mb-auth.js';
 // Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
 import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
 import { subDays, endOfDay, format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 const BATCH = 15;
 
@@ -215,6 +219,35 @@ function recentRedFor(w) {
   return null;
 }
 
+// Real Red's List history (reds_daily, written nightly by
+// scheduled-client-mix-snapshot.js): id → most recent snapshot_date in the
+// last 30 days (Sydney) the client was on Red's List. `source` is 'history'
+// once the table reaches back 30 days, else 'inferred' — callers fall back to
+// recentRedFor() until then, since a short history would under-report.
+const sydneyDate = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(d); // yyyy-MM-dd
+
+async function redHistory(now) {
+  const today = sydneyDate(now);
+  const since = format(subDays(parseISO(today), 30), 'yyyy-MM-dd');
+  const earliestRes = await supabase.from('reds_daily').select('snapshot_date').order('snapshot_date', { ascending: true }).limit(1);
+  if (earliestRes.error) throw new Error(`reds_daily: ${earliestRes.error.message}`);
+  const earliest = earliestRes.data?.[0]?.snapshot_date ?? null;
+  // ~30 nights × a few dozen reds overflows PostgREST's 1000-row cap — page it.
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.from('reds_daily').select('client_id, snapshot_date')
+      .gte('snapshot_date', since).order('snapshot_date').order('client_id').range(from, from + 999);
+    if (error) throw new Error(`reds_daily: ${error.message}`);
+    rows.push(...data);
+    if (data.length < 1000) break;
+  }
+  const lastRedOn = {};
+  for (const r of rows) {
+    if (!lastRedOn[r.client_id] || r.snapshot_date > lastRedOn[r.client_id]) lastRedOn[r.client_id] = r.snapshot_date;
+  }
+  return { source: earliest && earliest <= since ? 'history' : 'inferred', earliest, lastRedOn };
+}
+
 // ─── Handler ────────────────────────────────────────────────────────────────
 
 export const handler = async (event) => {
@@ -332,8 +365,15 @@ export const handler = async (event) => {
       });
     }
 
-    // Fetch all clients for enrichment
-    const clientMap = await getAllClients(token);
+    // Fetch all clients for enrichment, and the Red's List history. A
+    // history failure only costs the history-based flag, not the endpoint.
+    const [clientMap, history] = await Promise.all([
+      getAllClients(token),
+      redHistory(now).catch((e) => {
+        console.error('[mb-analytics] reds_daily:', e.message);
+        return { source: 'inferred', earliest: null, lastRedOn: {} };
+      }),
+    ]);
 
     function enrichClient(id, extra = {}) {
       const c   = clientMap[id] || { id, name: `Client ${id}`, email: '', phone: '' };
@@ -451,7 +491,10 @@ export const handler = async (event) => {
     const byCount = (min, max) =>
       [...visitedW1]
         .filter((id) => { const c = weeks[id].w1; return c >= min && c <= max; })
-        .map((id) => enrichClient(id, { sessionsThisWeek: weeks[id].w1 }));
+        .map((id) => {
+          const lastRedOn = history.lastRedOn[String(id)] ?? null;
+          return enrichClient(id, { sessionsThisWeek: weeks[id].w1, wasRedLast30: Boolean(lastRedOn), lastRedOn });
+        });
 
     const atRisk  = byCount(1, 2);
     const engaged = byCount(3, 99);
@@ -535,6 +578,9 @@ export const handler = async (event) => {
       period,
       reds:           allReds.slice(0, 200),
       fringeSegments,
+      // Which "Back from Red" source to trust: 'history' (wasRedLast30) once
+      // reds_daily reaches back 30 days, else 'inferred' (recentRed).
+      redHistory: { source: history.source, since: history.earliest },
       noShows,
       suspensions,
       declinedClients,

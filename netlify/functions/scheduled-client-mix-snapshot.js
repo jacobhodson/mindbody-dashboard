@@ -15,12 +15,18 @@
  * dashboard calls (mb-client-analytics / mb-onboarding, both reading the
  * Supabase mirror — no Mindbody calls), invoked in-process rather than over
  * HTTP, same reasoning as scheduled-coach-snapshot.js.
+ *
+ * Also writes tonight's Red's List membership to reds_daily (one row per
+ * client id, snapshot_date = today Sydney) — the list as Red's List shows it
+ * on load, i.e. minus onboarding clients. mb-client-analytics reads it for
+ * the Fringe Clients "Back from Red" flag. The day's rows are replaced, so a
+ * re-run the same day reflects the latest list.
  */
 import { createClient } from '@supabase/supabase-js';
 import { startOfWeek, parseISO, subDays, format } from 'date-fns';
 import { handler as analyticsHandler } from './mb-client-analytics.js';
 import { handler as onboardingHandler } from './mb-onboarding.js';
-import { summariseClientMix } from '../../src/utils/clientMix.js';
+import { summariseClientMix, allOnboardingClients, onboardingClientIds } from '../../src/utils/clientMix.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -73,8 +79,26 @@ export const handler = async () => {
     const { error } = await supabase.from('weekly_client_snapshots').upsert(row, { onConflict: 'week_start' });
     if (error) throw new Error(`weekly_client_snapshots: ${error.message}`);
 
-    console.log('[scheduled-client-mix-snapshot]', JSON.stringify(row));
-    return { statusCode: 200, body: JSON.stringify({ ok: true, ...row }) };
+    // ── Red's List daily history ──────────────────────────────────────────
+    const today = sydneyDate(now);
+    if ((analytics.summary?.redsCount ?? 0) > (analytics.reds || []).length) {
+      console.warn(`[scheduled-client-mix-snapshot] reds truncated: ${analytics.reds.length} of ${analytics.summary.redsCount}`);
+    }
+    const hiddenFromReds = onboardingClientIds(allOnboardingClients(onboarding), decisions);
+    const redRows = [...new Map(
+      (analytics.reds || [])
+        .filter((c) => !hiddenFromReds.has(String(c.id)))
+        .map((c) => [String(c.id), { snapshot_date: today, client_id: String(c.id), long_lapsed: Boolean(c.longLapsed) }]),
+    ).values()];
+    const { error: delErr } = await supabase.from('reds_daily').delete().eq('snapshot_date', today);
+    if (delErr) throw new Error(`reds_daily delete: ${delErr.message}`);
+    if (redRows.length) {
+      const { error: redsErr } = await supabase.from('reds_daily').insert(redRows);
+      if (redsErr) throw new Error(`reds_daily: ${redsErr.message}`);
+    }
+
+    console.log('[scheduled-client-mix-snapshot]', JSON.stringify(row), `reds_daily ${today}: ${redRows.length}`);
+    return { statusCode: 200, body: JSON.stringify({ ok: true, ...row, reds_daily: { snapshot_date: today, count: redRows.length } }) };
   } catch (e) {
     console.error('[scheduled-client-mix-snapshot] Failed:', e.message);
     return { statusCode: 500, body: JSON.stringify({ ok: false, error: e.message }) };
