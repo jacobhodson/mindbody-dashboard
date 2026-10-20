@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabaseClient.js';
+import { periodStartFor } from './periods.js';
 
 /**
  * Adds `delta` to today's metric_actuals row for metricKey (creating it if
@@ -25,9 +26,23 @@ export function onMetricActualsChanged(callback) {
 // `date` (yyyy-MM-dd, default today) lets the Scoreboard log into a past
 // week/month — it passes that period's last day (or today, if the period is
 // still in progress).
-export async function addMetricProgress(metricKey, delta, source = 'manual', date = null) {
+//
+// A negative delta (correcting an accidental +1, unchecking a linked task)
+// can't just come off `date`'s row — the entry being undone was usually
+// logged on an earlier day, so today has nothing to subtract from. It's
+// taken off the most recent days in [floorDate, date] instead, never
+// pushing a day below zero. floorDate defaults to the start of date's week
+// so a correction can't quietly eat into last week's numbers.
+export async function addMetricProgress(metricKey, delta, source = 'manual', date = null, floorDate = null) {
   if (!metricKey || !delta) return;
   const today = date || format(new Date(), 'yyyy-MM-dd');
+
+  if (delta < 0) {
+    const floor = floorDate || periodStartFor('weekly', new Date(`${today}T00:00:00`));
+    await subtractFromRecentDays(metricKey, -delta, floor, today, source);
+    window.dispatchEvent(new Event(CHANGED_EVENT));
+    return;
+  }
 
   const { data: existing, error: selErr } = await supabase
     .from('metric_actuals').select('id, value')
@@ -42,14 +57,36 @@ export async function addMetricProgress(metricKey, delta, source = 'manual', dat
       .update({ value: Number(existing.value) + delta, source, synced_at: new Date().toISOString() })
       .eq('id', existing.id);
     if (error) throw new Error(error.message);
-  } else if (delta > 0) {
-    // Nothing to subtract from yet if delta is negative — skip rather than
-    // create a phantom negative row.
+  } else {
     const { error } = await supabase.from('metric_actuals')
       .insert({ metric_key: metricKey, metric_date: today, value: delta, staff_id: null, source });
     if (error) throw new Error(error.message);
   }
   window.dispatchEvent(new Event(CHANGED_EVENT));
+}
+
+// Takes `amount` off metricKey's daily rows in [start, end], latest day
+// first, never pushing a day below zero. Returns how much was taken.
+async function subtractFromRecentDays(metricKey, amount, start, end, source) {
+  const { data: rows, error: selErr } = await supabase
+    .from('metric_actuals').select('id, value')
+    .eq('metric_key', metricKey).is('staff_id', null)
+    .gte('metric_date', start).lte('metric_date', end)
+    .order('metric_date', { ascending: false });
+  if (selErr) throw new Error(selErr.message);
+
+  let remaining = amount;
+  for (const row of rows || []) {
+    if (remaining <= 0) break;
+    const take = Math.min(Number(row.value), remaining);
+    if (take <= 0) continue;
+    const { error } = await supabase.from('metric_actuals')
+      .update({ value: Number(row.value) - take, source, synced_at: new Date().toISOString() })
+      .eq('id', row.id);
+    if (error) throw new Error(error.message);
+    remaining -= take;
+  }
+  return amount - remaining;
 }
 
 /**
@@ -81,16 +118,6 @@ export async function setMetricTotal(metricKey, start, end, newTotal) {
     return;
   }
 
-  let remaining = -delta;
-  for (const row of rows) {
-    if (remaining <= 0) break;
-    const take = Math.min(Number(row.value), remaining);
-    if (take <= 0) continue;
-    const { error } = await supabase.from('metric_actuals')
-      .update({ value: Number(row.value) - take, source: 'manual', synced_at: new Date().toISOString() })
-      .eq('id', row.id);
-    if (error) throw new Error(error.message);
-    remaining -= take;
-  }
+  await subtractFromRecentDays(metricKey, -delta, start, end, 'manual');
   window.dispatchEvent(new Event(CHANGED_EVENT));
 }

@@ -112,7 +112,7 @@ export function useTeamTasks(user, staff) {
       setCompletions((prev) => prev.filter((c) => c.id !== existing.id));
       // Back out whatever this completion had added to a linked target.
       if (template.linked_metric_key) {
-        addMetricProgress(template.linked_metric_key, -existing.value, 'task').catch((e) => setError(e.message));
+        addMetricProgress(template.linked_metric_key, -existing.value, 'task', null, existing.period_start).catch((e) => setError(e.message));
       }
       return;
     }
@@ -137,7 +137,7 @@ export function useTeamTasks(user, staff) {
     if (updErr) { setError(updErr.message); return null; }
     setCompletions((prev) => prev.map((c) => (c.id === existing.id ? data : c)));
     if (template.linked_metric_key) {
-      addMetricProgress(template.linked_metric_key, delta, 'task').catch((e) => setError(e.message));
+      addMetricProgress(template.linked_metric_key, delta, 'task', null, existing.period_start).catch((e) => setError(e.message));
     }
     return data;
   }, [staff, completionFor, markDone]);

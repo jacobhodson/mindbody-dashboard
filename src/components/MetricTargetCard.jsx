@@ -52,7 +52,7 @@ function ProgressRow({ cadenceLabel, target, actual, lastUpdated, canUpdate, onL
       </div>
       <div className="mt-1 flex items-center justify-between gap-2">
         <span className={`text-[10px] shrink-0 ${over ? 'text-red-600 font-medium' : 'text-gray-500'}`}>{remainingLabel}</span>
-        {canUpdate && <AddProgress onAdd={(n) => onLog(target.metric_key, n)} subtle={subtleUpdateButton} />}
+        {canUpdate && <AddProgress onAdd={(n) => onLog(target.metric_key, n, target.cadence)} subtle={subtleUpdateButton} />}
         <span className="text-[10px] text-gray-400 shrink-0 ml-auto">
           {lastUpdated ? `Updated ${formatDistanceToNow(new Date(lastUpdated), { addSuffix: true })}` : 'No updates yet'}
         </span>

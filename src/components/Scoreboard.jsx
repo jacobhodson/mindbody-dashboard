@@ -91,8 +91,8 @@ export default function Scoreboard({ staff, isManager, anchor, defaultView = 'we
   // today while it's still in progress.
   const logDate = current.end < today ? current.end : today;
   const logProgress = useCallback(
-    (metricKey, delta) => addMetricProgress(metricKey, delta, 'manual', logDate),
-    [logDate],
+    (metricKey, delta) => addMetricProgress(metricKey, delta, 'manual', logDate, current.start),
+    [logDate, current.start],
   );
 
   if (targetsLoading) return null;

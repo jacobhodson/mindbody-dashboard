@@ -66,9 +66,12 @@ export function useMetricProgress(rows) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actuals, ranges.map((r) => `${r.cadence}:${r.start}:${r.end}`).join(',')]);
 
-  const logProgress = useCallback(async (metricKey, delta) => {
-    await addMetricProgress(metricKey, delta, 'manual'); // reloads via onMetricActualsChanged
-  }, [load]);
+  // cadence bounds a negative correction to that card's current period.
+  const logProgress = useCallback(async (metricKey, delta, cadence) => {
+    const floor = cadence ? rangeFor(cadence)?.start : null;
+    await addMetricProgress(metricKey, delta, 'manual', null, floor); // reloads via onMetricActualsChanged
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ranges.map((r) => `${r.cadence}:${r.start}`).join(',')]);
 
   return { actualFor, lastUpdatedFor, logProgress, loading, error, reload: load };
 }

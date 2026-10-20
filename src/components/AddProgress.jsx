@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 
 /**
- * "+N" add-to-progress control — click to reveal a number input, submit
+ * "±N" add-to-progress control — a negative number (e.g. -1) takes an
+ * accidental entry back off — click to reveal a number input, submit
  * ADDS that amount (never overwrites). Shared by target cards in
  * WinTheWeek.jsx/Scoreboard.jsx (adds to a metric's daily metric_actuals
  * row) and count-type task rows in TaskChecklist.jsx (adds to that
@@ -49,12 +50,12 @@ export default function AddProgress({ onAdd, label = 'Update metric', subtle = f
       <input
         type="number"
         autoFocus
-        placeholder="+N"
+        placeholder="±N"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         className="w-16 rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
       />
-      <button type="submit" disabled={busy} className="rounded-lg bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50">Add</button>
+      <button type="submit" disabled={busy} className="rounded-lg bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50">{Number(value) < 0 ? 'Remove' : 'Add'}</button>
       <button type="button" onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-700"><X className="h-3.5 w-3.5" /></button>
     </form>
   );
