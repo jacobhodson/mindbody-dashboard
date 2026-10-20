@@ -22,6 +22,9 @@ export function sydneyNow(now = new Date()) {
 const toDate = (iso) => new Date(`${iso}T00:00:00Z`);
 const toIso = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 export const addDaysIso = (iso, n) => { const d = toDate(iso); d.setUTCDate(d.getUTCDate() + n); return toIso(d); };
+// The coming Sunday (today if it is Sunday) — previews use this so they show
+// exactly what that Sunday's send will contain.
+export const upcomingSunday = (iso) => addDaysIso(iso, (7 - toDate(iso).getUTCDay()) % 7);
 const mondayOf = (iso) => { const d = toDate(iso); return addDaysIso(iso, -((d.getUTCDay() + 6) % 7)); };
 const fmt = (iso, opts) => toDate(iso).toLocaleDateString('en-AU', { timeZone: 'UTC', ...opts });
 const fmtShort = (iso) => fmt(iso, { weekday: 'short', day: 'numeric', month: 'short' });

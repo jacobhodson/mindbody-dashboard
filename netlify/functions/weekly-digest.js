@@ -18,7 +18,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { ok, err, CORS } from './utils/mb-auth.js';
-import { sydneyNow, digestWindows, loadDigestData, digestContent, renderDigest } from './utils/digest-build.js';
+import { sydneyNow, upcomingSunday, digestWindows, loadDigestData, digestContent, renderDigest } from './utils/digest-build.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const FROM = process.env.DIGEST_FROM || 'Newstrength <team@newstrength.com.au>';
@@ -93,7 +93,7 @@ export const handler = async (event) => {
       const me = await caller(event);
       if (!me) return err('Sign in required', 401);
       const isManager = me.role === 'manager' || me.role === 'admin';
-      const win = digestWindows(sydneyNow().date);
+      const win = digestWindows(upcomingSunday(sydneyNow().date));
       const data = await loadDigestData(supabase, win);
       const targetId = isManager && qs.for ? qs.for : me.id;
       const person = data.staff.find((s) => s.id === targetId);
@@ -112,7 +112,7 @@ export const handler = async (event) => {
     // &test_for=<staff id>: email that one person their own digest as a
     // preview (not logged, ignores the Sunday gate and their on/off setting).
     if (qs.test_for) {
-      const win = digestWindows(sydneyNow().date);
+      const win = digestWindows(upcomingSunday(sydneyNow().date));
       const data = await loadDigestData(supabase, win);
       const person = data.staff.find((s) => s.id === qs.test_for);
       if (!person?.email) return err('No such team member with an email', 404);
