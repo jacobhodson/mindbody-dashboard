@@ -14,7 +14,7 @@
  *      pass &for=<staff id> to see someone else's. &send=1 also emails it to
  *      the caller's own address (never to the person previewed, never logged).
  *
- * Email goes out through Resend (RESEND_API_KEY, DIGEST_FROM).
+ * Email goes out through Resend (RESEND_API_KEY, DIGEST_FROM, DIGEST_REPLY_TO).
  */
 import { createClient } from '@supabase/supabase-js';
 import { ok, err, CORS } from './utils/mb-auth.js';
@@ -22,6 +22,8 @@ import { sydneyNow, upcomingSunday, digestWindows, loadDigestData, digestContent
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const FROM = process.env.DIGEST_FROM || 'Newstrength <team@newstrength.com.au>';
+// Replies go to a real inbox — the sending subdomain doesn't receive mail.
+const REPLY_TO = process.env.DIGEST_REPLY_TO || 'jacob@newstrength.com.au';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function sendEmail({ to, subject, html, text }) {
@@ -30,7 +32,7 @@ export async function sendEmail({ to, subject, html, text }) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: FROM, to: [to], subject, html, text }),
+    body: JSON.stringify({ from: FROM, to: [to], reply_to: REPLY_TO, subject, html, text }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`Resend ${res.status}: ${body.message || JSON.stringify(body).slice(0, 200)}`);
