@@ -141,6 +141,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             )}
             {user && (
               <NotificationBell
+                staff={staff} isManager={isManager}
                 onNavigate={(key, linkId) => { if (key === 'rocks' && linkId) openRock(linkId); else setTab(key); }}
               />
             )}

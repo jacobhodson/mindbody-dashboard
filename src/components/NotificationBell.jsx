@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Bell, CheckSquare, Plane, CalendarClock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useNotifications } from '../utils/useNotifications.js';
+import DigestControls from './DigestControls.jsx';
 
 const KIND = {
   task_assigned:   { Icon: CheckSquare,   tone: 'bg-emerald-100 text-emerald-700' },
@@ -14,7 +15,7 @@ const KIND = {
  * (managers) new leave requests. Only ever your own — see notifications RLS.
  * Clicking one marks it read and jumps to the tab it's about.
  */
-export default function NotificationBell({ onNavigate }) {
+export default function NotificationBell({ onNavigate, staff, isManager }) {
   const { items, unread, loading, markRead, markAllRead, clearRead } = useNotifications();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -87,6 +88,7 @@ export default function NotificationBell({ onNavigate }) {
               );
             })}
           </div>
+          {staff && <DigestControls staff={staff} isManager={isManager} />}
         </div>
       )}
     </div>
