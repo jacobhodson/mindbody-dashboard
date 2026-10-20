@@ -50,7 +50,11 @@ export function periodLabel(cadence, periodStart) {
  * cadence, to compute the right bucket.
  */
 export function periodStartForTemplate(template, now = new Date()) {
-  if (template.cadence === 'once') return template.due_date;
+  // An undated one-off keys its single completion off the day it was
+  // created (task_completions.period_start is NOT NULL).
+  if (template.cadence === 'once') {
+    return template.due_date || (template.created_at ? format(new Date(template.created_at), 'yyyy-MM-dd') : null);
+  }
   return periodStartFor(template.cadence, now);
 }
 

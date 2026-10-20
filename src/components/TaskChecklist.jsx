@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Check, User, Users, Plus, X, ArrowRight, Pencil, Trash2, CalendarDays, Target } from 'lucide-react';
+import { Check, User, Users, Plus, X, ArrowRight, Pencil, Trash2, CalendarDays, Target, List, Columns3, ArrowRightLeft } from 'lucide-react';
 import { useTeamTasks, resolveAssignmentFields } from '../utils/useTeamTasks.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useAllClients } from '../utils/useAllClients.js';
 import { useTargets, groupTargetsByMetric } from '../utils/useTargets.js';
 import { renderFormatted } from '../utils/richText.js';
 import { dueDateFor } from '../utils/periods.js';
+import { TASK_BUCKETS, bucketBounds, bucketFor, dropDateFor } from '../utils/taskBuckets.js';
 import { format, parseISO } from 'date-fns';
 import RichTextField from './RichTextField.jsx';
 import AddProgress from './AddProgress.jsx';
@@ -19,8 +20,8 @@ import { PlaybookChip, PlaybookPicker } from '../utils/playbookLink.jsx';
 // whose personal/team/assigned model would strip their assignment.
 const isLinkedTask = (t) => Boolean(t.rock_id || t.meeting_id);
 
-const CADENCE_LABEL = { daily: 'Today', weekly: 'This week', monthly: 'This month', once: 'One-off tasks' };
-const CADENCE_ORDER = ['daily', 'weekly', 'monthly', 'once'];
+const CADENCE_TAG = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+const VIEW_KEY = 'home-task-view';
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 // A client's full name, resolved against a typed name via useAllClients — used
@@ -141,7 +142,6 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
     e.preventDefault();
     if (!label.trim()) return;
     if (assignMode === 'assigned' && !assignee) return;
-    if (cadence === 'once' && !dueDate) return;
     if (targetType === 'count' && !targetValue) return;
     setBusy(true);
     const linkedTarget = linkableMetrics.find((t) => t.id === linkedTargetId);
@@ -156,7 +156,7 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
       isManager,
       assignMode,
       assignee: assignMode === 'assigned' ? assignee : null,
-      due_date: cadence === 'once' ? dueDate : null,
+      due_date: cadence === 'once' ? (dueDate || null) : null,
       due_day: (cadence === 'weekly' || cadence === 'monthly') && dueDay ? Number(dueDay) : null,
       client_id: clientName.trim() ? resolveClientId(clientName.trim()) : null,
       linked_target_id: linkedTarget?.id || null,
@@ -194,9 +194,10 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
         {cadence === 'once' && (
           <input
             type="date"
-            required
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
+            title="Leave blank for no due date"
+            aria-label="Due date (optional)"
             className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-gray-900"
           />
         )}
@@ -297,7 +298,10 @@ function TaskForm({ initial, isManager, staff, onSubmit, onClose, submitLabel = 
   );
 }
 
-function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onUpdate, onDelete, assignedName, isManager, staff, canEdit, linkedClientName, linkedTargetLabel, sourceTag, notes }) {
+// `compact` renders it as a board card (no description; drag via
+// `drag` = { draggable, onDragStart, onDragEnd, dragging }, plus a Move
+// menu of `moveTargets` [{ key, label }] for touch).
+function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onUpdate, onDelete, assignedName, isManager, staff, canEdit, linkedClientName, linkedTargetLabel, sourceTag, notes, overdue, compact = false, drag, moveTargets = [], onMove }) {
   const [notesOpen, setNotesOpen] = useState(false);
   const isCount = template.target_type === 'count';
   const countValue = completion?.value ?? 0;
@@ -305,9 +309,11 @@ function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onU
   const [logging, setLogging] = useState(false);
   const [editing, setEditing] = useState(false);
 
+  const wrapClass = compact ? 'rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm' : 'py-3';
+
   if (editing) {
     return (
-      <li className="py-3">
+      <li className={wrapClass}>
         <TaskForm
           initial={{
             label: template.label,
@@ -335,9 +341,15 @@ function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onU
   }
 
   const dueDate = dueDateFor(template);
+  const draggable = Boolean(drag?.draggable);
 
   return (
-    <li className="py-3">
+    <li
+      draggable={draggable}
+      onDragStart={draggable ? (e) => { e.dataTransfer.effectAllowed = 'move'; drag.onDragStart(); } : undefined}
+      onDragEnd={draggable ? drag.onDragEnd : undefined}
+      className={`${wrapClass} ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${drag?.dragging ? 'opacity-40' : ''}`}
+    >
       <div className="flex items-start gap-3">
         {isCount ? (
           <div
@@ -362,7 +374,7 @@ function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onU
           </button>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <span className={`text-sm font-medium ${done ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
               {template.label}
             </span>
@@ -394,16 +406,19 @@ function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onU
                 <Target className="h-2.5 w-2.5" /> {linkedTargetLabel}
               </span>
             )}
+            {CADENCE_TAG[template.cadence] && (
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">{CADENCE_TAG[template.cadence]}</span>
+            )}
             {dueDate && (
-              <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
-                <CalendarDays className="h-3 w-3" /> Due {format(parseISO(dueDate), 'EEE d MMM')}
+              <span className={`flex items-center gap-0.5 text-[10px] ${overdue ? 'font-medium text-red-600' : 'text-gray-400'}`}>
+                <CalendarDays className="h-3 w-3" /> Due {format(parseISO(dueDate), 'EEE d MMM')}{overdue ? ' · overdue' : ''}
               </span>
             )}
           </div>
-          {template.description && (
+          {template.description && !compact && (
             <p className="text-xs text-gray-500 mt-0.5">{renderFormatted(template.description)}</p>
           )}
-          {(sourceTag || notes || template.playbook_page_id) && (
+          {(sourceTag || notes || template.playbook_page_id || moveTargets.length > 0) && (
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <PlaybookChip pageId={template.playbook_page_id} />
               {sourceTag && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">{sourceTag}</span>}
@@ -413,6 +428,20 @@ function TaskRow({ template, completion, onToggle, onLogCount, onLogContact, onU
                   open={notesOpen}
                   onClick={() => setNotesOpen((o) => !o)}
                 />
+              )}
+              {moveTargets.length > 0 && (
+                <label className="ml-auto flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-gray-700" title="Reschedule to…">
+                  <ArrowRightLeft className="h-3 w-3" />
+                  <select
+                    value=""
+                    onChange={(e) => e.target.value && onMove(e.target.value)}
+                    aria-label="Move to column"
+                    className="cursor-pointer appearance-none bg-transparent text-[10px] focus:outline-none"
+                  >
+                    <option value="">Move</option>
+                    {moveTargets.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                  </select>
+                </label>
               )}
             </div>
           )}
@@ -523,12 +552,55 @@ export default function TaskChecklist({ user, staff, isManager }) {
     return null;
   };
 
-  const grouped = useMemo(() => {
-    const g = { daily: [], weekly: [], monthly: [], once: [] };
-    for (const t of visibleTemplates) g[t.cadence]?.push(t);
-    g.once.sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
+  // List or Board — remembered per browser.
+  const [view, setView] = useState(() => {
+    try { return localStorage.getItem(VIEW_KEY) === 'board' ? 'board' : 'list'; } catch { return 'list'; }
+  });
+  const chooseView = (v) => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* private mode */ } };
+  const [dragId, setDragId]   = useState(null);
+  const [overCol, setOverCol] = useState(null);
+
+  const isDone = (t) => {
+    const c = completionFor(t);
+    return t.target_type === 'count' ? (c?.value ?? 0) >= t.target_value : Boolean(c);
+  };
+
+  // Tasks by when they're due (see taskBuckets.js). Within a group: open
+  // before done, then earliest due first, then the template's sort order.
+  const bounds = bucketBounds();
+  const buckets = useMemo(() => {
+    const g = Object.fromEntries(TASK_BUCKETS.map((b) => [b.key, []]));
+    for (const t of visibleTemplates) {
+      const due = dueDateFor(t);
+      const done = isDone(t);
+      g[bucketFor(due, done, bounds)].push({ t, due, done });
+    }
+    for (const list of Object.values(g)) {
+      list.sort((a, b) => (a.done - b.done)
+        || (a.due || '9999').localeCompare(b.due || '9999')
+        || (a.t.sort_order ?? 0) - (b.t.sort_order ?? 0));
+    }
     return g;
-  }, [visibleTemplates]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleTemplates, completionFor, bounds.today]);
+
+  // Board drag = reschedule. Only open one-offs move (a recurring task's
+  // date comes from its cadence), only by someone allowed to edit them, and
+  // a rock/meeting to-do can't lose its due date (those always need one).
+  const canReschedule = (t) => t.cadence === 'once' && !isDone(t) && (isLinkedTask(t)
+    ? isManager || t.owner_staff_id === staff?.id || t.assigned_staff_id === staff?.id
+    : isManager || t.owner_staff_id === staff?.id);
+  const canDropOn = (t, bucketKey) => {
+    if (!canReschedule(t)) return false;
+    const date = dropDateFor(bucketKey, bounds);
+    if (date === undefined) return false;
+    if (date === null && isLinkedTask(t)) return false;
+    return bucketFor(dueDateFor(t), false, bounds) !== bucketKey;
+  };
+  const reschedule = (t, bucketKey) => {
+    if (!canDropOn(t, bucketKey)) return;
+    updateTask(t.id, { due_date: dropDateFor(bucketKey, bounds) });
+  };
 
   const handleUpdate = async (template, fields) => {
     await updateTask(template.id, {
@@ -539,7 +611,7 @@ export default function TaskChecklist({ user, staff, isManager }) {
       target_type: fields.target_type,
       target_value: fields.target_value,
       unit: fields.unit || null,
-      due_date: fields.cadence === 'once' ? fields.due_date : null,
+      due_date: fields.cadence === 'once' ? (fields.due_date || null) : null,
       due_day: (fields.cadence === 'weekly' || fields.cadence === 'monthly') ? fields.due_day : null,
       client_id: fields.client_id || null,
       linked_target_id: fields.linked_target_id || null,
@@ -550,6 +622,41 @@ export default function TaskChecklist({ user, staff, isManager }) {
   };
 
   const handleDelete = async (template) => { await deleteTask(template.id); };
+
+  const renderRow = (template, bucketKey, compact = false) => (
+    <TaskRow
+      key={template.id}
+      template={template}
+      completion={completionFor(template)}
+      overdue={bucketKey === 'overdue'}
+      compact={compact}
+      drag={compact ? {
+        draggable: canReschedule(template),
+        dragging: dragId === template.id,
+        onDragStart: () => setDragId(template.id),
+        onDragEnd: () => { setDragId(null); setOverCol(null); },
+      } : undefined}
+      moveTargets={compact ? TASK_BUCKETS.filter((b) => !b.listOnly && canDropOn(template, b.key)) : []}
+      onMove={(key) => reschedule(template, key)}
+      onToggle={toggle}
+      onLogCount={logCount}
+      onLogContact={logContactTask}
+      onUpdate={handleUpdate}
+      onDelete={handleDelete}
+      isManager={isManager}
+      staff={staff}
+      canEdit={!isLinkedTask(template) && (isManager || template.owner_staff_id === staff?.id)}
+      sourceTag={sourceTagFor(template)}
+      notes={isLinkedTask(template) ? { taskNotes, nameById: staffNameById } : null}
+      assignedName={
+        isManager && template.assigned_staff_id && template.assigned_staff_id !== staff?.id
+          ? staffNameById[template.assigned_staff_id]
+          : null
+      }
+      linkedClientName={template.client_id ? clientNameById[template.client_id] : null}
+      linkedTargetLabel={template.linked_target_id ? targetLabelById[template.linked_target_id] : null}
+    />
+  );
 
   if (loading) {
     return <p className="text-sm text-gray-500">Loading your tasks…</p>;
@@ -574,7 +681,21 @@ export default function TaskChecklist({ user, staff, isManager }) {
               : "Check off what you've done — it's logged automatically."}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-0.5 rounded-lg border border-gray-200 bg-white p-0.5">
+            {[['list', 'List', List], ['board', 'Board', Columns3]].map(([key, label, Icon]) => (
+              <button
+                key={key}
+                onClick={() => chooseView(key)}
+                aria-pressed={view === key}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium ${
+                  view === key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" /> {label}
+              </button>
+            ))}
+          </div>
           {isManager && (
             <div className="flex gap-1 rounded-lg border border-gray-200 bg-white p-1">
               <button
@@ -613,43 +734,61 @@ export default function TaskChecklist({ user, staff, isManager }) {
 
       {error && <p className="text-xs text-red-600">{error}</p>}
 
-      {CADENCE_ORDER.map((cadence) => {
-        const list = grouped[cadence];
-        if (!list.length) return null;
-        return (
-          <div key={cadence} className="rounded-xl border border-gray-200 bg-white">
-            <div className="border-b border-gray-200 px-4 py-3">
-              <h3 className="text-sm font-semibold text-gray-800">{CADENCE_LABEL[cadence]}</h3>
+      {view === 'list' ? (
+        TASK_BUCKETS.map((bucket) => {
+          const list = buckets[bucket.key];
+          if (!list.length) return null;
+          const red = bucket.tone === 'red';
+          const card = (
+            <div key={bucket.key} className={`rounded-xl border bg-white ${red ? 'border-red-200' : 'border-gray-200'}`}>
+              <div className={`flex items-center gap-2 rounded-t-xl border-b px-4 py-3 ${red ? 'border-red-100 bg-red-50/60' : 'border-gray-200'}`}>
+                <h3 className={`text-sm font-semibold ${red ? 'text-red-700' : 'text-gray-800'}`}>{bucket.label}</h3>
+                <span className="text-xs text-gray-400">{list.length}</span>
+              </div>
+              <ul className="divide-y divide-gray-200 px-4">
+                {list.map(({ t }) => renderRow(t, bucket.key))}
+              </ul>
             </div>
-            <ul className="divide-y divide-gray-200 px-4">
-              {list.map((template) => (
-                <TaskRow
-                  key={template.id}
-                  template={template}
-                  completion={completionFor(template)}
-                  onToggle={toggle}
-                  onLogCount={logCount}
-                  onLogContact={logContactTask}
-                  onUpdate={handleUpdate}
-                  onDelete={handleDelete}
-                  isManager={isManager}
-                  staff={staff}
-                  canEdit={!isLinkedTask(template) && (isManager || template.owner_staff_id === staff?.id)}
-                  sourceTag={sourceTagFor(template)}
-                  notes={isLinkedTask(template) ? { taskNotes, nameById: staffNameById } : null}
-                  assignedName={
-                    isManager && template.assigned_staff_id && template.assigned_staff_id !== staff?.id
-                      ? staffNameById[template.assigned_staff_id]
-                      : null
-                  }
-                  linkedClientName={template.client_id ? clientNameById[template.client_id] : null}
-                  linkedTargetLabel={template.linked_target_id ? targetLabelById[template.linked_target_id] : null}
-                />
-              ))}
-            </ul>
+          );
+          if (!bucket.listOnly) return card;
+          return (
+            <details key={bucket.key}>
+              <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-800">{bucket.label} ({list.length})</summary>
+              <div className="mt-2">{card}</div>
+            </details>
+          );
+        })
+      ) : (
+        <div className="-mx-1 overflow-x-auto pb-2">
+          <div className="flex gap-3 px-1">
+            {TASK_BUCKETS.filter((b) => !b.listOnly).map((bucket) => {
+              const list = buckets[bucket.key];
+              const red = bucket.tone === 'red';
+              const dragTask = dragId && visibleTemplates.find((t) => t.id === dragId);
+              const droppable = dragTask && canDropOn(dragTask, bucket.key);
+              return (
+                <div
+                  key={bucket.key}
+                  onDragOver={(e) => { if (droppable) { e.preventDefault(); setOverCol(bucket.key); } }}
+                  onDragLeave={() => setOverCol((c) => (c === bucket.key ? null : c))}
+                  onDrop={(e) => { e.preventDefault(); if (dragTask) reschedule(dragTask, bucket.key); setDragId(null); setOverCol(null); }}
+                  className={`flex w-72 shrink-0 flex-col rounded-xl p-2 transition-colors ${red ? 'bg-red-50/70' : 'bg-gray-100/70'} ${
+                    overCol === bucket.key ? 'ring-2 ring-emerald-400' : ''
+                  } ${dragTask && !droppable ? 'opacity-60' : ''}`}
+                >
+                  <div className="mb-2 flex items-center gap-2 px-1">
+                    <span className={`text-xs font-semibold ${red ? 'text-red-700' : 'text-gray-700'}`}>{bucket.label}</span>
+                    <span className="text-xs text-gray-400">{list.length}</span>
+                  </div>
+                  <ul className="flex min-h-[4rem] flex-1 flex-col gap-2">
+                    {list.map(({ t }) => renderRow(t, bucket.key, true))}
+                  </ul>
+                </div>
+              );
+            })}
           </div>
-        );
-      })}
+        </div>
+      )}
 
       {visibleTemplates.length === 0 && (
         <p className="text-sm text-gray-500">
