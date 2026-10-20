@@ -6,9 +6,9 @@ import { format, addDays, addWeeks, startOfWeek, endOfWeek, endOfMonth, startOfM
  * due_date; a recurring task's due day in its current period), so one-offs
  * sit alongside the recurring tasks due the same week.
  *
- * Overdue = not done and due before today; it always comes first. A done
- * task from a past day stays in its own bucket (this week), or drops to
- * "Completed earlier" once it's from before this week.
+ * Overdue = not done and due before today; it always comes first. Anything
+ * ticked off goes to "Completed" (collapsed below the list/board) so only
+ * open work is on show.
  */
 export const TASK_BUCKETS = [
   { key: 'overdue',    label: 'Overdue',    tone: 'red' },
@@ -18,7 +18,7 @@ export const TASK_BUCKETS = [
   { key: 'this_month', label: 'This month' },
   { key: 'later',      label: 'Later' },
   { key: 'none',       label: 'No due date' },
-  { key: 'done_earlier', label: 'Completed earlier', listOnly: true },
+  { key: 'done',       label: 'Completed', collapsed: true },
 ];
 
 const ymd = (d) => format(d, 'yyyy-MM-dd');
@@ -38,10 +38,10 @@ export function bucketBounds(now = new Date()) {
 }
 
 export function bucketFor(dueDate, done, b = bucketBounds()) {
+  if (done) return 'done';
   if (!dueDate) return 'none';
-  if (!done && dueDate < b.today) return 'overdue';
+  if (dueDate < b.today) return 'overdue';
   if (dueDate === b.today) return 'today';
-  if (dueDate < b.weekStart) return 'done_earlier';
   if (dueDate <= b.weekEnd) return 'this_week';
   if (dueDate <= b.nextWeekEnd) return 'next_week';
   if (dueDate <= b.monthEnd) return 'this_month';

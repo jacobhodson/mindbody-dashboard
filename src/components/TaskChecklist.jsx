@@ -565,8 +565,8 @@ export default function TaskChecklist({ user, staff, isManager }) {
     return t.target_type === 'count' ? (c?.value ?? 0) >= t.target_value : Boolean(c);
   };
 
-  // Tasks by when they're due (see taskBuckets.js). Within a group: open
-  // before done, then earliest due first, then the template's sort order.
+  // Open tasks by when they're due (see taskBuckets.js), earliest first;
+  // anything ticked off goes to the collapsed Completed list.
   const bounds = bucketBounds();
   const buckets = useMemo(() => {
     const g = Object.fromEntries(TASK_BUCKETS.map((b) => [b.key, []]));
@@ -576,10 +576,10 @@ export default function TaskChecklist({ user, staff, isManager }) {
       g[bucketFor(due, done, bounds)].push({ t, due, done });
     }
     for (const list of Object.values(g)) {
-      list.sort((a, b) => (a.done - b.done)
-        || (a.due || '9999').localeCompare(b.due || '9999')
+      list.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999')
         || (a.t.sort_order ?? 0) - (b.t.sort_order ?? 0));
     }
+    g.done.reverse(); // most recently due first
     return g;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleTemplates, completionFor, bounds.today]);
@@ -623,6 +623,24 @@ export default function TaskChecklist({ user, staff, isManager }) {
 
   const handleDelete = async (template) => { await deleteTask(template.id); };
 
+  const openBuckets = TASK_BUCKETS.filter((bk) => !bk.collapsed);
+
+  // One list-view group (also used for the collapsed Completed list).
+  const groupCard = (bucket) => {
+    const red = bucket.tone === 'red';
+    return (
+      <div key={bucket.key} className={`rounded-xl border bg-white ${red ? 'border-red-200' : 'border-gray-200'}`}>
+        <div className={`flex items-center gap-2 rounded-t-xl border-b px-4 py-3 ${red ? 'border-red-100 bg-red-50/60' : 'border-gray-200'}`}>
+          <h3 className={`text-sm font-semibold ${red ? 'text-red-700' : 'text-gray-800'}`}>{bucket.label}</h3>
+          <span className="text-xs text-gray-400">{buckets[bucket.key].length}</span>
+        </div>
+        <ul className="divide-y divide-gray-200 px-4">
+          {buckets[bucket.key].map(({ t }) => renderRow(t, bucket.key))}
+        </ul>
+      </div>
+    );
+  };
+
   const renderRow = (template, bucketKey, compact = false) => (
     <TaskRow
       key={template.id}
@@ -636,7 +654,7 @@ export default function TaskChecklist({ user, staff, isManager }) {
         onDragStart: () => setDragId(template.id),
         onDragEnd: () => { setDragId(null); setOverCol(null); },
       } : undefined}
-      moveTargets={compact ? TASK_BUCKETS.filter((b) => !b.listOnly && canDropOn(template, b.key)) : []}
+      moveTargets={compact ? openBuckets.filter((b) => canDropOn(template, b.key)) : []}
       onMove={(key) => reschedule(template, key)}
       onToggle={toggle}
       onLogCount={logCount}
@@ -735,33 +753,11 @@ export default function TaskChecklist({ user, staff, isManager }) {
       {error && <p className="text-xs text-red-600">{error}</p>}
 
       {view === 'list' ? (
-        TASK_BUCKETS.map((bucket) => {
-          const list = buckets[bucket.key];
-          if (!list.length) return null;
-          const red = bucket.tone === 'red';
-          const card = (
-            <div key={bucket.key} className={`rounded-xl border bg-white ${red ? 'border-red-200' : 'border-gray-200'}`}>
-              <div className={`flex items-center gap-2 rounded-t-xl border-b px-4 py-3 ${red ? 'border-red-100 bg-red-50/60' : 'border-gray-200'}`}>
-                <h3 className={`text-sm font-semibold ${red ? 'text-red-700' : 'text-gray-800'}`}>{bucket.label}</h3>
-                <span className="text-xs text-gray-400">{list.length}</span>
-              </div>
-              <ul className="divide-y divide-gray-200 px-4">
-                {list.map(({ t }) => renderRow(t, bucket.key))}
-              </ul>
-            </div>
-          );
-          if (!bucket.listOnly) return card;
-          return (
-            <details key={bucket.key}>
-              <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-800">{bucket.label} ({list.length})</summary>
-              <div className="mt-2">{card}</div>
-            </details>
-          );
-        })
+        openBuckets.map((bucket) => (buckets[bucket.key].length ? groupCard(bucket) : null))
       ) : (
         <div className="-mx-1 overflow-x-auto pb-2">
           <div className="flex gap-3 px-1">
-            {TASK_BUCKETS.filter((b) => !b.listOnly).map((bucket) => {
+            {openBuckets.map((bucket) => {
               const list = buckets[bucket.key];
               const red = bucket.tone === 'red';
               const dragTask = dragId && visibleTemplates.find((t) => t.id === dragId);
@@ -788,6 +784,14 @@ export default function TaskChecklist({ user, staff, isManager }) {
             })}
           </div>
         </div>
+      )}
+
+      {/* Ticked-off tasks, out of the way in both views. */}
+      {buckets.done.length > 0 && (
+        <details>
+          <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-800">Completed ({buckets.done.length})</summary>
+          <div className="mt-2">{groupCard(TASK_BUCKETS.find((bk) => bk.key === 'done'))}</div>
+        </details>
       )}
 
       {visibleTemplates.length === 0 && (
