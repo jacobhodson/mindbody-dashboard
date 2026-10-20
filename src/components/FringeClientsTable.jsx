@@ -20,11 +20,11 @@ const SORTS = [
   { key: 'name',          label: 'Name A–Z' },
 ];
 
-// "Back from Red": from mb-client-analytics. Once reds_daily has 30 days of
-// history (redHistory.source === 'history') it's wasRedLast30 — actually on
-// Red's List in the last 30 days. Until then it's the inferred recentRed: a
-// week with no classes in the 4 weeks before this window, after attending
-// before it (over-flags around holiday weeks).
+// "Back from Red": from mb-client-analytics. Once reds_daily covers the last
+// 4 Mondays (redHistory.source === 'history') it's onMondayReds — on the Red's
+// List actioned in one of the last 4 Monday meetings. Until then it's the
+// inferred recentRed: a week with no classes in the 4 weeks before this
+// window, after attending before it (over-flags around holiday weeks).
 const FILTERS = [
   { key: 'all',      label: 'All' },
   { key: 'up',       label: 'Trending up' },
@@ -47,8 +47,8 @@ function sortClients(list, sort) {
 // Tooltip text when the client is "Back from Red", else null.
 function backFromRed(c, useHistory) {
   if (useHistory) {
-    return c.wasRedLast30
-      ? `On Red's List ${c.lastRedOn ? format(parseISO(c.lastRedOn), 'd MMM') : 'in the last 30 days'} — back attending now`
+    return c.onMondayReds
+      ? `On Red's List at the ${c.lastRedMonday ? format(parseISO(c.lastRedMonday), 'EEE d MMM') : 'recent Monday'} meeting — back attending now`
       : null;
   }
   if (!c.recentRed) return null;
@@ -219,8 +219,8 @@ export default function FringeClientsTable({ contactLog, onboardingIds = new Set
                 onClick={() => setFilter(f.key)}
                 title={f.key === 'backFromRed'
                   ? (useRedHistory
-                    ? 'On Red\'s List at some point in the last 30 days'
-                    : 'Had a week with no classes in the 4 weeks before this one, after attending before that — would have been on Red\'s List (inferred until 30 days of Red\'s List history exist)')
+                    ? 'On Red\'s List at one of the last 4 Monday meetings'
+                    : 'Had a week with no classes in the 4 weeks before this one, after attending before that — would have been on Red\'s List (inferred until 4 Mondays of Red\'s List history exist)')
                   : undefined}
                 className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
                   filter === f.key ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100'

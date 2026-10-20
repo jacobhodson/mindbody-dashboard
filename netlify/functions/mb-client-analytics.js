@@ -21,8 +21,8 @@
  *   fringe      – visited W1, segmented by count (atRisk/engaged)
  *                 each client carries: sessionsThisWeek, trend (+ delta vs
  *                 the 3 prior weeks), service, isFullyUtilising, and
- *                 recentRed — see recentRedFor() — plus wasRedLast30 /
- *                 lastRedOn from the reds_daily history (see redHistory())
+ *                 recentRed — see recentRedFor() — plus onMondayReds /
+ *                 lastRedMonday from the reds_daily history (see redHistory())
  *   noShows     – clients with unsigned bookings in W1 window
  *   suspensions – clients with active SuspensionInfo or hold-type status
  *                 (excludes Terminated, Expired, Non Member)
@@ -220,23 +220,29 @@ function recentRedFor(w) {
 }
 
 // Real Red's List history (reds_daily, written nightly by
-// scheduled-client-mix-snapshot.js): id → most recent snapshot_date in the
-// last 30 days (Sydney) the client was on Red's List. `source` is 'history'
-// once the table reaches back 30 days, else 'inferred' — callers fall back to
-// recentRedFor() until then, since a short history would under-report.
+// scheduled-client-mix-snapshot.js). Only the Monday snapshots count: the
+// team actions Red's List in the Monday meeting, so "Back from Red" means
+// "on the list we actioned in one of the last 4 Monday meetings" — someone
+// who dipped red for a day mid-week and came straight back isn't flagged.
+// Returns id → most recent of those Mondays they were on it. `source` is
+// 'history' once reds_daily covers all 4 Mondays, else 'inferred' — callers
+// fall back to recentRedFor() until then (a short history would under-report).
+const MONDAYS_BACK = 4;
 const sydneyDate = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(d); // yyyy-MM-dd
 
 async function redHistory(now) {
-  const today = sydneyDate(now);
-  const since = format(subDays(parseISO(today), 30), 'yyyy-MM-dd');
+  const today = parseISO(sydneyDate(now));
+  const lastMonday = startOfWeek(today, { weekStartsOn: 1 }); // today, if it's Monday
+  const mondays = Array.from({ length: MONDAYS_BACK }, (_, i) => format(subWeeks(lastMonday, i), 'yyyy-MM-dd'));
+  const since = mondays[MONDAYS_BACK - 1];
   const earliestRes = await supabase.from('reds_daily').select('snapshot_date').order('snapshot_date', { ascending: true }).limit(1);
   if (earliestRes.error) throw new Error(`reds_daily: ${earliestRes.error.message}`);
   const earliest = earliestRes.data?.[0]?.snapshot_date ?? null;
-  // ~30 nights × a few dozen reds overflows PostgREST's 1000-row cap — page it.
+  // Paged in case 4 Mondays' rows ever exceed PostgREST's 1000-row cap.
   const rows = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase.from('reds_daily').select('client_id, snapshot_date')
-      .gte('snapshot_date', since).order('snapshot_date').order('client_id').range(from, from + 999);
+      .in('snapshot_date', mondays).order('snapshot_date').order('client_id').range(from, from + 999);
     if (error) throw new Error(`reds_daily: ${error.message}`);
     rows.push(...data);
     if (data.length < 1000) break;
@@ -492,8 +498,8 @@ export const handler = async (event) => {
       [...visitedW1]
         .filter((id) => { const c = weeks[id].w1; return c >= min && c <= max; })
         .map((id) => {
-          const lastRedOn = history.lastRedOn[String(id)] ?? null;
-          return enrichClient(id, { sessionsThisWeek: weeks[id].w1, wasRedLast30: Boolean(lastRedOn), lastRedOn });
+          const lastRedMonday = history.lastRedOn[String(id)] ?? null;
+          return enrichClient(id, { sessionsThisWeek: weeks[id].w1, onMondayReds: Boolean(lastRedMonday), lastRedMonday });
         });
 
     const atRisk  = byCount(1, 2);
@@ -578,8 +584,8 @@ export const handler = async (event) => {
       period,
       reds:           allReds.slice(0, 200),
       fringeSegments,
-      // Which "Back from Red" source to trust: 'history' (wasRedLast30) once
-      // reds_daily reaches back 30 days, else 'inferred' (recentRed).
+      // Which "Back from Red" source to trust: 'history' (onMondayReds) once
+      // reds_daily covers the last 4 Mondays, else 'inferred' (recentRed).
       redHistory: { source: history.source, since: history.earliest },
       noShows,
       suspensions,
