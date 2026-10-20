@@ -74,7 +74,7 @@ export default function ClientMixSnapshot({ clientAnalytics, onboarding, decisio
           <Tile label="Onboarding pipeline" value={fmt(mix?.pipeline)} loading={redsLoading}
             sub={mix ? `on a trial / intro offer${mix.newMembersOnboarding ? ` · plus ${mix.newMembersOnboarding} straight-in new members` : ''}` : undefined} />
           <Tile label="Red %" value={mix?.redPct != null ? `${mix.redPct}%` : '–'} loading={redsLoading}
-            sub={mix ? `${mix.reds} of ${mix.active} active on Red's List` : undefined} />
+            sub={mix ? `${mix.reds} of ${mix.group} group members on Red's List` : undefined} />
         </div>
       )}
     </div>

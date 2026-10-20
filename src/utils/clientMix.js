@@ -73,10 +73,10 @@ export function allOnboardingClients(onboarding) {
 
 // Everything the Operations snapshot and the weekly row show.
 //  - reds: /api/mb-client-analytics `reds` (default 7-day window — the same
-//    list Red's List shows on load). Red's List hides onboarding clients,
-//    and only reds who are also active clients count, so the % is a true
-//    share of the active total (Red's List itself is group-class only —
-//    PT-only clients are tracked on the PT tab instead).
+//    list Red's List shows on load). Red's List hides onboarding clients.
+//    Red % is group-only on both sides: reds whose membership category is
+//    Group ÷ active Group members. PT/Online clients (incl. hybrid
+//    "Semi-private + group") are excluded — PT reds live on the PT tab.
 export function summariseClientMix({ activeContracts, reds, onboarding, decisions }) {
   const categories = categoriseClients(activeContracts);
   const counts = { pt: 0, online: 0, group: 0, addon: 0 };
@@ -87,7 +87,7 @@ export function summariseClientMix({ activeContracts, reds, onboarding, decision
   const redIds = new Set(
     (reds || [])
       .map((c) => String(c.id))
-      .filter((id) => !hiddenFromReds.has(id) && categories.has(id)),
+      .filter((id) => !hiddenFromReds.has(id) && categories.get(id) === 'group'),
   );
 
   const active = categories.size;
@@ -104,6 +104,6 @@ export function summariseClientMix({ activeContracts, reds, onboarding, decision
     newMembersOnboarding: onboardingClients
       .filter((c) => c.isStraightIn && decisions[c.id]?.decision !== 'removed').length,
     reds:     redIds.size,
-    redPct:   active > 0 ? Math.round((redIds.size / active) * 1000) / 10 : null,
+    redPct:   counts.group > 0 ? Math.round((redIds.size / counts.group) * 1000) / 10 : null,
   };
 }
