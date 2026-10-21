@@ -1,21 +1,23 @@
 import { useMemo } from 'react';
 import { Plane } from 'lucide-react';
 import { useLeave } from '../../utils/useLeave.js';
-import { typeMeta, formatRange, STATUS_BY_KEY } from '../../utils/leave.js';
+import { typeMeta, formatRange, STATUS_BY_KEY, todayIso } from '../../utils/leave.js';
 
 const RECENT_MS = 7 * 86400000;
 
-// Home notice, private to each person: your own leave that's still waiting
-// on a manager, or was approved/declined in the last week. Only ever lists
-// the signed-in person's requests — nobody sees anyone else's here.
+// Home notice, private to each person: your own upcoming leave (not yet
+// finished) that's still waiting on a manager, or was approved/declined in
+// the last week. Only ever lists the signed-in person's requests — nobody
+// sees anyone else's here.
 export default function MyLeaveCard({ staff, onOpenHR }) {
   const { requests } = useLeave();
+  const today = todayIso();
   const mine = useMemo(() => requests
-    .filter((r) => r.staff_id === staff?.id && (
+    .filter((r) => r.staff_id === staff?.id && r.end_date >= today && (
       r.status === 'pending'
       || (r.decided_at && Date.now() - new Date(r.decided_at).getTime() < RECENT_MS)
     ))
-    .sort((a, b) => a.start_date.localeCompare(b.start_date)), [requests, staff]);
+    .sort((a, b) => a.start_date.localeCompare(b.start_date)), [requests, staff, today]);
 
   if (mine.length === 0) return null;
 
