@@ -48,6 +48,12 @@
 [functions."weekly-digest"]
   timeout = 26
 
+[functions."scheduled-ghl-sync"]
+  timeout = 26
+
+[functions."ghl-lead"]
+  timeout = 26
+
 [dev]
   command = "vite"
   port = 8888

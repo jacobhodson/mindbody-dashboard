@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact, Mountain, CalendarCheck, BookOpen, Plane } from 'lucide-react';
+import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact, Mountain, CalendarCheck, BookOpen, Plane, TrendingUp } from 'lucide-react';
 import logo from '../assets/newstrength-logo.svg';
 import Sidebar             from './Sidebar.jsx';
 import Home                from './Home.jsx';
@@ -23,6 +23,7 @@ import RocksTab            from './RocksTab.jsx';
 import MeetingsTab         from './MeetingsTab.jsx';
 import PlaybookTab         from './playbook/PlaybookTab.jsx';
 import HRTab               from './hr/HRTab.jsx';
+import AcquisitionTab      from './acquisition/AcquisitionTab.jsx';
 import NotificationBell    from './NotificationBell.jsx';
 import { usePlaybook }     from '../utils/usePlaybook.js';
 import { PlaybookLinkProvider } from '../utils/playbookLink.jsx';
@@ -38,6 +39,7 @@ const TABS = [
   { key: 'operations',        label: 'Group Training',    Icon: Activity,      group: 'Coaching' },
   { key: 'finances',          label: 'Finances',          Icon: DollarSign,    group: 'Business', managerOnly: true },
   { key: 'scorecard',         label: 'Scorecard',         Icon: BarChart3,     group: 'Business' },
+  { key: 'acquisition',       label: 'Acquisition',       Icon: TrendingUp,    group: 'Business' },
   { key: 'team',              label: 'Team',              Icon: Users,         group: 'Business', managerOnly: true },
   { key: 'rocks',             label: 'Rocks',             Icon: Mountain,      group: 'Business' },
   { key: 'meetings',          label: 'Meetings',          Icon: CalendarCheck, group: 'Business' },
@@ -239,6 +241,9 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             />
           </>
         )}
+
+        {/* ─ Acquisition (GHL Leads Pipeline) ─ */}
+        {tab === 'acquisition' && <AcquisitionTab />}
 
         {/* ─ Finances ─ */}
         {tab === 'finances' && isManager && (
