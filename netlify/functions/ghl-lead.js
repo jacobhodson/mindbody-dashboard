@@ -8,6 +8,7 @@
  *   POST {action:'add-mindbody', mbClientId}
  *   POST {action:'add-referral', firstName, lastName, email, phone, referredBy, note}
  *   POST {action:'dismiss', mbClientId}
+ *   POST {action:'termination', id, decision:'churn'|'not_churn'}   (managers)
  *
  * Anything created in GHL is also written straight into the ghl_* mirror so
  * the board shows it without waiting for the next scheduled-ghl-sync run.
@@ -17,6 +18,7 @@ import {
   ghlFetch, ghlConfigured, LOCATION_ID, isLeadsPipeline, opportunityRow, contactRow,
   findContact, toE164, serviceClient, requireStaff, MB_LOOKBACK_DAYS,
 } from './utils/ghl.js';
+import { sydneyDate, syncChurn, recordNotice } from './utils/metric-sync.js';
 
 const supabase = serviceClient();
 
@@ -127,6 +129,58 @@ async function mbClient(id) {
   return data.raw;
 }
 
+// ── Mindbody terminations with no GHL cancellation notice ─────────────────
+// "Churn" counts it as a notice (on the termination day, or today if that's
+// still ahead) and tags the member in GHL so the cancellation side runs
+// there too. The notice is written before the tag, so the webhook the tag
+// fires (ghl-cancellation.js) lands as a duplicate. No GHL contact → churn
+// is still counted; nothing is created in GHL (a new contact could set off
+// lead workflows).
+const CANCEL_TAG = process.env.GHL_CANCEL_TAG || 'cancellation notice given';
+
+async function decideTermination(id, decision, staff) {
+  if (!['churn', 'not_churn'].includes(decision)) throw Object.assign(new Error('decision must be churn or not_churn'), { status: 400 });
+  const { data: t, error } = await supabase.from('contract_terminations').select('*').eq('id', id).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!t) throw Object.assign(new Error('Termination not found'), { status: 404 });
+  if (t.status !== 'pending') throw Object.assign(new Error(`Already decided (${t.status})`), { status: 409 });
+
+  const decided = { decided_by: staff.id, decided_at: new Date().toISOString() };
+  if (decision === 'not_churn') {
+    const { error: e } = await supabase.from('contract_terminations').update({ status: 'not_churn', ...decided }).eq('id', id);
+    if (e) throw new Error(e.message);
+    return { status: 'not_churn' };
+  }
+
+  const c = await mbClient(t.mb_client_id).catch(() => ({}));
+  const email = c.Email || null;
+  const phone = c.MobilePhone || c.HomePhone || null;
+  let contact = null, ghlNote = null;
+  if (ghlConfigured()) {
+    try { contact = (await findContact({ email, phone }))?.contact || null; }
+    catch (e) { ghlNote = `GHL lookup failed: ${e.message}`; }
+    if (!contact && !ghlNote) ghlNote = 'No GHL contact found — counted in churn only';
+  } else ghlNote = 'GHL not connected — counted in churn only';
+
+  const today = sydneyDate(Date.now());
+  const notice = await recordNotice(supabase, {
+    noticeDate: t.termination_date < today ? t.termination_date : today, source: 'dashboard',
+    ghlContactId: contact?.id, mbClientId: t.mb_client_id,
+    name: t.name || [c.FirstName, c.LastName].filter(Boolean).join(' '), email, phone,
+    reason: 'Terminated in Mindbody without a cancellation form', terminationId: t.id, createdBy: staff.id,
+  });
+  const { error: e } = await supabase.from('contract_terminations')
+    .update({ status: 'churn', cancellation_id: notice.id, ...decided }).eq('id', id);
+  if (e) throw new Error(e.message);
+
+  if (contact) {
+    try { await ghlFetch(`/contacts/${encodeURIComponent(contact.id)}/tags`, { method: 'POST', body: { tags: [CANCEL_TAG] } }); }
+    catch (err2) { ghlNote = `Counted, but tagging in GHL failed: ${err2.message}`; }
+  }
+  await syncChurn(supabase);
+  return { status: 'churn', counted: !notice.duplicate_of, taggedInGhl: !!contact && !ghlNote, note: ghlNote };
+}
+
 // ── New Mindbody accounts with no GHL contact ─────────────────────────────
 async function mbQueue() {
   const since = new Date(Date.now() - MB_LOOKBACK_DAYS * 86400_000).toISOString().slice(0, 10);
@@ -194,6 +248,11 @@ export const handler = async (event) => {
         .insert({ kind: 'dismissed', mb_client_id: String(body.mbClientId), created_by: staff.id });
       if (e) throw new Error(e.message);
       return ok({ dismissed: true });
+    }
+
+    if (body.action === 'termination') {
+      if (!['manager', 'admin'].includes(staff.role)) return err('Managers only', 403);
+      return ok(await decideTermination(body.id, body.decision, staff));
     }
 
     if (!ghlConfigured()) return err('GHL is not connected yet', 503);

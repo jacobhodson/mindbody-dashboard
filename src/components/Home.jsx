@@ -9,6 +9,7 @@ import MyPipelineTasks from './MyPipelineTasks.jsx';
 import MissingRolloverDecisions from './MissingRolloverDecisions.jsx';
 import HomeReminders from './HomeReminders.jsx';
 import LeaveApprovalsCard from './hr/LeaveApprovalsCard.jsx';
+import TerminationReviewCard from './TerminationReviewCard.jsx';
 import MyLeaveCard from './hr/MyLeaveCard.jsx';
 import HomeAutomationsPanel from './HomeAutomationsPanel.jsx';
 import { useReminders } from '../utils/useReminders.js';
@@ -38,6 +39,7 @@ export default function Home({
         staff={staff} isManager={isManager} onViewClient={onViewClient}
       />
       {isManager && on('leave_approvals') && <LeaveApprovalsCard isManager={isManager} onOpenHR={onOpenHR} />}
+      {isManager && on('termination_review') && <TerminationReviewCard isManager={isManager} onViewClient={onViewClient} />}
       {on('my_leave') && <MyLeaveCard staff={staff} onOpenHR={onOpenHR} />}
       {on('xero_mapping') && <StaffNeedingXeroMapping isManager={isManager} />}
       {on('new_clients') && <NewClientsToAllocate onViewClient={onViewClient} />}

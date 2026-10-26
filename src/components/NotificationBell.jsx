@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bell, CheckSquare, Plane, CalendarClock } from 'lucide-react';
+import { Bell, CheckSquare, Plane, CalendarClock, UserMinus } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useNotifications } from '../utils/useNotifications.js';
 import DigestControls from './DigestControls.jsx';
@@ -8,11 +8,12 @@ const KIND = {
   task_assigned:   { Icon: CheckSquare,   tone: 'bg-emerald-100 text-emerald-700' },
   leave_decided:   { Icon: Plane,         tone: 'bg-sky-100 text-sky-700' },
   leave_requested: { Icon: CalendarClock, tone: 'bg-amber-100 text-amber-700' },
+  termination_review: { Icon: UserMinus,  tone: 'bg-red-100 text-red-700' },
 };
 
 /**
  * Header bell: tasks someone else assigned you, decisions on your leave, and
- * (managers) new leave requests. Only ever your own — see notifications RLS.
+ * (managers) new leave requests and Mindbody terminations to review. Only ever your own — see notifications RLS.
  * Clicking one marks it read and jumps to the tab it's about.
  */
 export default function NotificationBell({ onNavigate, staff, isManager }) {

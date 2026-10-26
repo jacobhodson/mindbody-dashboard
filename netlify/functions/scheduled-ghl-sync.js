@@ -15,7 +15,9 @@
  *                            ones are re-checked every few hours in case they
  *                            come through a GHL form later
  *   + Scoreboard metrics   – Sales (won) and Leads (created) per day, from
- *                            the mirror, written to metric_actuals
+ *                            the mirror, and Churn from cancellation notices,
+ *                            written to metric_actuals; new Mindbody contract
+ *                            terminations queued for manager review
  *
  * Driven by pg_cron every 15 min (20261023000000_ghl_acquisition.sql) with
  * `x-sync-secret: $MB_SYNC_SECRET`, or by a signed-in staff member's
@@ -26,6 +28,7 @@ import {
   ghlFetch, ghlConfigured, ghlCallCount, resetGhlCallCount, LOCATION_ID, PIPELINE_NAME,
   isLeadsPipeline, stagesOf, MB_LOOKBACK_DAYS, opportunityRow, contactRow, findContact, serviceClient, requireStaff,
 } from './utils/ghl.js';
+import { selectAll, sydneyDate, writeDailyMetric, syncChurn, refreshChurnReview } from './utils/metric-sync.js';
 
 const supabase = serviceClient();
 
@@ -40,17 +43,6 @@ async function upsert(table, rows, onConflict = 'id') {
     if (error) throw new Error(`${table} upsert: ${error.message}`);
   }
   return rows.length;
-}
-
-async function selectAll(build) {
-  let all = [], from = 0;
-  while (true) {
-    const { data, error } = await build().range(from, from + 999);
-    if (error) throw new Error(error.message);
-    all = all.concat(data);
-    if (data.length < 1000) return all;
-    from += 1000;
-  }
 }
 
 async function inBatches(items, fn, deadline) {
@@ -151,62 +143,22 @@ async function syncMindbodyMatches(deadline) {
   return { due: queue.length, checked: done };
 }
 
-const sydneyDate = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date(iso));
-
-// Scoreboard metrics fed from the Leads pipeline mirror, recomputed in full
-// every run (so an opportunity moved back out of won, or deleted, drops off
-// again). Owner's calls: GHL replaces manual logging from the Monday of the
-// week each went live; earlier days keep the hand-logged numbers. Manual
-// logging for these keys is blocked in the UI (src/utils/autoMetrics.js).
-//   sales – opportunities marked won, on the (Sydney) day they were won
-//           (2026-10-26)
-//   leads – opportunities created in the pipeline, any status, on the
-//           (Sydney) day they were created — same definition as the
-//           Acquisition tab (2026-10-26)
-const SALES_FROM = '2026-10-26';
-const LEADS_FROM = '2026-10-26';
-
-// Writes one team-level (staff_id null) metric_actuals row per Sydney day
-// from `from` on, zeroing days that no longer have any.
-async function writeDailyMetric(metricKey, from, timestamps) {
-  const counts = {};
-  for (const at of timestamps) {
-    if (!at) continue;
-    const day = sydneyDate(at);
-    if (day >= from) counts[day] = (counts[day] || 0) + 1;
-  }
-
-  // Check-then-write, same as metricActuals.js — the staff_id-null
-  // uniqueness is a partial index PostgREST can't upsert against.
-  const existing = await selectAll(() => supabase.from('metric_actuals').select('id, metric_date, value')
-    .eq('metric_key', metricKey).is('staff_id', null).gte('metric_date', from).order('metric_date'));
-  const byDate = Object.fromEntries(existing.map((r) => [r.metric_date, r]));
-  const now = new Date().toISOString();
-  let changed = 0;
-  for (const day of new Set([...Object.keys(counts), ...Object.keys(byDate)])) {
-    const value = counts[day] || 0;
-    const row = byDate[day];
-    if (row && Number(row.value) === value) continue;
-    const { error } = row
-      ? await supabase.from('metric_actuals').update({ value, source: 'ghl', synced_at: now }).eq('id', row.id)
-      : await supabase.from('metric_actuals').insert({ metric_key: metricKey, metric_date: day, value, staff_id: null, source: 'ghl' });
-    if (error) throw new Error(`metric_actuals (${metricKey}): ${error.message}`);
-    changed++;
-  }
-  return { sinceCutover: Object.values(counts).reduce((a, b) => a + b, 0), daysChanged: changed };
-}
-
+// Scoreboard Sales (won, on the day won) and Leads (created, any status — the
+// Acquisition tab's definition) from the Leads pipeline mirror; Churn from
+// cancellation notices. Cutovers + writer in utils/metric-sync.js.
 async function syncWonSales(pipelineId) {
   const won = await selectAll(() => supabase.from('ghl_opportunities')
     .select('id, won_at:raw->>lastStatusChangeAt, updated_at')
     .eq('pipeline_id', pipelineId).eq('status', 'won').order('id'));
-  return { won: won.length, ...await writeDailyMetric('sales', SALES_FROM, won.map((o) => o.won_at || o.updated_at)) };
+  const days = won.map((o) => o.won_at || o.updated_at).filter(Boolean).map(sydneyDate);
+  return { won: won.length, ...await writeDailyMetric(supabase, 'sales', days, 'ghl') };
 }
 
 async function syncNewLeads(pipelineId) {
   const opps = await selectAll(() => supabase.from('ghl_opportunities')
     .select('id, created_at').eq('pipeline_id', pipelineId).order('id'));
-  return { total: opps.length, ...await writeDailyMetric('leads', LEADS_FROM, opps.map((o) => o.created_at)) };
+  const days = opps.map((o) => o.created_at).filter(Boolean).map(sydneyDate);
+  return { total: opps.length, ...await writeDailyMetric(supabase, 'leads', days, 'ghl') };
 }
 
 export async function runGhlSync() {
@@ -215,9 +167,11 @@ export async function runGhlSync() {
   const opportunities = await syncOpportunities(leads.id, deadline);
   const sales = await syncWonSales(leads.id);
   const newLeads = await syncNewLeads(leads.id);
+  const churnReview = await refreshChurnReview(supabase);
+  const churn = await syncChurn(supabase);
   const contacts = await syncContacts(leads.id, deadline);
   const mindbody = await syncMindbodyMatches(deadline);
-  return { pipeline: leads.name, opportunities, sales, leads: newLeads, contacts, mindbody };
+  return { pipeline: leads.name, opportunities, sales, leads: newLeads, churn: { ...churn, review: churnReview }, contacts, mindbody };
 }
 
 export const handler = async (event) => {
