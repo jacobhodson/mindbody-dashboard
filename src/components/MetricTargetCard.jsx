@@ -2,6 +2,7 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { renderFormatted } from '../utils/richText.js';
 import AddProgress from './AddProgress.jsx';
+import { AUTO_METRIC_SOURCES } from '../utils/autoMetrics.js';
 
 // These two are fed automatically every night by scheduled-daily-refresh.js
 // from Mindbody — no manual "Update metric" control for them, and managers
@@ -86,10 +87,12 @@ export default function MetricTargetCard({
   showManageControls = true, periodLabel, managerOnlyUpdates = false,
 }) {
   const isMindbody = MINDBODY_METRIC_KEYS.has(metricKey);
+  // Synced metrics (Mindbody, GHL won → Sales) are never logged by hand.
+  const autoSource = AUTO_METRIC_SOURCES[metricKey];
   const ownerNames = owners.map((id) => staffList.find((s) => s.id === id)?.full_name).filter(Boolean).join('/');
   // managerOnlyUpdates: the Scoreboard sets this when viewing a past period,
   // so only managers can change history; owners still log the current one.
-  const canUpdate = !isMindbody && (isManager || (!managerOnlyUpdates && owners.includes(staff?.id)));
+  const canUpdate = !autoSource && (isManager || (!managerOnlyUpdates && owners.includes(staff?.id)));
 
   const primaryTarget = compact ? (weeklyTarget || monthlyTarget) : null;
   const primaryLabel  = compact ? (primaryTarget === weeklyTarget ? 'This week' : 'This month') : null;
@@ -118,6 +121,7 @@ export default function MetricTargetCard({
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-900 truncate">{renderFormatted(label)}</p>
           {ownerNames && <p className="text-xs text-gray-500">{ownerNames}</p>}
+          {autoSource === 'GHL' && <p className="text-[10px] text-gray-400">Auto: GHL deals marked won</p>}
         </div>
         {isManager && !isMindbody && showManageControls && (
           <div className="flex shrink-0 items-center gap-1">

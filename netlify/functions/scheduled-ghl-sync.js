@@ -149,13 +149,57 @@ async function syncMindbodyMatches(deadline) {
   return { due: queue.length, checked: done };
 }
 
+const sydneyDate = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date(iso));
+
+// Scoreboard "Sales" = Leads pipeline opportunities marked won, on the
+// (Sydney) day they were won. Owner's call 2026-10-26: GHL replaces manual
+// logging from SALES_FROM on (the Monday of that week); earlier days keep the
+// hand-logged numbers. Recomputed in full from the mirror every run, so an
+// opportunity moved back out of won (or deleted) drops off again. Manual
+// logging for 'sales' is blocked in the UI (src/utils/autoMetrics.js).
+const SALES_METRIC_KEY = 'sales';
+const SALES_FROM = '2026-10-26';
+
+async function syncWonSales(pipelineId) {
+  const won = await selectAll(() => supabase.from('ghl_opportunities')
+    .select('id, won_at:raw->>lastStatusChangeAt, updated_at')
+    .eq('pipeline_id', pipelineId).eq('status', 'won').order('id'));
+  const counts = {};
+  for (const o of won) {
+    const at = o.won_at || o.updated_at;
+    if (!at) continue;
+    const day = sydneyDate(at);
+    if (day >= SALES_FROM) counts[day] = (counts[day] || 0) + 1;
+  }
+
+  // Check-then-write, same as metricActuals.js — the staff_id-null
+  // uniqueness is a partial index PostgREST can't upsert against.
+  const existing = await selectAll(() => supabase.from('metric_actuals').select('id, metric_date, value')
+    .eq('metric_key', SALES_METRIC_KEY).is('staff_id', null).gte('metric_date', SALES_FROM).order('metric_date'));
+  const byDate = Object.fromEntries(existing.map((r) => [r.metric_date, r]));
+  const now = new Date().toISOString();
+  let changed = 0;
+  for (const day of new Set([...Object.keys(counts), ...Object.keys(byDate)])) {
+    const value = counts[day] || 0;
+    const row = byDate[day];
+    if (row && Number(row.value) === value) continue;
+    const { error } = row
+      ? await supabase.from('metric_actuals').update({ value, source: 'ghl', synced_at: now }).eq('id', row.id)
+      : await supabase.from('metric_actuals').insert({ metric_key: SALES_METRIC_KEY, metric_date: day, value, staff_id: null, source: 'ghl' });
+    if (error) throw new Error(`metric_actuals (sales): ${error.message}`);
+    changed++;
+  }
+  return { won: won.length, sinceCutover: Object.values(counts).reduce((a, b) => a + b, 0), daysChanged: changed };
+}
+
 export async function runGhlSync() {
   const deadline = Date.now() + BUDGET_MS;
   const leads = await syncPipelines();
   const opportunities = await syncOpportunities(leads.id, deadline);
+  const sales = await syncWonSales(leads.id);
   const contacts = await syncContacts(leads.id, deadline);
   const mindbody = await syncMindbodyMatches(deadline);
-  return { pipeline: leads.name, opportunities, contacts, mindbody };
+  return { pipeline: leads.name, opportunities, sales, contacts, mindbody };
 }
 
 export const handler = async (event) => {

@@ -1,6 +1,7 @@
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabaseClient.js';
 import { periodStartFor } from './periods.js';
+import { isAutoMetric } from './autoMetrics.js';
 
 /**
  * Adds `delta` to today's metric_actuals row for metricKey (creating it if
@@ -34,7 +35,9 @@ export function onMetricActualsChanged(callback) {
 // pushing a day below zero. floorDate defaults to the start of date's week
 // so a correction can't quietly eat into last week's numbers.
 export async function addMetricProgress(metricKey, delta, source = 'manual', date = null, floorDate = null) {
-  if (!metricKey || !delta) return;
+  // Synced metrics are written by their sync only (e.g. a task still linked
+  // to Sales would otherwise count a GHL sale twice).
+  if (!metricKey || !delta || isAutoMetric(metricKey)) return;
   const today = date || format(new Date(), 'yyyy-MM-dd');
 
   if (delta < 0) {

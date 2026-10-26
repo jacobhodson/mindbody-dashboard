@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { Pencil } from 'lucide-react';
 import { renderFormatted } from '../utils/richText.js';
 
-// Fed nightly from Mindbody (see MetricTargetCard.jsx) — never hand-edited.
-const MINDBODY_METRIC_KEYS = new Set(['attendance_visits', 'revenue']);
+import { isAutoMetric } from '../utils/autoMetrics.js';
 
 function fmt(metricKey, n) {
   const rounded = Math.round(n);
@@ -56,7 +55,7 @@ export default function ScoreboardTable({ metrics, view, columns, sumFor, firstD
   const [editing, setEditing] = useState(null); // `${metricKey}|${start}`
   const [saveError, setSaveError] = useState(null);
 
-  const canEditCell = (metricKey) => isManager && view !== 'rolling30' && !MINDBODY_METRIC_KEYS.has(metricKey);
+  const canEditCell = (metricKey) => isManager && view !== 'rolling30' && !isAutoMetric(metricKey);
 
   const save = async (metricKey, w, value) => {
     setSaveError(null);
@@ -158,7 +157,7 @@ export default function ScoreboardTable({ metrics, view, columns, sumFor, firstD
       <p className="mt-2 text-[10px] text-gray-400">
         Green = target hit, red = missed, — = not tracked yet. Targets shown are the current targets.
         {view === 'rolling30' && ' Rolling 30 uses the monthly target (or the weekly target scaled to 30 days).'}
-        {isManager && view !== 'rolling30' && ' Managers: click a number to correct that period’s total (Attendance and Revenue come from Mindbody and can’t be edited).'}
+        {isManager && view !== 'rolling30' && ' Managers: click a number to correct that period’s total (Attendance and Revenue come from Mindbody, and Sales from GHL deals marked won, so they can’t be edited).'}
       </p>
     </div>
   );
