@@ -27,7 +27,8 @@ export default function Sidebar({ tabs, activeTab, onSelect, atRiskCount, mobile
   // Consecutive tabs sharing a `group` become one section; ungrouped tabs
   // are their own one-item section.
   const sections = [];
-  for (const tab of tabs) {
+  const bottomTabs = tabs.filter((t) => t.pinBottom);
+  for (const tab of tabs.filter((t) => !t.pinBottom)) {
     const last = sections[sections.length - 1];
     if (tab.group && last?.group === tab.group) last.tabs.push(tab);
     else sections.push({ group: tab.group || null, tabs: [tab] });
@@ -106,6 +107,12 @@ export default function Sidebar({ tabs, activeTab, onSelect, atRiskCount, mobile
             isManager={isManager}
           />
         </div>
+
+        {bottomTabs.length > 0 && (
+          <div className="mt-2 space-y-1 border-t border-gray-200 pt-2">
+            {bottomTabs.map((tab) => <NavItem key={tab.key} tab={tab} {...itemProps} />)}
+          </div>
+        )}
 
         <button
           onClick={() => setCollapsed((c) => !c)}

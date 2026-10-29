@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact, Mountain, CalendarCheck, BookOpen, Plane, TrendingUp } from 'lucide-react';
-import logo from '../assets/newstrength-logo.svg';
+import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact, Mountain, CalendarCheck, BookOpen, Plane, TrendingUp, Settings as SettingsIcon } from 'lucide-react';
 import Sidebar             from './Sidebar.jsx';
 import Home                from './Home.jsx';
 import Scorecard           from './Scorecard.jsx';
@@ -25,33 +24,48 @@ import PlaybookTab         from './playbook/PlaybookTab.jsx';
 import HRTab               from './hr/HRTab.jsx';
 import AcquisitionTab      from './acquisition/AcquisitionTab.jsx';
 import NotificationBell    from './NotificationBell.jsx';
+import SettingsTab         from './settings/SettingsTab.jsx';
+import { useTabAccess }    from '../utils/useTabAccess.js';
 import { usePlaybook }     from '../utils/usePlaybook.js';
 import { PlaybookLinkProvider } from '../utils/playbookLink.jsx';
 import { useOnboardingRollover } from '../utils/useOnboardingRollover.js';
 
 // Sidebar order. Tabs sharing a `group` sit together under a collapsible
-// heading (see Sidebar.jsx); ungrouped ones are top-level items.
+// heading (see Sidebar.jsx); ungrouped ones are top-level items, and
+// `pinBottom` ones sit at the foot of the sidebar.
+// Who sees which tab is configurable per role (Settings → Permissions,
+// useTabAccess.js): `managerOnly` is just the default; `lockedManagerOnly`
+// tabs hold manager-only data so coaches can never be given them;
+// `alwaysVisible` tabs aren't configurable at all.
 const TABS = [
-  { key: 'home',              label: 'Home',              Icon: HomeIcon  },
+  { key: 'home',              label: 'Home',              Icon: HomeIcon,      alwaysVisible: true },
   { key: 'clients',           label: 'Clients',           Icon: Contact,       group: 'Coaching' },
   { key: 'onboarding',        label: 'Onboarding',        Icon: Users2,        group: 'Coaching' },
   { key: 'personalTraining',  label: 'Personal Training', Icon: Dumbbell,      group: 'Coaching' },
   { key: 'operations',        label: 'Group Training',    Icon: Activity,      group: 'Coaching' },
-  { key: 'finances',          label: 'Finances',          Icon: DollarSign,    group: 'Business', managerOnly: true },
+  { key: 'finances',          label: 'Finances',          Icon: DollarSign,    group: 'Business', managerOnly: true, lockedManagerOnly: true },
   { key: 'scorecard',         label: 'Scorecard',         Icon: BarChart3,     group: 'Business' },
   { key: 'acquisition',       label: 'Acquisition',       Icon: TrendingUp,    group: 'Business' },
-  { key: 'team',              label: 'Team',              Icon: Users,         group: 'Business', managerOnly: true },
+  { key: 'team',              label: 'Team',              Icon: Users,         group: 'Business', managerOnly: true, lockedManagerOnly: true },
   { key: 'rocks',             label: 'Rocks',             Icon: Mountain,      group: 'Business' },
   { key: 'meetings',          label: 'Meetings',          Icon: CalendarCheck, group: 'Business' },
   { key: 'hr',                label: 'HR',                Icon: Plane,         group: 'Business' },
   { key: 'playbook',          label: 'Playbook',          Icon: BookOpen  },
+  { key: 'settings',          label: 'Settings',          Icon: SettingsIcon,  alwaysVisible: true, pinBottom: true },
 ];
 
 // Short-program products: removed from pipeline on no-rollover
 const SHORT_PRODUCTS = new Set(['3-Session', '14-Day']);
 
-export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh, refreshOnboarding, contactLog, user, staff, isManager, onSignOut }) {
-  const [tab, setTab] = useState('home');
+export default function Dashboard({ data, loading, errors, lastRefresh, onRefresh, refreshOnboarding, contactLog, user, staff, isManager, isAdmin, reloadStaff, appSettings, onSignOut }) {
+  const [selectedTab, setTab] = useState('home');
+  const tabAccess = useTabAccess(!!user);
+  const visibleTabs = useMemo(
+    () => TABS.filter((t) => t.alwaysVisible || tabAccess.isAllowed(staff?.role, t)),
+    [tabAccess.isAllowed, staff?.role],
+  );
+  // A hidden tab (permissions changed, or a notification deep link) falls back to Home.
+  const tab = visibleTabs.some((t) => t.key === selectedTab) ? selectedTab : 'home';
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [selectedClientMindbodyId, setSelectedClientMindbodyId] = useState(null);
   const anyLoading    = Object.values(loading).some(Boolean);
@@ -129,10 +143,10 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             >
               <Menu className="h-5 w-5" />
             </button>
-            <img src={logo} alt="Newstrength" className="h-8 w-auto" />
+            <img src={appSettings.logo} alt={appSettings.settings.business_name} className="h-8 w-auto max-w-[140px] object-contain" />
             <div className="hidden sm:block border-l border-gray-200 pl-3">
-              <h1 className="text-lg font-semibold tracking-tight text-gray-900">Operations Dashboard</h1>
-              <p className="text-xs text-gray-500 mt-0.5">{import.meta.env.VITE_BUSINESS_NAME || 'Your Gym'}</p>
+              <h1 className="text-lg font-semibold tracking-tight text-gray-900">{appSettings.settings.system_name}</h1>
+              <p className="text-xs text-gray-500 mt-0.5">{appSettings.settings.business_name}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
@@ -171,7 +185,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
 
       <div className="flex items-start">
         <Sidebar
-          tabs={TABS.filter((t) => !t.managerOnly || isManager)}
+          tabs={visibleTabs}
           activeTab={tab}
           onSelect={(key) => { if (key === 'rocks') setOpenRockId(null); setTab(key); }}
           atRiskCount={atRiskCount}
@@ -331,6 +345,14 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
 
         {/* ─ HR (Leave Planner) ─ */}
         {tab === 'hr' && <HRTab staff={staff} isManager={isManager} />}
+
+        {/* ─ Settings ─ */}
+        {tab === 'settings' && (
+          <SettingsTab
+            staff={staff} isManager={isManager} isAdmin={isAdmin} reloadStaff={reloadStaff}
+            tabs={TABS} tabAccess={tabAccess} appSettings={appSettings}
+          />
+        )}
 
         {/* ─ Playbook ─ */}
         {tab === 'playbook' && (

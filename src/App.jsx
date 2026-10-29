@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import Dashboard from './components/Dashboard.jsx';
 import LoginForm from './components/LoginForm.jsx';
+import SetPasswordForm from './components/SetPasswordForm.jsx';
+import { authLinkType } from './lib/supabaseClient.js';
+import { useAppSettings } from './utils/useAppSettings.js';
 import { useContactLog } from './utils/useContactLog.js';
 import { useAuth } from './utils/useAuth.js';
 import { useStaff } from './utils/useStaff.js';
@@ -29,7 +32,10 @@ async function safeFetch(url, options) {
 
 export default function App() {
   const { user, loading: authLoading, signIn, signOut } = useAuth();
-  const { staff, isManager } = useStaff(user);
+  const { staff, isManager, isAdmin, reload: reloadStaff } = useStaff(user);
+  const appSettings = useAppSettings();
+  // Arrived from an invite / reset email: choose a password before anything else.
+  const [pendingPassword, setPendingPassword] = useState(authLinkType);
   const [data, setData]               = useState({ attendance: null, clientAnalytics: null, payments: null, revenue: null, onboarding: null, pt: null, celebrations: null });
   const [loading, setLoading]         = useState(LOADING_ALL);
   const [errors, setErrors]           = useState({});
@@ -72,7 +78,34 @@ export default function App() {
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center px-4">
-        <LoginForm onSignIn={signIn} />
+        <LoginForm onSignIn={signIn} logo={appSettings.logo} businessName={appSettings.settings.business_name} />
+      </div>
+    );
+  }
+
+  if (pendingPassword) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center px-4">
+        <SetPasswordForm
+          kind={pendingPassword}
+          email={user.email}
+          logo={appSettings.logo}
+          appName={appSettings.settings.system_name}
+          onDone={() => setPendingPassword(null)}
+        />
+      </div>
+    );
+  }
+
+  // Deactivated in Settings → Team & access (their login is blocked too, but
+  // an already-open session can outlive that until its token expires).
+  if (staff && !staff.active) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center px-4">
+        <div className="mx-auto max-w-sm w-full rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <p className="text-sm text-gray-700">Your access to the {appSettings.settings.system_name} has been turned off. Talk to a manager if that's a mistake.</p>
+          <button onClick={signOut} className="mt-4 rounded-lg bg-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-300">Sign out</button>
+        </div>
       </div>
     );
   }
@@ -89,6 +122,9 @@ export default function App() {
       user={user}
       staff={staff}
       isManager={isManager}
+      isAdmin={isAdmin}
+      reloadStaff={reloadStaff}
+      appSettings={appSettings}
       onSignOut={signOut}
     />
   );

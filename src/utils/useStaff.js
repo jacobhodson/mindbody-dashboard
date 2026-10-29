@@ -26,6 +26,8 @@ export function useStaff(user) {
   useEffect(() => { load(); }, [load]);
 
   const isManager = staff?.role === 'manager' || staff?.role === 'admin';
+  // Owner level — API connections and granting admin (Settings tab).
+  const isAdmin = staff?.role === 'admin';
 
-  return { staff, loading, error, isManager, reload: load };
+  return { staff, loading, error, isManager, isAdmin, reload: load };
 }

@@ -1,4 +1,3 @@
-import XeroConnection     from './XeroConnection.jsx';
 import RevenueCards       from './RevenueCards.jsx';
 import RetailSales        from './RetailSales.jsx';
 import DeclinedList       from './DeclinedList.jsx';
@@ -12,7 +11,6 @@ export default function FinancesTab({ data, loading, errors, isManager }) {
 
   return (
     <>
-      <XeroConnection isManager={isManager} />
       <RevenueCards
         data={data.revenue}
         loading={loading.revenue}
