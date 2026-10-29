@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Dashboard from './components/Dashboard.jsx';
 import LoginForm from './components/LoginForm.jsx';
 import SetPasswordForm from './components/SetPasswordForm.jsx';
-import { authLinkType } from './lib/supabaseClient.js';
+import { supabase, authLink } from './lib/supabaseClient.js';
 import { useAppSettings } from './utils/useAppSettings.js';
 import { useContactLog } from './utils/useContactLog.js';
 import { useAuth } from './utils/useAuth.js';
@@ -34,8 +34,19 @@ export default function App() {
   const { user, loading: authLoading, signIn, signOut } = useAuth();
   const { staff, isManager, isAdmin, reload: reloadStaff } = useStaff(user);
   const appSettings = useAppSettings();
-  // Arrived from an invite / reset email: choose a password before anything else.
-  const [pendingPassword, setPendingPassword] = useState(authLinkType);
+  // Arrived from an invite / reset email: swap the link's token for a session,
+  // then choose a password before anything else.
+  const [pendingPassword, setPendingPassword] = useState(null);
+  const [linkState, setLinkState] = useState(authLink ? 'verifying' : null); // 'verifying' | 'failed'
+  useEffect(() => {
+    if (!authLink) return;
+    window.history.replaceState(null, '', window.location.pathname);
+    supabase.auth.verifyOtp({ token_hash: authLink.tokenHash, type: authLink.type }).then(({ error }) => {
+      if (error) { setLinkState('failed'); return; }
+      setPendingPassword(authLink.type);
+      setLinkState(null);
+    });
+  }, []);
   const [data, setData]               = useState({ attendance: null, clientAnalytics: null, payments: null, revenue: null, onboarding: null, pt: null, celebrations: null });
   const [loading, setLoading]         = useState(LOADING_ALL);
   const [errors, setErrors]           = useState({});
@@ -71,14 +82,17 @@ export default function App() {
   const userId = user?.id;
   useEffect(() => { if (userId) refresh(); }, [userId, refresh]);
 
-  if (authLoading) {
+  if (authLoading || linkState === 'verifying') {
     return <div className="min-h-screen bg-gray-50" />;
   }
 
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center px-4">
-        <LoginForm onSignIn={signIn} logo={appSettings.logo} businessName={appSettings.settings.business_name} />
+        <LoginForm
+          onSignIn={signIn} logo={appSettings.logo} businessName={appSettings.settings.business_name}
+          notice={linkState === 'failed' ? 'That link has expired or was already used. Use "Forgot password?" to get a new one, or ask a manager.' : null}
+        />
       </div>
     );
   }

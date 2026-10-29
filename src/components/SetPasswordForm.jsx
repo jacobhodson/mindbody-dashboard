@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabaseClient.js';
 
 /**
  * Shown after arriving from an invite or password-reset email (App.jsx,
- * authLinkType): the link has already signed the person in, so all that's
+ * authLink + verifyOtp): the link has already signed the person in, so all that's
  * left is choosing a password.
  */
 export default function SetPasswordForm({ kind, email, logo, appName, onDone }) {

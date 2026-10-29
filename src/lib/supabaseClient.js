@@ -8,14 +8,15 @@ if (!url || !anonKey) {
   console.error('Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY — Team Tasks will not work.');
 }
 
-// An invite or password-reset email lands back here with the session in the
-// URL hash (#access_token=…&type=invite|recovery). supabase-js consumes and
-// clears that hash during start-up, so note the type first — App.jsx uses it
-// to ask the person to choose a password before showing the dashboard.
-export const authLinkType = (() => {
+// Invite / password-reset emails (netlify/functions/staff-admin.js) link to
+// /?auth=invite|recovery&token_hash=… — App.jsx exchanges the token for a
+// session with verifyOtp() and then asks the person to choose a password.
+export const authLink = (() => {
   try {
-    const t = new URLSearchParams(window.location.hash.slice(1)).get('type');
-    return t === 'invite' || t === 'recovery' ? t : null;
+    const q = new URLSearchParams(window.location.search);
+    const type = q.get('auth');
+    const tokenHash = q.get('token_hash');
+    return (type === 'invite' || type === 'recovery') && tokenHash ? { type, tokenHash } : null;
   } catch { return null; }
 })();
 

@@ -3,7 +3,7 @@ import { LogIn } from 'lucide-react';
 import defaultLogo from '../assets/newstrength-logo.svg';
 import { staffAdmin } from '../utils/staffAdmin.js';
 
-export default function LoginForm({ onSignIn, logo = defaultLogo, businessName = 'Newstrength' }) {
+export default function LoginForm({ onSignIn, logo = defaultLogo, businessName = 'Newstrength', notice }) {
   const [forgot, setForgot]     = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [email, setEmail]       = useState('');
@@ -38,6 +38,7 @@ export default function LoginForm({ onSignIn, logo = defaultLogo, businessName =
           {forgot ? "Enter your work email and we'll send you a link to set a new password." : 'Use the email and password your manager gave you.'}
         </p>
 
+        {notice && <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{notice}</p>}
         <form onSubmit={submit} className="space-y-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>

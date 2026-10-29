@@ -36,6 +36,17 @@ function siteUrl(event) {
   return PROD_URL;
 }
 
+// Our own link straight to the dashboard, carrying Supabase's hashed token;
+// App.jsx exchanges it with verifyOtp(). This avoids Supabase's /verify
+// redirect, which only honours URLs on the project's Auth redirect allowlist
+// (and otherwise falls back to the Site URL — localhost on this project).
+function appLink(event, data, type) {
+  const url = new URL(siteUrl(event));
+  url.searchParams.set('auth', type);
+  url.searchParams.set('token_hash', data.properties.hashed_token);
+  return url.toString();
+}
+
 async function caller(event) {
   const token = (event.headers.authorization || event.headers.Authorization || '').replace(/^Bearer\s+/i, '');
   if (!token) return null;
@@ -105,7 +116,7 @@ async function invite(me, body, event) {
   // staff row with role 'coach', which is corrected just below.
   const { data, error } = await supabase.auth.admin.generateLink({
     type: 'invite', email,
-    options: { data: { full_name }, redirectTo: siteUrl(event) },
+    options: { data: { full_name } },
   });
   if (error) throw Object.assign(new Error(error.message), { status: 400 });
 
@@ -114,7 +125,7 @@ async function invite(me, body, event) {
     .eq('auth_user_id', data.user.id).select().single();
   if (upErr) throw new Error(upErr.message);
 
-  const link = data.properties.action_link;
+  const link = appLink(event, data, 'invite');
   const emailed = await emailLink({ to: email, name: full_name, link, kind: 'invite' });
   return { staff: row, link, emailed };
 }
@@ -129,14 +140,11 @@ async function loginLink(me, body, event) {
     ? await supabase.auth.admin.getUserById(target.auth_user_id)
     : { data: null };
   const neverSignedIn = !authUser?.user?.last_sign_in_at;
-  const { data, error } = await supabase.auth.admin.generateLink({
-    type: neverSignedIn && !authUser?.user ? 'invite' : 'recovery',
-    email: target.email,
-    options: { redirectTo: siteUrl(event) },
-  });
+  const type = neverSignedIn && !authUser?.user ? 'invite' : 'recovery';
+  const { data, error } = await supabase.auth.admin.generateLink({ type, email: target.email });
   if (error) throw Object.assign(new Error(error.message), { status: 400 });
 
-  const link = data.properties.action_link;
+  const link = appLink(event, data, type);
   const emailed = await emailLink({ to: target.email, name: target.full_name, link, kind: neverSignedIn ? 'invite' : 'recovery' });
   return { link, emailed };
 }
@@ -196,9 +204,9 @@ async function forgotPassword(body, event) {
   // find out who works here.
   if (!target?.active || !target.auth_user_id) return { ok: true };
   const { data, error } = await supabase.auth.admin.generateLink({
-    type: 'recovery', email: target.email, options: { redirectTo: siteUrl(event) },
+    type: 'recovery', email: target.email,
   });
-  if (!error) await emailLink({ to: target.email, name: target.full_name, link: data.properties.action_link, kind: 'recovery' });
+  if (!error) await emailLink({ to: target.email, name: target.full_name, link: appLink(event, data, 'recovery'), kind: 'recovery' });
   return { ok: true };
 }
 
