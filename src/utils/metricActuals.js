@@ -19,6 +19,8 @@ import { isAutoMetric } from './autoMetrics.js';
 // page reload. Readers subscribe via onMetricActualsChanged().
 const CHANGED_EVENT = 'metric-actuals-changed';
 
+export const notifyMetricActualsChanged = () => window.dispatchEvent(new Event(CHANGED_EVENT));
+
 export function onMetricActualsChanged(callback) {
   window.addEventListener(CHANGED_EVENT, callback);
   return () => window.removeEventListener(CHANGED_EVENT, callback);

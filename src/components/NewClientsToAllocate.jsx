@@ -3,6 +3,7 @@ import { useUnallocatedClients } from '../utils/useUnallocatedClients.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { GROUP_VALUE, caseloadPayloadFor } from '../utils/caseload.js';
 import { daysAgoLabel } from '../utils/dateLabels.js';
+import { useSaleOnAllocate } from '../utils/mindbodySales.js';
 
 const selectClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
@@ -15,6 +16,7 @@ const selectClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 
 export default function NewClientsToAllocate({ onViewClient }) {
   const { clients, loading, allocate } = useUnallocatedClients();
   const { staffList } = useAllStaff();
+  const sale = useSaleOnAllocate();
 
   if (loading || clients.length === 0) return null;
 
@@ -27,7 +29,8 @@ export default function NewClientsToAllocate({ onViewClient }) {
           {clients.length}
         </span>
       </div>
-      <p className="text-xs text-gray-500 mb-4">Started in the last 30 days and don't have anyone owning their caseload yet — anyone can pick these up.</p>
+      <p className="text-xs text-gray-500 mb-4">Started in the last 30 days and don't have anyone owning their caseload yet — anyone can pick these up. Ticked clients add to Sales when assigned.</p>
+      {sale.error && <p className="mb-3 text-xs text-red-600">{sale.error}</p>}
 
       <div className="space-y-2">
         {clients.map((c) => (
@@ -45,15 +48,24 @@ export default function NewClientsToAllocate({ onViewClient }) {
               <p className="text-xs text-gray-500">{daysAgoLabel(c.creation_date)}</p>
             </button>
 
-            <select
-              defaultValue=""
-              onChange={(e) => e.target.value && allocate(c.id, caseloadPayloadFor(e.target.value))}
-              className={selectClass}
-            >
-              <option value="" disabled>Assign to…</option>
-              <option value={GROUP_VALUE}>Group Program</option>
-              {staffList.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
-            </select>
+            <div className="flex items-center gap-3 shrink-0">
+              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                <input type="checkbox" checked={sale.countsAsSale(c.id)} onChange={() => sale.toggle(c.id)} className="accent-emerald-600" />
+                Count as sale
+              </label>
+              <select
+                value=""
+                onChange={(e) => {
+                  const payload = caseloadPayloadFor(e.target.value);
+                  sale.allocateWithSale(c, () => allocate(c.id, payload));
+                }}
+                className={selectClass}
+              >
+                <option value="" disabled>Assign to…</option>
+                <option value={GROUP_VALUE}>Group Program</option>
+                {staffList.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+              </select>
+            </div>
           </div>
         ))}
       </div>

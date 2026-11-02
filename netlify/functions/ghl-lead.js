@@ -9,6 +9,8 @@
  *   POST {action:'add-referral', firstName, lastName, email, phone, referredBy, note}
  *   POST {action:'dismiss', mbClientId}
  *   POST {action:'termination', id, decision:'churn'|'not_churn'}   (managers)
+ *   POST {action:'mindbody-sale', mbClientId, saleDate?}
+ *   POST {action:'remove-mindbody-sale', id}   (whoever added it, or managers)
  *
  * Anything created in GHL is also written straight into the ghl_* mirror so
  * the board shows it without waiting for the next scheduled-ghl-sync run.
@@ -18,7 +20,7 @@ import {
   ghlFetch, ghlConfigured, LOCATION_ID, isLeadsPipeline, opportunityRow, contactRow,
   findContact, toE164, serviceClient, requireStaff, MB_LOOKBACK_DAYS,
 } from './utils/ghl.js';
-import { sydneyDate, syncChurn, recordNotice } from './utils/metric-sync.js';
+import { sydneyDate, syncChurn, syncSales, recordNotice, METRIC_FROM } from './utils/metric-sync.js';
 
 const supabase = serviceClient();
 
@@ -181,6 +183,40 @@ async function decideTermination(id, decision, staff) {
   return { status: 'churn', counted: !notice.duplicate_of, taggedInGhl: !!contact && !ghlNote, note: ghlNote };
 }
 
+// ── Sales made directly through Mindbody ──────────────────────────────────
+// One per client, so allocating someone twice (or from both Home panels)
+// can't count them twice; the first date stands. Neither needs GHL connected.
+async function addMindbodySale(mbClientId, saleDate, staff) {
+  if (!mbClientId) throw Object.assign(new Error('mbClientId is required'), { status: 400 });
+  const today = sydneyDate(Date.now());
+  const day = saleDate || today;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today || day < METRIC_FROM.sales) {
+    throw Object.assign(new Error(`Sale date must be between ${METRIC_FROM.sales} and today`), { status: 400 });
+  }
+  const { data: client, error: cErr } = await supabase.from('clients')
+    .select('id, first_name, last_name').eq('mindbody_id', mbClientId).maybeSingle();
+  if (cErr) throw new Error(cErr.message);
+  if (!client) throw Object.assign(new Error('Client not found'), { status: 404 });
+  const { error } = await supabase.from('mindbody_sales').upsert({
+    mb_client_id: mbClientId, client_id: client.id, sale_date: day, created_by: staff.id,
+    name: [client.first_name, client.last_name].filter(Boolean).join(' ') || null,
+  }, { onConflict: 'mb_client_id', ignoreDuplicates: true });
+  if (error) throw new Error(error.message);
+  return syncSales(supabase);
+}
+
+async function removeMindbodySale(id, staff) {
+  const { data: sale, error } = await supabase.from('mindbody_sales').select('id, created_by').eq('id', id).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!sale) throw Object.assign(new Error('Sale not found'), { status: 404 });
+  if (sale.created_by !== staff.id && !['manager', 'admin'].includes(staff.role)) {
+    throw Object.assign(new Error('Only whoever added this sale, or a manager, can remove it'), { status: 403 });
+  }
+  const { error: e } = await supabase.from('mindbody_sales').delete().eq('id', id);
+  if (e) throw new Error(e.message);
+  return syncSales(supabase);
+}
+
 // ── New Mindbody accounts with no GHL contact ─────────────────────────────
 async function mbQueue() {
   const since = new Date(Date.now() - MB_LOOKBACK_DAYS * 86400_000).toISOString().slice(0, 10);
@@ -254,6 +290,9 @@ export const handler = async (event) => {
       if (!['manager', 'admin'].includes(staff.role)) return err('Managers only', 403);
       return ok(await decideTermination(body.id, body.decision, staff));
     }
+
+    if (body.action === 'mindbody-sale') return ok(await addMindbodySale(String(body.mbClientId || ''), body.saleDate, staff));
+    if (body.action === 'remove-mindbody-sale') return ok(await removeMindbodySale(body.id, staff));
 
     if (!ghlConfigured()) return err('GHL is not connected yet', 503);
     switch (body.action) {

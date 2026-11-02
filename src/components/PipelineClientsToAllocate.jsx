@@ -5,6 +5,7 @@ import { useAllStaff } from '../utils/useAllStaff.js';
 import { useMembershipPackages } from '../utils/useMembershipPackages.js';
 import { GROUP_VALUE, caseloadPayloadFor } from '../utils/caseload.js';
 import { daysAgoLabel } from '../utils/dateLabels.js';
+import { useSaleOnAllocate } from '../utils/mindbodySales.js';
 
 const ADD_PACKAGE_VALUE = '__add__';
 const selectClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500';
@@ -28,6 +29,7 @@ export default function PipelineClientsToAllocate({ pipelineIds, isManager, onVi
   const { packages, createPackage } = useMembershipPackages();
   const [addingPackageForId, setAddingPackageForId] = useState(null);
   const [newPackageName, setNewPackageName] = useState('');
+  const sale = useSaleOnAllocate();
 
   const needsAllocation = useMemo(() => {
     if (!pipelineIds || pipelineIds.size === 0) return [];
@@ -65,8 +67,9 @@ export default function PipelineClientsToAllocate({ pipelineIds, isManager, onVi
         </span>
       </div>
       <p className="text-xs text-gray-500 mb-4">
-        Currently on a front-end offer/trial pass and still missing a coach{isManager ? ' or a package' : ''} — anyone can pick these up.
+        Currently on a front-end offer/trial pass and still missing a coach{isManager ? ' or a package' : ''} — anyone can pick these up. Ticked clients add to Sales when assigned.
       </p>
+      {sale.error && <p className="mb-3 text-xs text-red-600">{sale.error}</p>}
 
       <div className="space-y-2">
         {needsAllocation.map((c) => {
@@ -83,15 +86,24 @@ export default function PipelineClientsToAllocate({ pipelineIds, isManager, onVi
 
               <div className="flex items-center gap-2 flex-wrap">
                 {noCoach && (
-                  <select
-                    defaultValue=""
-                    onChange={(e) => e.target.value && updateCaseload(c.id, caseloadPayloadFor(e.target.value))}
-                    className={selectClass}
-                  >
-                    <option value="" disabled>Assign to…</option>
-                    <option value={GROUP_VALUE}>Group Program</option>
-                    {staffList.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
-                  </select>
+                  <>
+                    <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                      <input type="checkbox" checked={sale.countsAsSale(c.id)} onChange={() => sale.toggle(c.id)} className="accent-emerald-600" />
+                      Count as sale
+                    </label>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const payload = caseloadPayloadFor(e.target.value);
+                        sale.allocateWithSale(c, () => updateCaseload(c.id, payload));
+                      }}
+                      className={selectClass}
+                    >
+                      <option value="" disabled>Assign to…</option>
+                      <option value={GROUP_VALUE}>Group Program</option>
+                      {staffList.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                    </select>
+                  </>
                 )}
 
                 {isManager && noPackage && (

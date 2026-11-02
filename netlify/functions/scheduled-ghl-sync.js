@@ -28,7 +28,7 @@ import {
   ghlFetch, ghlConfigured, ghlCallCount, resetGhlCallCount, LOCATION_ID, PIPELINE_NAME,
   isLeadsPipeline, stagesOf, MB_LOOKBACK_DAYS, opportunityRow, contactRow, findContact, serviceClient, requireStaff,
 } from './utils/ghl.js';
-import { selectAll, sydneyDate, writeDailyMetric, syncChurn, refreshChurnReview } from './utils/metric-sync.js';
+import { selectAll, sydneyDate, writeDailyMetric, syncSales, syncChurn, refreshChurnReview } from './utils/metric-sync.js';
 
 const supabase = serviceClient();
 
@@ -143,17 +143,9 @@ async function syncMindbodyMatches(deadline) {
   return { due: queue.length, checked: done };
 }
 
-// Scoreboard Sales (won, on the day won) and Leads (created, any status — the
-// Acquisition tab's definition) from the Leads pipeline mirror; Churn from
-// cancellation notices. Cutovers + writer in utils/metric-sync.js.
-async function syncWonSales(pipelineId) {
-  const won = await selectAll(() => supabase.from('ghl_opportunities')
-    .select('id, won_at:raw->>lastStatusChangeAt, updated_at')
-    .eq('pipeline_id', pipelineId).eq('status', 'won').order('id'));
-  const days = won.map((o) => o.won_at || o.updated_at).filter(Boolean).map(sydneyDate);
-  return { won: won.length, ...await writeDailyMetric(supabase, 'sales', days, 'ghl') };
-}
-
+// Scoreboard Leads (created, any status — the Acquisition tab's definition)
+// from the Leads pipeline mirror; Sales (won + Mindbody sales) and Churn
+// (cancellation notices) in utils/metric-sync.js, with the cutovers + writer.
 async function syncNewLeads(pipelineId) {
   const opps = await selectAll(() => supabase.from('ghl_opportunities')
     .select('id, created_at').eq('pipeline_id', pipelineId).order('id'));
@@ -165,7 +157,7 @@ export async function runGhlSync() {
   const deadline = Date.now() + BUDGET_MS;
   const leads = await syncPipelines();
   const opportunities = await syncOpportunities(leads.id, deadline);
-  const sales = await syncWonSales(leads.id);
+  const sales = await syncSales(supabase);
   const newLeads = await syncNewLeads(leads.id);
   const churnReview = await refreshChurnReview(supabase);
   const churn = await syncChurn(supabase);

@@ -9,14 +9,16 @@ import LeadModal from './LeadModal.jsx';
 import MindbodyLeadQueue from './MindbodyLeadQueue.jsx';
 import ReferralForm from './ReferralForm.jsx';
 import CancellationNotices from './CancellationNotices.jsx';
+import MindbodySales from './MindbodySales.jsx';
 
 /**
  * Acquisition (Business group): the GHL "📈 Leads Pipeline" mirrored from
  * GoHighLevel — lead counts split Meta / Organic / Referral, the pipeline
  * board (cards open to GHL notes), new Mindbody accounts missing from GHL,
- * adding referrals, and cancellation notices (Scoreboard Churn).
+ * adding referrals, Mindbody sales (Scoreboard Sales) and cancellation
+ * notices (Scoreboard Churn).
  */
-export default function AcquisitionTab() {
+export default function AcquisitionTab({ staff, isManager }) {
   const acq = useAcquisition();
   const { clientsList } = useAllClients();
   const [openLead, setOpenLead]     = useState(null);
@@ -83,6 +85,7 @@ export default function AcquisitionTab() {
       )}
 
       <MindbodyLeadQueue key={queueKey} connected={connected} onAdded={acq.reload} />
+      <MindbodySales clients={clientsList} staff={staff} isManager={isManager} />
       <CancellationNotices />
 
       {openLead && <LeadModal lead={openLead} locationId={acq.pipeline?.location_id} onClose={() => setOpenLead(null)} />}

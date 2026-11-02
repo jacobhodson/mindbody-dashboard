@@ -257,7 +257,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         )}
 
         {/* ─ Acquisition (GHL Leads Pipeline) ─ */}
-        {tab === 'acquisition' && <AcquisitionTab />}
+        {tab === 'acquisition' && <AcquisitionTab staff={staff} isManager={isManager} />}
 
         {/* ─ Finances ─ */}
         {tab === 'finances' && isManager && (
