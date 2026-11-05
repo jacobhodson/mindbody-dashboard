@@ -9,7 +9,7 @@ import { useLinkedTasks } from '../utils/useLinkedTasks.js';
 import { useRockNotes } from '../utils/useRockNotes.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import {
-  ROCK_STATUSES, ROCK_STATUS_BY_KEY, ROCK_GRADIENTS, gradientClassFor,
+  ROCK_STATUSES, ROCK_PRIORITIES, ROCK_STATUS_BY_KEY, ROCK_GRADIENTS, gradientClassFor,
 } from '../utils/rocks.js';
 import { renderFormatted } from '../utils/richText.js';
 import RichTextField from './RichTextField.jsx';
@@ -434,6 +434,12 @@ function Properties({ rock, staffList, isManager, canEdit, progress, onUpdate })
     ['Status', (
       <select disabled={!canEdit} value={rock.status} onChange={(e) => onUpdate({ status: e.target.value })} className={selectClass}>
         {ROCK_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+      </select>
+    )],
+    ['Priority', (
+      <select disabled={!canEdit} value={rock.priority || ''} onChange={(e) => onUpdate({ priority: e.target.value || null })} className={selectClass}>
+        <option value="">Not set</option>
+        {ROCK_PRIORITIES.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
       </select>
     )],
     ['Owner', (

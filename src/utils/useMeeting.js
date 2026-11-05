@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient.js';
 import { periodStartFor } from './periods.js';
+import { meetingCadence } from './meetingAgendas.js';
 
 /**
- * One week's meeting of a given type ('team' | 'leadership'), keyed by that
- * week's Monday. This week's (or a future week's) meeting is created the
- * first time anyone opens it — replacing Notion's weekly auto-created page —
- * so there's no cron job. Past weeks that never had a meeting stay empty.
+ * One meeting of a given type ('team' | 'leadership' | 'monthly'), keyed by
+ * that week's Monday or that month's 1st. The current (or a future) meeting
+ * is created the first time anyone opens it — replacing Notion's weekly auto-created page —
+ * so there's no cron job. Past periods that never had a meeting stay empty.
  *
  * Also loads the meeting's items and ratings, and the ids of earlier
  * meetings of the same type (for "Last week's to-dos").
@@ -27,7 +28,7 @@ export function useMeeting(type, meetingDate) {
         .from('meetings').select('*').eq('meeting_type', type).eq('meeting_date', meetingDate).maybeSingle();
       if (mErr) throw mErr;
 
-      if (!m && meetingDate >= periodStartFor('weekly')) {
+      if (!m && meetingDate >= periodStartFor(meetingCadence(type))) {
         // Two people opening it at once both upsert; ignoreDuplicates makes
         // the loser a no-op, then both read the same row back.
         const { error: insErr } = await supabase
@@ -103,6 +104,19 @@ export function useMeeting(type, meetingDate) {
   }, [meeting]);
 
   return { meeting, items, ratings, pastMeetings, loading, error, updateMeeting, addItem, removeItem, saveRating, reload: load };
+}
+
+/** Entries in `section` of an earlier meeting — what was carried from it. */
+export function useCarriedItems(meetingId, section) {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    if (!meetingId) { setItems([]); return undefined; }
+    let cancelled = false;
+    supabase.from('meeting_items').select('*').eq('meeting_id', meetingId).eq('section', section).order('created_at')
+      .then(({ data, error }) => { if (!cancelled && !error) setItems(data || []); });
+    return () => { cancelled = true; };
+  }, [meetingId, section]);
+  return items;
 }
 
 /** The Leadership Huddle's cascade for a week, readable by all staff. */

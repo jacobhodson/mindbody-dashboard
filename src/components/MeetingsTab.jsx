@@ -2,27 +2,29 @@ import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Trash2, Plus, ArrowRightLeft, ListPlus, Star, ExternalLink } from 'lucide-react';
 import { format, parseISO, addDays, subDays } from 'date-fns';
 import { periodStartForOffset } from '../utils/periods.js';
-import { MEETING_TYPES, CASCADE_SECTIONS, MEETING_STATUSES } from '../utils/meetingAgendas.js';
+import { MEETING_TYPES, CASCADE_SECTIONS, MEETING_STATUSES, meetingCadence } from '../utils/meetingAgendas.js';
 import { useMeetingSections } from '../utils/useMeetingSections.js';
-import { useMeeting, useLeadershipCascade } from '../utils/useMeeting.js';
+import { useMeeting, useLeadershipCascade, useCarriedItems } from '../utils/useMeeting.js';
 import { useIssues } from '../utils/useIssues.js';
 import { useLinkedTasks } from '../utils/useLinkedTasks.js';
 import { useRocks, canEditRock } from '../utils/useRocks.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
-import { ROCK_STATUSES } from '../utils/rocks.js';
+import { ROCK_STATUSES, ROCK_PRIORITIES } from '../utils/rocks.js';
+import { useRockNotes } from '../utils/useRockNotes.js';
 import { renderFormatted } from '../utils/richText.js';
 import RichTextField from './RichTextField.jsx';
 import LinkedTaskList, { TaskForm } from './LinkedTaskList.jsx';
 import Scoreboard from './Scoreboard.jsx';
+import ScorecardReview from './ScorecardReview.jsx';
 import { rockProgress } from './RocksTab.jsx';
 import BuildModeToggle from './BuildModeToggle.jsx';
 import AgendaBuilder from './AgendaBuilder.jsx';
 import RedsList from './RedsList.jsx';
 
 /**
- * Weekly meetings — the Monday Team Meeting (everyone) and the Leadership
- * Huddle (managers only), replacing the Notion databases that spun up a new
- * page each week. Pick a week; that week's meeting is created on first open.
+ * Meetings — the Monday Team Meeting (everyone), the Leadership Huddle and the
+ * Monthly Same-Page (managers only), replacing the Notion databases that spun
+ * up a new page each week. Pick a date; that meeting is created on first open.
  * People add their own entries to each agenda section; IDS issues carry over
  * week to week until solved; to-dos are regular tasks (they land in the
  * assignee's Home checklist) and roll into next week's "Last week's to-dos".
@@ -31,7 +33,9 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
   const [type, setType]     = useState('team');
   const [offset, setOffset] = useState(0);
   const [building, setBuilding] = useState(false);
-  const meetingDate = periodStartForOffset('weekly', offset);
+  const cadence = meetingCadence(type);
+  const monthly = cadence === 'monthly';
+  const meetingDate = periodStartForOffset(cadence, offset);
   const config = MEETING_TYPES[type];
   const agenda = useMeetingSections(type);
   const sections = useMemo(() => agenda.sectionsFor(meetingDate), [agenda, meetingDate]);
@@ -49,7 +53,10 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
 
   // Meeting to-dos (incl. IDS ones) can be linked to a rock as well.
   const { rocks } = useRocks();
-  const ctx = { staff, isManager, staffList, nameById, meeting, meetingDate, mtg, todos, type, reds, rocks };
+  const defaultDue = monthly
+    ? format(addDays(new Date(), 30), 'yyyy-MM-dd')
+    : format(addDays(parseISO(meetingDate), 7), 'yyyy-MM-dd');
+  const ctx = { staff, isManager, staffList, nameById, meeting, meetingDate, mtg, todos, type, reds, rocks, monthly, defaultDue };
 
   return (
     <div className="space-y-6">
@@ -57,7 +64,7 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
         <div>
           <h1 className="text-lg font-semibold text-gray-900">Meetings</h1>
           <p className="text-sm text-gray-500">
-            This week's meeting opens automatically — add your bits to each section before or during it.
+            The current meeting opens automatically — add your bits to each section before or during it.
           </p>
         </div>
         {isManager && (
@@ -77,7 +84,7 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
             .map(([key, c]) => (
               <button
                 key={key}
-                onClick={() => setType(key)}
+                onClick={() => { setType(key); setOffset(0); }}
                 className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   type === key ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'
                 }`}
@@ -88,22 +95,22 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={() => setOffset((o) => o - 1)} aria-label="Previous week" className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100">
+          <button onClick={() => setOffset((o) => o - 1)} aria-label={monthly ? 'Previous month' : 'Previous week'} className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100">
             <ChevronLeft className="h-4 w-4" />
           </button>
           <span className="min-w-[9rem] text-center text-sm font-medium text-gray-900">
-            Mon {format(parseISO(meetingDate), 'd MMM yyyy')}
+            {monthly ? format(parseISO(meetingDate), 'MMMM yyyy') : `Mon ${format(parseISO(meetingDate), 'd MMM yyyy')}`}
           </span>
           <button
             onClick={() => setOffset((o) => o + 1)}
             disabled={offset >= 1}
-            aria-label="Next week"
+            aria-label={monthly ? 'Next month' : 'Next week'}
             className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-40"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
           {offset !== 0 && (
-            <button onClick={() => setOffset(0)} className="text-xs text-emerald-700 hover:underline">This week</button>
+            <button onClick={() => setOffset(0)} className="text-xs text-emerald-700 hover:underline">{monthly ? 'This month' : 'This week'}</button>
           )}
         </div>
       </div>
@@ -111,18 +118,18 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
       {(mtg.error || todos.error) && <p className="text-xs text-red-600">{mtg.error || todos.error}</p>}
 
       {building ? (
-        <AgendaBuilder key={type} label={config.label} type={type} agenda={agenda} />
+        <AgendaBuilder key={type} label={config.label} type={type} agenda={agenda} staff={staff} />
       ) : mtg.loading || agenda.loading ? (
         <p className="text-sm text-gray-500">Loading…</p>
       ) : !meeting ? (
         <p className="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">
-          No {config.label} was recorded for this week.
+          No {config.label} was recorded for this {monthly ? 'month' : 'week'}.
         </p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
             <h2 className="flex-1 text-sm font-semibold text-gray-900">
-              {config.label} · {format(parseISO(meetingDate), 'EEEE d MMMM')}
+              {config.label} · {format(parseISO(meetingDate), monthly ? 'MMMM yyyy' : 'EEEE d MMMM')}
             </h2>
             <AverageRating ratings={mtg.ratings} />
             <select
@@ -156,11 +163,11 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
 }
 
 function SectionBody({ section, ctx, onOpenRocks }) {
-  const { mtg, meeting, meetingDate, todos, staff, staffList, isManager, nameById } = ctx;
+  const { mtg, meeting, meetingDate, todos, staff, staffList, isManager, nameById, monthly, defaultDue } = ctx;
 
   switch (section.kind) {
     case 'items':
-      return <ItemList sectionKey={section.key} ctx={ctx} />;
+      return <SectionLists section={section} ctx={ctx} />;
 
     case 'cascade_in':
       return <CascadeIn meetingDate={meetingDate} nameById={nameById} />;
@@ -178,18 +185,29 @@ function SectionBody({ section, ctx, onOpenRocks }) {
       );
 
     case 'scorecard':
-      // A Monday meeting reviews the week that just finished.
+      // A meeting reviews the period that just finished.
       return (
         <Scoreboard
           staff={staff}
           isManager={isManager}
           anchor={format(subDays(parseISO(meetingDate), 1), 'yyyy-MM-dd')}
-          defaultView="weekly"
+          defaultView={monthly ? 'monthly' : 'weekly'}
+        />
+      );
+
+    case 'scorecard_30':
+      return (
+        <ScorecardReview
+          staff={staff}
+          meetingDate={meetingDate}
+          config={section.config}
+          hasDiscussion={(key) => mtg.items.some((i) => i.section === `${section.key}:${key}`)}
+          renderDiscussion={(key) => <ItemList sectionKey={`${section.key}:${key}`} ctx={ctx} placeholder="Add to the discussion…" />}
         />
       );
 
     case 'rocks':
-      return <RockReview staff={staff} staffList={staffList} isManager={isManager} onOpenRocks={onOpenRocks} />;
+      return <RockReview staff={staff} staffList={staffList} isManager={isManager} onOpenRocks={onOpenRocks} detailed={monthly} />;
 
     case 'ids':
       return <IssuesBoard board={section.board} voices={section.voices} ctx={ctx} />;
@@ -226,15 +244,18 @@ function SectionBody({ section, ctx, onOpenRocks }) {
           isManager={isManager}
           extraFields={{ meeting_id: meeting.id }}
           rocks={ctx.rocks}
-          defaultDue={format(addDays(parseISO(meetingDate), 7), 'yyyy-MM-dd')}
-          addLabel="Add to-do"
-          emptyText="No to-dos yet this week."
+          defaultDue={defaultDue}
+          addLabel={monthly ? 'Add priority' : 'Add to-do'}
+          emptyText={monthly ? 'No priorities set yet.' : 'No to-dos yet this week.'}
         />
       );
     }
 
     case 'reds':
       return <RedsSection sectionKey={section.key} ctx={ctx} />;
+
+    case 'carry':
+      return <CarrySection section={section} ctx={ctx} />;
 
     case 'rating':
       return <Ratings ratings={mtg.ratings} staff={staff} nameById={nameById} onSave={mtg.saveRating} />;
@@ -255,29 +276,83 @@ function RedsSection({ sectionKey, ctx }) {
   return (
     <div className="space-y-3">
       {reds ? <RedsList {...reds} /> : <p className="text-sm text-gray-500">Red's List isn't available.</p>}
-      {notes.length > 0 && (
-        <div>
-          <h4 className="mb-1 text-xs font-semibold text-gray-500">Notes from this meeting</h4>
-          <ul className="space-y-1.5">
-            {notes.map((item) => (
-              <li key={item.id} className="flex items-start gap-2 text-sm">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-300" />
-                <div className="min-w-0 flex-1">
-                  <span className="whitespace-pre-wrap text-gray-800">{renderFormatted(item.body)}</span>
-                  <span className="ml-2 text-[11px] text-gray-400">— {nameById[item.staff_id] || 'Someone'}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <ReadOnlyEntries title="Notes from this meeting" items={notes} nameById={nameById} />
+    </div>
+  );
+}
+
+function ReadOnlyEntries({ title, items, nameById }) {
+  if (!items.length) return null;
+  return (
+    <div>
+      <h4 className="mb-1 text-xs font-semibold text-gray-500">{title}</h4>
+      <ul className="space-y-1.5">
+        {items.map((item) => (
+          <li key={item.id} className="flex items-start gap-2 text-sm">
+            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-300" />
+            <div className="min-w-0 flex-1">
+              <span className="whitespace-pre-wrap text-gray-800">{renderFormatted(item.body)}</span>
+              <span className="ml-2 text-[11px] text-gray-400">— {nameById[item.staff_id] || 'Someone'}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ── Sub-lists ──────────────────────────────────────────────────────────────
+// A list section split into titled sub-lists by config.lists (build mode).
+// Entries whose sub-list has since been removed stay visible, read-only.
+function SectionLists({ section, ctx }) {
+  const { mtg, nameById } = ctx;
+  const lists = section.config?.lists || [];
+  const prefix = `${section.key}:`;
+  const current = new Set(lists.map((l) => prefix + l.key));
+  const earlier = mtg.items.filter((i) => i.section.startsWith(prefix) && !current.has(i.section));
+
+  if (!lists.length) {
+    return (
+      <div className="space-y-3">
+        <ItemList sectionKey={section.key} ctx={ctx} />
+        <ReadOnlyEntries title="Earlier entries" items={earlier} nameById={nameById} />
+      </div>
+    );
+  }
+  const plain = mtg.items.filter((i) => i.section === section.key);
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        {lists.map((l) => (
+          <div key={l.key} className="rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+            <h4 className="mb-1.5 text-xs font-semibold text-gray-700">{l.title}</h4>
+            <ItemList sectionKey={prefix + l.key} ctx={ctx} />
+          </div>
+        ))}
+      </div>
+      <ReadOnlyEntries title="Earlier entries" items={[...plain, ...earlier]} nameById={nameById} />
+    </div>
+  );
+}
+
+// ── Carry over ─────────────────────────────────────────────────────────────
+function CarrySection({ section, ctx }) {
+  const { mtg, nameById, monthly } = ctx;
+  const previous = mtg.pastMeetings[0];
+  const carried = useCarriedItems(previous?.id, section.key);
+  const fromLabel = previous && format(parseISO(previous.meeting_date), monthly ? 'MMMM' : 'd MMM');
+
+  return (
+    <div className="space-y-3">
+      <ReadOnlyEntries title={`Carried in from ${fromLabel}`} items={carried} nameById={nameById} />
+      <ItemList sectionKey={section.key} ctx={ctx} placeholder="Add an item to carry over…" />
     </div>
   );
 }
 
 // ── Free-form entries ──────────────────────────────────────────────────────
 
-function ItemList({ sectionKey, ctx }) {
+function ItemList({ sectionKey, ctx, placeholder = 'Add yours…' }) {
   const { mtg, staff, isManager, nameById } = ctx;
   const items = mtg.items.filter((i) => i.section === sectionKey);
   const [draft, setDraft] = useState('');
@@ -314,7 +389,7 @@ function ItemList({ sectionKey, ctx }) {
       )}
       <form onSubmit={submit} className="flex items-end gap-2">
         <div className="min-w-0 flex-1">
-          <RichTextField value={draft} onChange={setDraft} placeholder="Add yours…" />
+          <RichTextField value={draft} onChange={setDraft} placeholder={placeholder} />
         </div>
         <button
           type="submit"
@@ -359,14 +434,60 @@ function CascadeIn({ meetingDate, nameById }) {
 
 // ── Rock review ────────────────────────────────────────────────────────────
 
-function RockReview({ staff, staffList, isManager, onOpenRocks }) {
+const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
+
+function RockReview({ staff, staffList, isManager, onOpenRocks, detailed }) {
   const { rocks, loading, updateRock } = useRocks();
-  const active = useMemo(() => rocks.filter((r) => r.status !== 'done'), [rocks]);
+  const active = useMemo(() => {
+    const open = rocks.filter((r) => r.status !== 'done');
+    if (!detailed) return open;
+    return [...open].sort((a, b) => (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3));
+  }, [rocks, detailed]);
   const linked = useLinkedTasks('rock_id', active.map((r) => r.id), staff, isManager);
   const nameById = Object.fromEntries(staffList.map((s) => [s.id, s.full_name]));
   const selectClass = 'rounded-md border border-gray-300 bg-gray-50 px-1.5 py-1 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-70';
 
   if (loading) return <p className="text-xs text-gray-500">Loading…</p>;
+  if (detailed) {
+    return (
+      <div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <th className="pb-2 font-medium">Rock</th>
+                <th className="pb-2 font-medium">Priority</th>
+                <th className="pb-2 font-medium">Owner</th>
+                <th className="pb-2 font-medium">Status</th>
+                <th className="pb-2 font-medium">Notes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {active.map((rock) => (
+                <DetailedRockRow
+                  key={rock.id}
+                  rock={rock}
+                  staff={staff}
+                  ownerName={nameById[rock.owner_staff_id]}
+                  nameById={nameById}
+                  editable={canEditRock(rock, staff, isManager)}
+                  selectClass={selectClass}
+                  onUpdate={(patch) => updateRock(rock.id, patch)}
+                  onOpenRocks={onOpenRocks}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {active.length === 0 && <p className="text-xs text-gray-500">No active rocks.</p>}
+        {onOpenRocks && (
+          <button onClick={() => onOpenRocks(null)} className="mt-3 flex items-center gap-1 text-xs text-emerald-700 hover:underline">
+            Open Rocks <ExternalLink className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    );
+  }
   return (
     <div>
       <div className="overflow-x-auto">
@@ -424,6 +545,72 @@ function RockReview({ staff, staffList, isManager, onOpenRocks }) {
   );
 }
 
+// Monthly rock row: notes are the rock's own notes, so an update added here
+// also shows on the rock page (and vice versa).
+function DetailedRockRow({ rock, ownerName, nameById, editable, selectClass, onUpdate, onOpenRocks }) {
+  const { notes, addNote } = useRockNotes(rock.id);
+  const [draft, setDraft] = useState('');
+  const latest = notes[0];
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!draft.trim()) return;
+    if (await addNote(draft)) setDraft('');
+  };
+
+  return (
+    <tr className="align-top">
+      <td className="py-2 pr-3">
+        {onOpenRocks
+          ? <button onClick={() => onOpenRocks(rock.id)} className="text-left text-gray-900 hover:text-emerald-700 hover:underline">{rock.title}</button>
+          : <span className="text-gray-900">{rock.title}</span>}
+      </td>
+      <td className="py-2 pr-2">
+        <select disabled={!editable} value={rock.priority || ''} onChange={(e) => onUpdate({ priority: e.target.value || null })} aria-label={`Priority for ${rock.title}`} className={selectClass}>
+          <option value="">Not set</option>
+          {ROCK_PRIORITIES.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+        </select>
+      </td>
+      <td className="py-2 pr-3 text-gray-600">{ownerName || '—'}</td>
+      <td className="py-2 pr-2">
+        <div className="flex items-center gap-1.5">
+          <select disabled={!editable} value={rock.status} onChange={(e) => onUpdate({ status: e.target.value })} aria-label={`Status for ${rock.title}`} className={selectClass}>
+            {ROCK_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+          <button
+            disabled={!editable}
+            onClick={() => onUpdate({ on_track: !rock.on_track })}
+            className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${
+              rock.on_track ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+            } disabled:cursor-default`}
+          >
+            {rock.on_track ? 'On track' : 'Off track'}
+          </button>
+        </div>
+      </td>
+      <td className="w-[32%] py-2">
+        {latest && (
+          <p className="mb-1 text-xs text-gray-700">
+            {renderFormatted(latest.body)}
+            <span className="ml-1.5 text-[11px] text-gray-400">
+              — {nameById[latest.staff_id] || 'Someone'}, {format(new Date(latest.created_at), 'd MMM')}
+            </span>
+          </p>
+        )}
+        <form onSubmit={submit}>
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Add a note…"
+            aria-label={`Add a note to ${rock.title}`}
+            className="w-full rounded-md border border-gray-300 bg-gray-50 px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </form>
+      </td>
+    </tr>
+  );
+}
+
 // ── IDS ────────────────────────────────────────────────────────────────────
 
 const ISSUE_STATUSES = [
@@ -433,7 +620,7 @@ const ISSUE_STATUSES = [
 ];
 
 function IssuesBoard({ board, voices, ctx }) {
-  const { staff, isManager, staffList, nameById, meeting, meetingDate, todos, rocks } = ctx;
+  const { staff, isManager, staffList, nameById, meeting, defaultDue, todos, rocks } = ctx;
   const { issues, loading, error, addIssue, updateIssue, deleteIssue } = useIssues(board);
   const [title, setTitle]       = useState('');
   const [todoFor, setTodoFor]   = useState(null);
@@ -501,7 +688,7 @@ function IssuesBoard({ board, voices, ctx }) {
           <TaskForm
             staffList={staffList}
             rocks={rocks}
-            initial={{ label: issue.title, assignee: staff?.id || '', due_date: format(addDays(parseISO(meetingDate), 7), 'yyyy-MM-dd') }}
+            initial={{ label: issue.title, assignee: staff?.id || '', due_date: defaultDue }}
             submitLabel="Add to-do"
             onCancel={() => setTodoFor(null)}
             onSubmit={async (fields) => {

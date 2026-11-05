@@ -11,6 +11,12 @@ export const ROCK_STATUSES = [
 
 export const ROCK_STATUS_BY_KEY = Object.fromEntries(ROCK_STATUSES.map((s) => [s.key, s]));
 
+export const ROCK_PRIORITIES = [
+  { key: 'high',   label: 'High' },
+  { key: 'medium', label: 'Medium' },
+  { key: 'low',    label: 'Low' },
+];
+
 // Cover presets for rocks without a photo. Stored on rocks.cover as
 // 'gradient:<key>'; class strings are written out in full so Tailwind
 // keeps them.

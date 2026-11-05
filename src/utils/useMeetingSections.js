@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient.js';
 import { periodStartFor } from './periods.js';
-import { MEETING_TYPES } from './meetingAgendas.js';
+import { MEETING_TYPES, meetingCadence } from './meetingAgendas.js';
 
 /**
  * A meeting type's agenda from `meeting_sections`
@@ -9,9 +9,9 @@ import { MEETING_TYPES } from './meetingAgendas.js';
  * make to it. `sectionsFor(date)` is the agenda as it stood for that week's
  * meeting: a section shows for meetings in [active_from, active_until).
  *
- * Changes take effect from the current week: adding stamps active_from with
- * this week's Monday, removing stamps active_until — so earlier weeks keep
- * their sections and entries. If the table can't be read (e.g. the migration
+ * Changes take effect from the current period: adding stamps active_from with
+ * this week's Monday (or the 1st, for a monthly meeting), removing stamps
+ * active_until — so earlier meetings keep their sections and entries. If the table can't be read (e.g. the migration
  * isn't applied yet) it falls back to the seed agenda in meetingAgendas.js.
  */
 export function useMeetingSections(type) {
@@ -36,14 +36,14 @@ export function useMeetingSections(type) {
 
   useEffect(() => { setLoading(true); load(); }, [load]);
 
-  const thisWeek = periodStartFor('weekly');
+  const thisPeriod = periodStartFor(meetingCadence(type));
 
   /** The agenda for a given meeting date (yyyy-MM-dd). */
   const sectionsFor = useCallback((date) => rows.filter((s) =>
     (!s.active_from || date >= s.active_from) && (!s.active_until || date < s.active_until)), [rows]);
 
-  /** What build mode edits: the agenda from this week on. */
-  const current = useMemo(() => rows.filter((s) => !s.active_until || s.active_until > thisWeek), [rows, thisWeek]);
+  /** What build mode edits: the agenda from this period on. */
+  const current = useMemo(() => rows.filter((s) => !s.active_until || s.active_until > thisPeriod), [rows, thisPeriod]);
 
   const run = async (query) => {
     const { error: err } = await query;
@@ -53,26 +53,27 @@ export function useMeetingSections(type) {
     return true;
   };
 
-  const addSection = ({ title, kind, hint, minutes }) => {
+  const addSection = ({ title, kind, hint, minutes, config }) => {
     const max = rows.reduce((m, s) => Math.max(m, s.sort_order), -1);
     return run(supabase.from('meeting_sections').insert({
       meeting_type: type,
       key: `${kind}_${crypto.randomUUID().slice(0, 8)}`,
       title, kind, hint: hint || null, minutes: minutes ?? null,
-      board: kind === 'ids' ? type : null,
+      board: kind === 'ids' ? (type === 'team' ? 'team' : 'leadership') : null,
       voices: kind === 'ids' && type === 'team',
+      config: config || {},
       sort_order: max + 1,
-      active_from: thisWeek,
+      active_from: thisPeriod,
     }));
   };
 
   const updateSection = (id, patch) => run(supabase.from('meeting_sections').update(patch).eq('id', id));
 
-  // A section added this week has no history yet, so it's simply deleted;
-  // anything older is retired from this week on.
-  const removeSection = (section) => (section.active_from === thisWeek
+  // A section added this period has no history yet, so it's simply deleted;
+  // anything older is retired from this period on.
+  const removeSection = (section) => (section.active_from === thisPeriod
     ? run(supabase.from('meeting_sections').delete().eq('id', section.id))
-    : run(supabase.from('meeting_sections').update({ active_until: thisWeek }).eq('id', section.id)));
+    : run(supabase.from('meeting_sections').update({ active_until: thisPeriod }).eq('id', section.id)));
 
   /** Save a new order for the current agenda (array of ids). */
   const reorder = (ids) => {

@@ -1,19 +1,24 @@
-// The two weekly meeting agendas, mirroring the Notion templates they
-// replace (MONDAY TEAM MEETING and Leadership Huddle). The live agendas are
+// The meeting agendas: the two weekly ones mirror the Notion templates they
+// replace (MONDAY TEAM MEETING and Leadership Huddle), and the monthly one is
+// the Same-Page Meeting template. `cadence` (default weekly) sets how often a
+// type's meeting comes round and how it's dated. The live agendas are
 // the `meeting_sections` table (editable in the Meetings tab's build mode —
 // see useMeetingSections.js); the `sections` below are the original seed,
 // used only as a fallback if that table can't be read. `kind` picks which
 // component renders the section in MeetingsTab.jsx:
-//   items       — free-form entries people add (stored in meeting_items under `key`)
+//   items       — free-form entries people add (stored in meeting_items under
+//                 `key`, or `key:listKey` when config.lists splits it into sub-lists)
 //   cascade_in  — the Leadership Huddle's agreed message for this week (read-only)
 //   cascade_out — the two cascade lists the huddle fills in
-//   scorecard   — the live Scoreboard for the week before the meeting
-//   rocks       — rock review (status / stage / on-track)
+//   scorecard   — the live Scoreboard for the period before the meeting
+//   scorecard_30 — automatic rolling-30-day review; off-track metrics get a discussion list
+//   rocks       — rock review (status / on-track; monthly adds priority + notes)
 //   ids         — the IDS issues board for `board`
 //   last_todos  — to-dos from previous meetings of this type
 //   todos       — to-dos created in this meeting
 //   rating      — 1–10 rating + one improvement
 //   reds        — the live Group Training Red's List, contactable in place
+//   carry       — items to carry over; the previous meeting's show here too
 
 export const MEETING_TYPES = {
   team: {
@@ -65,17 +70,61 @@ export const MEETING_TYPES = {
         hint: 'Each attendee rates 1–10 + one improvement.' },
     ],
   },
+  monthly: {
+    label: 'Monthly Same-Page',
+    managerOnly: true,
+    cadence: 'monthly',
+    sections: [
+      { key: 'scorecard', title: '30-Day Scorecard Review', kind: 'scorecard_30',
+        hint: 'Updates automatically. Discuss anything off track.',
+        config: { hidden_metrics: [], rollover_target: 80 } },
+      { key: 'headlines', title: 'Operations Headlines', kind: 'items',
+        hint: 'From the GM.',
+        config: { lists: [
+          { key: 'going_well', title: "What's going well" },
+          { key: 'not_going_well', title: "What's not going well" },
+          { key: 'decisions', title: 'Decisions for the founders' },
+        ] } },
+      { key: 'rocks', title: 'Rock Review', kind: 'rocks',
+        hint: 'Priority, owner, status and notes for each active rock.' },
+      { key: 'team_review', title: 'Team Review', kind: 'items',
+        config: { lists: [
+          { key: 'capacity', title: 'Capacity' },
+          { key: 'hiring', title: 'Hiring' },
+          { key: 'performance', title: 'Performance' },
+          { key: 'wellbeing', title: 'Wellbeing' },
+          { key: 'upcoming_leave', title: 'Upcoming leave' },
+        ] } },
+      { key: 'ops_risks', title: 'Operations & Risks', kind: 'items',
+        config: { lists: [
+          { key: 'systems', title: 'Systems' },
+          { key: 'compliance', title: 'Compliance' },
+          { key: 'venue', title: 'Venue' },
+          { key: 'equipment', title: 'Equipment' },
+          { key: 'insurance', title: 'Insurance' },
+          { key: 'financials', title: 'Financials' },
+        ] } },
+      { key: 'next_30', title: 'Next 30 Days', kind: 'todos',
+        hint: 'Top 3 priorities and who owns each.' },
+      { key: 'carry', title: 'Carry to Next Month', kind: 'carry',
+        hint: "These show again on next month's meeting." },
+    ],
+  },
 };
+
+export const meetingCadence = (type) => MEETING_TYPES[type]?.cadence || 'weekly';
 
 // Section types a manager can add in build mode. `once` = only one per
 // agenda (a second copy would just repeat the same content).
 export const SECTION_KINDS = [
   { kind: 'items',       label: 'List — people add entries', once: false },
   { kind: 'scorecard',   label: 'Scorecard',                 once: true },
+  { kind: 'scorecard_30', label: '30-day scorecard (automatic)', once: true },
   { kind: 'rocks',       label: 'Rock review',               once: true },
   { kind: 'ids',         label: 'IDS board',                 once: true },
-  { kind: 'last_todos',  label: "Last week's to-dos",        once: true },
+  { kind: 'last_todos',  label: "Last meeting's to-dos",     once: true },
   { kind: 'todos',       label: 'New to-dos',                once: true },
+  { kind: 'carry',       label: 'Carry to next meeting',     once: true },
   { kind: 'rating',      label: 'Meeting rating',            once: true },
   { kind: 'reds',        label: "Red's List (Group Training)", once: true, types: ['team'] },
   { kind: 'cascade_in',  label: 'Cascade from Leadership',   once: true, types: ['team'] },
