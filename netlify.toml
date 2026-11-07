@@ -54,6 +54,9 @@
 [functions."ghl-lead"]
   timeout = 26
 
+[functions."ai-chat"]
+  timeout = 26
+
 [dev]
   command = "vite"
   port = 8888

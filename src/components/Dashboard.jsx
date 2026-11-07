@@ -3,6 +3,7 @@ import { format, isToday } from 'date-fns';
 import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact, Mountain, CalendarCheck, BookOpen, Plane, TrendingUp, Settings as SettingsIcon } from 'lucide-react';
 import Sidebar             from './Sidebar.jsx';
 import Home                from './Home.jsx';
+import AiAssistant         from './AiAssistant.jsx';
 import Scorecard           from './Scorecard.jsx';
 import StatsGrid          from './StatsGrid.jsx';
 import ClientMixSnapshot  from './ClientMixSnapshot.jsx';
@@ -361,6 +362,9 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         </main>
         </PlaybookLinkProvider>
       </div>
+
+      {/* ─ Ask AI (managers/admins only for now) ─ */}
+      {isManager && <AiAssistant />}
     </div>
   );
 }
