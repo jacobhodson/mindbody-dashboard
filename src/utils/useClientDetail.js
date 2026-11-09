@@ -2,17 +2,33 @@ import { useState, useEffect, useCallback } from 'react';
 import { startOfWeek, subWeeks, addDays } from 'date-fns';
 import { supabase } from '../lib/supabaseClient.js';
 
-// Buckets signed-in class visits into 4 Monday-start weeks — w1 = current
-// week to date, w4 = 3 weeks ago — same rolling-window convention as
-// mb-client-analytics.js and periods.js's periodStartFor('weekly'). Used for
-// the client health scorecard (reuses WeeklyAttendancePanel.jsx's colouring).
-function weeklyAttendanceFrom(classRows) {
+// For attendance health an appointment counts as a session when it's a
+// training booking (PT, Semi Private or Open Gym) and the client showed up.
+// Consults/strategy sessions ('other') aren't training, so they're left out.
+// Broader than recompute_client_visit_totals() in SQL, whose
+// total_pt_sessions is deliberately PT/SP only.
+const ATTENDED_APPT_STATUSES = new Set(['Completed', 'Arrived']);
+const TRAINING_APPT_CATEGORIES = new Set(['pt', 'sp', 'gym']);
+function isAttendedAppointment(row) {
+  return TRAINING_APPT_CATEGORIES.has(row.session_category) && ATTENDED_APPT_STATUSES.has(row.status);
+}
+
+// Buckets attended sessions (signed-in class visits plus attended training
+// appointments) into 4 Monday-start weeks — w1 = current week to date, w4 =
+// 3 weeks ago — same rolling-window convention as mb-client-analytics.js and
+// periods.js's periodStartFor('weekly'). Used for the client health
+// scorecard (reuses WeeklyAttendancePanel.jsx's colouring).
+function weeklyAttendanceFrom(classRows, apptRows) {
   const thisWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
   const weekStarts = [0, 1, 2, 3].map((i) => subWeeks(thisWeekStart, i));
   const counts = [0, 0, 0, 0];
-  for (const row of classRows) {
-    if (!row.signed_in || !row.class_date) continue;
-    const d = new Date(`${row.class_date}T00:00:00`);
+  const dates = [
+    ...classRows.filter((r) => r.signed_in).map((r) => r.class_date),
+    ...apptRows.filter(isAttendedAppointment).map((r) => r.appointment_date),
+  ];
+  for (const date of dates) {
+    if (!date) continue;
+    const d = new Date(`${date}T00:00:00`);
     for (let i = 0; i < 4; i++) {
       const start = weekStarts[i];
       if (d >= start && d < addDays(start, 7)) { counts[i]++; break; }
@@ -87,7 +103,7 @@ export function useClientDetail(mindbodyId) {
       ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
       setVisits(merged);
-      const { weeklyAttendance: wa, avgWeekly: avg } = weeklyAttendanceFrom(classRes.data || []);
+      const { weeklyAttendance: wa, avgWeekly: avg } = weeklyAttendanceFrom(classRes.data || [], apptRes.data || []);
       setWeeklyAttendance(wa);
       setAvgWeekly(avg);
       setNotes(notesRes.data || []);
