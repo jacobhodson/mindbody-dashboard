@@ -1,4 +1,5 @@
 import PTRedsList          from './PTRedsList.jsx';
+import PTCancellationsList from './PTCancellationsList.jsx';
 import OpenGymList         from './OpenGymList.jsx';
 import UncheckedSessionsList from './UncheckedSessionsList.jsx';
 import SessionCreditsList  from './SessionCreditsList.jsx';
@@ -83,6 +84,9 @@ export default function PersonalTrainingTab({ data, loading, error, contactLog, 
 
       {/* PT Reds */}
       <PTRedsList data={data} loading={loading} error={error} contactLog={contactLog} onViewClient={onViewClient} />
+
+      {/* Cancelled sessions (detected by the Mindbody mirror, tagged by staff) */}
+      <PTCancellationsList contactLog={contactLog} onViewClient={onViewClient} />
 
       {/* Open Gym + Unchecked side by side */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

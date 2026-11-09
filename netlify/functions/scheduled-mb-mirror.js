@@ -139,12 +139,17 @@ async function syncTransactions(token, fromDate, toDate) {
 }
 
 // Mindbody drops cancelled appointments from /appointment/staffappointments
-// rather than returning them as Cancelled, so a future booking that gets
-// cancelled would otherwise linger in the mirror as "Booked". With
-// `pruneFuture`, rows from today onward inside the synced window that this
-// fetch didn't return (synced_at older than the run) are deleted. Past rows
-// are left alone so historical counts don't shift.
-async function syncAppointments(token, fromDate, toDate, { pruneFuture = false } = {}) {
+// rather than returning them as Cancelled (no API endpoint returns them at
+// all — confirmed 2026-11-09). So with `prune`, rows inside the synced
+// window that this fetch didn't return (synced_at older than the run) are
+// treated as cancelled: copied to appointment_cancellations (PT tab →
+// Cancelled Sessions), then removed so they stop counting as booked/attended.
+// Guards: no prune when the fetch came back empty or capped, or when an
+// implausible share of the window vanished at once (a Mindbody hiccup, not
+// a wave of cancellations); and if the copy fails nothing is deleted.
+const PRUNE_MAX_SHARE = 0.3;
+
+async function syncAppointments(token, fromDate, toDate, { prune = false } = {}) {
   const runStart = new Date().toISOString();
   const appts = await fetchAllPages('/appointment/staffappointments', token,
     { StartDate: `${fromDate}T00:00:00`, EndDate: `${toDate}T23:59:59` }, 'Appointments');
@@ -152,14 +157,58 @@ async function syncAppointments(token, fromDate, toDate, { pruneFuture = false }
     .map((a) => ({ id: String(a.Id), local_ts: toLocalTs(a.StartDateTime), raw: a, synced_at: new Date().toISOString() }))
     .filter((r) => r.local_ts));
   const n = await upsert('mb_appointments', rows);
-  if (pruneFuture && appts.length < 20000) {
-    const pruneFrom = localDate(0) > fromDate ? localDate(0) : fromDate;
-    const { error } = await supabase.from('mb_appointments').delete()
-      .gte('local_ts', `${pruneFrom}T00:00:00`).lte('local_ts', `${toDate}T23:59:59`)
-      .lt('synced_at', runStart);
+  if (!prune || appts.length === 0 || appts.length >= 20000) return n;
+
+  // A recorded "cancellation" that Mindbody returns again (restored, or
+  // rescheduled from outside the window) wasn't cancelled after all.
+  const returnedIds = rows.map((r) => r.id);
+  for (let i = 0; i < returnedIds.length; i += 200) {
+    const { error } = await supabase.from('appointment_cancellations').delete().in('appointment_id', returnedIds.slice(i, i + 200));
+    if (error) { console.error(`[mb-mirror] appointment_cancellations un-cancel: ${error.message}`); break; }
+  }
+
+  const gone = await selectAll(() => supabase.from('mb_appointments')
+    .select('id, local_ts, raw, synced_at')
+    .gte('local_ts', `${fromDate}T00:00:00`).lte('local_ts', `${toDate}T23:59:59`)
+    .lt('synced_at', runStart).order('id'));
+  if (!gone.length) return n;
+  if (gone.length > Math.max(20, PRUNE_MAX_SHARE * (rows.length + gone.length))) {
+    console.warn(`[mb-mirror] appointments: ${gone.length} of ${rows.length + gone.length} vanished in ${fromDate}..${toDate} — skipping prune`);
+    return n;
+  }
+
+  const { data: ref } = await supabase.from('mb_reference').select('raw').eq('key', 'sessiontypes').maybeSingle();
+  const typeName = Object.fromEntries((ref?.raw || []).map((t) => [String(t.Id), t.Name || '']));
+  const cancellations = gone.map((g) => {
+    const a = g.raw || {};
+    const name = typeName[String(a.SessionTypeId)] || '';
+    return {
+      appointment_id:     g.id,
+      client_mindbody_id: a.ClientId != null ? String(a.ClientId) : null,
+      session_type_id:    a.SessionTypeId != null ? String(a.SessionTypeId) : null,
+      session_type_name:  name || null,
+      session_category:   classifySession(name),
+      staff_mindbody_id:  a.StaffId != null ? String(a.StaffId) : (a.Staff?.Id != null ? String(a.Staff.Id) : null),
+      staff_name:         `${a.Staff?.FirstName || ''} ${a.Staff?.LastName || ''}`.trim() || null,
+      start_local:        g.local_ts,
+      last_status:        a.Status || null,
+      last_seen_at:       g.synced_at,
+      raw:                a,
+    };
+  });
+  // ignoreDuplicates: a row already recorded keeps its staff tag.
+  const { error: insErr } = await supabase.from('appointment_cancellations')
+    .upsert(cancellations, { onConflict: 'appointment_id', ignoreDuplicates: true });
+  if (insErr) {
+    console.error(`[mb-mirror] appointment_cancellations insert failed, not pruning: ${insErr.message}`);
+    return n;
+  }
+  const ids = gone.map((g) => g.id);
+  for (let i = 0; i < ids.length; i += 200) {
+    const { error } = await supabase.from('mb_appointments').delete().in('id', ids.slice(i, i + 200)).lt('synced_at', runStart);
     if (error) throw new Error(`mb_appointments prune: ${error.message}`);
   }
-  return n;
+  return { upserted: n, cancelled: gone.length };
 }
 
 // Class list only — visits are a separate per-class call (syncVisits).
@@ -295,7 +344,7 @@ async function runMode(mode, qs, token) {
         syncSales(token, localDate(-2), localDate(0)),
         syncTransactions(token, localDate(-2), localDate(0)),
         syncClasses(token, localDate(-1), localDate(0)),
-        syncAppointments(token, localDate(-7), localDate(7), { pruneFuture: true }), // a week ahead: upcoming PT bookings (PT Red's List)
+        syncAppointments(token, localDate(-7), localDate(7), { prune: true }), // a week ahead: upcoming PT bookings (PT Red's List)
       ]);
       const visits = await syncVisits(token, localDate(-1), localDate(0), { deadline });
       return { roster, sales, txns, classes, appts, visits };
@@ -308,7 +357,7 @@ async function runMode(mode, qs, token) {
         syncSales(token, localDate(-35), localDate(0)),
         syncTransactions(token, localDate(-31), localDate(0)),
         syncClasses(token, localDate(-3), localDate(0)),
-        syncAppointments(token, localDate(-35), localDate(7), { pruneFuture: true }),
+        syncAppointments(token, localDate(-35), localDate(7), { prune: true }),
       ]);
       const visits = await syncVisits(token, localDate(-3), localDate(0), { force: true, deadline });
       return { types, products, roster, sales, txns, classes, appts, visits };
