@@ -13,12 +13,29 @@ export default function PTRedsList({ data, loading, error, contactLog, onViewCli
   // come back in one mb-pt-analytics response, so switching needs no fetch.
   // Older responses without ptRedsByPeriod fall back to the rolling list.
   const byPeriod = data?.ptRedsByPeriod;
-  const clients  = (byPeriod ? byPeriod[period] : data?.ptReds) || [];
-  const subtitle = {
-    lastWeek:     'Had PT/SP the week before · missed last week',
-    calendarWeek: 'Had PT/SP last week · none yet this week',
-    '7days':      'Had PT/SP the 7 days before · missed the last 7 days',
-  }[period];
+  const rawClients = (byPeriod ? byPeriod[period] : data?.ptReds) || [];
+
+  // Sorting. "Next booked" only exists on This week (the only list with
+  // upcoming bookings); elsewhere it falls back to last attended.
+  const [sortBy, setSortBy] = useState('lastAttended'); // 'name' | 'lastAttended' | 'nextBooked'
+  const effectiveSort = sortBy === 'nextBooked' && period !== 'calendarWeek' ? 'lastAttended' : sortBy;
+  const clients = [...rawClients].sort((a, b) => {
+    if (effectiveSort === 'name') return (a.name || '').localeCompare(b.name || '');
+    if (effectiveSort === 'nextBooked') {
+      // No booking first (they're the ones to chase), then soonest booking.
+      const an = a.upcoming?.[0]?.start, bn = b.upcoming?.[0]?.start;
+      if (!an && !bn) return (b.lastSession || '').localeCompare(a.lastSession || '');
+      if (!an) return -1;
+      if (!bn) return 1;
+      return an.localeCompare(bn);
+    }
+    return (b.lastSession || '').localeCompare(a.lastSession || ''); // most recent first
+  });
+  const sortOptions = [
+    { key: 'name',         label: 'Name' },
+    { key: 'lastAttended', label: 'Last attended' },
+    ...(period === 'calendarWeek' ? [{ key: 'nextBooked', label: 'Next booked' }] : []),
+  ];
   const bookedCount = period === 'calendarWeek' ? clients.filter((c) => c.upcoming?.length).length : 0;
 
   const isContacted   = contactLog?.isContacted  ?? (() => false);
@@ -39,9 +56,12 @@ export default function PTRedsList({ data, loading, error, contactLog, onViewCli
             </span>
           )}
           {!loading && bookedCount > 0 && (
-            <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 border border-emerald-500/20">
+            <span
+              className="shrink-0 whitespace-nowrap flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 border border-emerald-500/20"
+              title={`${bookedCount} of these clients have a PT/SP session booked later this week`}
+            >
               <CalendarCheck className="h-3 w-3" />
-              {bookedCount} booked later this week
+              {bookedCount} booked
             </span>
           )}
         </div>
@@ -65,7 +85,24 @@ export default function PTRedsList({ data, loading, error, contactLog, onViewCli
           ))}
         </div>
       </div>
-      <p className="px-5 pt-2 text-xs text-gray-500">{subtitle}</p>
+      <div className="px-5 py-2 border-b border-gray-200 flex items-center gap-2 text-xs">
+        <span className="text-gray-500">Sort</span>
+        <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+          {sortOptions.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setSortBy(key)}
+              className={`px-3 py-1 transition-colors ${
+                effectiveSort === key
+                  ? 'bg-gray-300 text-gray-900'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="overflow-y-auto max-h-80 scrollbar-thin">
         {loading && (
