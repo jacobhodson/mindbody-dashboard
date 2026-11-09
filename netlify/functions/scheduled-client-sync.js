@@ -15,10 +15,17 @@
  *                            clobbered by a resync.
  *   2. syncClassVisitLedger    – yesterday's class visits, one row per
  *                                client per class attended.
- *   3. syncAppointmentLedger   – yesterday's PT/appointment visits.
+ *   3. syncAppointmentLedger   – PT/appointment visits for the trailing
+ *                                APPT_RESYNC_DAYS, not just yesterday:
+ *                                coaches often close out an appointment
+ *                                (NoShow -> Completed, Arrived -> Completed)
+ *                                days later, and a one-day pass froze the
+ *                                status it saw first.
  *   4. recomputeTotals         – for clients touched today, refresh
  *                                total_classes_attended/total_pt_sessions/
- *                                last_visit_date on the clients row.
+ *                                last_visit_date via the
+ *                                recompute_client_visit_totals() SQL function
+ *                                (PT/SP Completed or Arrived count as visits).
  *
  * Manual HTTP invocation with ?backfillLedgerDate=YYYY-MM-DD runs steps 2–4
  * for exactly that one date (used to backfill the last ~90 days one call at
@@ -56,6 +63,7 @@ export const config = {
 };
 
 const CLASS_BATCH = 15; // matches mb-client-analytics.js's classvisits fan-out batch size
+const APPT_RESYNC_DAYS = 14; // the mirror re-fetches appointments for the last 35 days nightly
 
 // ─── Roster sync ────────────────────────────────────────────────────────────
 
@@ -222,9 +230,9 @@ async function fetchSessionTypeMap(token) {
   }
 }
 
-async function getAppointmentsForDay(token, dateStr) {
-  const start = `${dateStr}T00:00:00`;
-  const end   = `${dateStr}T23:59:59`;
+async function getAppointmentsForRange(token, startDate, endDate) {
+  const start = `${startDate}T00:00:00`;
+  const end   = `${endDate}T23:59:59`;
   let all = [];
   let offset = 0;
   while (true) {
@@ -237,10 +245,10 @@ async function getAppointmentsForDay(token, dateStr) {
   return all;
 }
 
-async function syncAppointmentLedger(token, dateStr, idMap) {
+async function syncAppointmentLedger(token, startDate, endDate, idMap) {
   const [sessionTypeMap, appts] = await Promise.all([
     fetchSessionTypeMap(token),
-    getAppointmentsForDay(token, dateStr),
+    getAppointmentsForRange(token, startDate, endDate),
   ]);
   // Keyed by mindbody_appointment_id (our unique constraint) — defensive
   // against the same appointment appearing twice across a paginated fetch,
@@ -259,7 +267,7 @@ async function syncAppointmentLedger(token, dateStr, idMap) {
       session_type_name:          typeName || null,
       session_category:           classifySession(typeName),
       staff_name:                 `${a.Staff?.FirstName || ''} ${a.Staff?.LastName || ''}`.trim() || null,
-      appointment_date:           dateStr,
+      appointment_date:           (a.StartDateTime || '').slice(0, 10) || startDate,
       appointment_start_datetime: a.StartDateTime || null,
       status:                     a.Status || null,
       synced_at:                  new Date().toISOString(),
@@ -277,27 +285,10 @@ async function syncAppointmentLedger(token, dateStr, idMap) {
 // ─── Totals recompute ───────────────────────────────────────────────────────
 
 async function recomputeTotals(clientIds) {
-  for (const clientId of clientIds) {
-    const [classesRes, apptsRes] = await Promise.all([
-      supabase.from('client_class_visits').select('class_date', { count: 'exact' }).eq('client_id', clientId).eq('signed_in', true),
-      supabase.from('client_appointment_visits').select('appointment_date', { count: 'exact' }).eq('client_id', clientId).eq('status', 'Completed').in('session_category', ['pt', 'sp']),
-    ]);
-    if (classesRes.error || apptsRes.error) {
-      console.error('[scheduled-client-sync] totals recompute failed for', clientId, classesRes.error?.message, apptsRes.error?.message);
-      continue;
-    }
-    const classDates = (classesRes.data || []).map((r) => r.class_date);
-    const apptDates  = (apptsRes.data || []).map((r) => r.appointment_date);
-    const lastVisit  = [...classDates, ...apptDates].sort().pop() || null;
-
-    const { error: updErr } = await supabase.from('clients').update({
-      total_classes_attended: classesRes.count || 0,
-      total_pt_sessions:      apptsRes.count || 0,
-      last_visit_date:        lastVisit,
-      updated_at:             new Date().toISOString(),
-    }).eq('id', clientId);
-    if (updErr) console.error('[scheduled-client-sync] clients totals update failed for', clientId, updErr.message);
-  }
+  if (!clientIds.size) return 0;
+  const { data, error } = await supabase.rpc('recompute_client_visit_totals', { p_client_ids: [...clientIds] });
+  if (error) throw new Error(`totals recompute failed: ${error.message}`);
+  return data;
 }
 
 // ─── Handler ────────────────────────────────────────────────────────────────
@@ -320,9 +311,12 @@ export const handler = async (event) => {
 
     const dateStr = backfillLedgerDate || format(subDays(new Date(), 1), 'yyyy-MM-dd');
 
+    // A backfill call covers exactly its one date; the cron run re-syncs the
+    // trailing window ending yesterday.
+    const apptStart = backfillLedgerDate || format(subDays(parseISO(dateStr), APPT_RESYNC_DAYS - 1), 'yyyy-MM-dd');
     const [classResult, apptResult] = await Promise.all([
       syncClassVisitLedger(token, dateStr, idMap),
-      syncAppointmentLedger(token, dateStr, idMap),
+      syncAppointmentLedger(token, apptStart, dateStr, idMap),
     ]);
 
     const touchedClientIds = new Set([...classResult.clientIds, ...apptResult.clientIds]);
