@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { TrendingDown, Search, CheckCircle, ArrowUp, ArrowDown, ArrowRight, Sparkles, ChevronDown, AlertTriangle, BadgeCheck, Contact } from 'lucide-react';
 import { formatDistanceToNow, parseISO, format, differenceInDays } from 'date-fns';
 import ContactModal          from './ContactModal.jsx';
@@ -32,7 +32,9 @@ export default function RedsList({ data: propData, loading: propLoading, error: 
   const [search, setSearch]         = useState('');
   const [selected, setSelected]     = useState(null);
   const [expandedId, setExpandedId] = useState(null);
-  const [period, setPeriod]         = useState('7days');
+  // Default to last full Mon–Sun week; the parent's prop data is the rolling
+  // 7-day window (shared with other consumers), so it's only used for '7days'.
+  const [period, setPeriod]         = useState('lastWeek');
   const [view, setView]             = useState('regular'); // 'regular' | 'urgent'
   const [localData, setLocalData]   = useState(null);
   const [localLoading, setLocalLoading] = useState(false);
@@ -42,9 +44,7 @@ export default function RedsList({ data: propData, loading: propLoading, error: 
   const loading = localLoading || (localData === null && propLoading);
   const error   = localError   ?? propError;
 
-  const changePeriod = useCallback(async (newPeriod) => {
-    if (newPeriod === period) return;
-    setPeriod(newPeriod);
+  const loadPeriod = useCallback(async (newPeriod) => {
     if (newPeriod === '7days' && propData) {
       setLocalData(null);
       setLocalError(null);
@@ -55,13 +55,24 @@ export default function RedsList({ data: propData, loading: propLoading, error: 
     try {
       const res  = await fetch(`/api/mb-client-analytics?period=${newPeriod}`);
       const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       setLocalData(json);
     } catch (e) {
       setLocalError(e.message);
     } finally {
       setLocalLoading(false);
     }
-  }, [period, propData]);
+  }, [propData]);
+
+  // Initial load for the default (last week) period.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadPeriod('lastWeek'); }, []);
+
+  const changePeriod = useCallback((newPeriod) => {
+    if (newPeriod === period) return;
+    setPeriod(newPeriod);
+    loadPeriod(newPeriod);
+  }, [period, loadPeriod]);
 
   // Exclude clients currently in the onboarding pipeline — they're tracked separately
   // (Backend already sorts urgent — active-contract + long-lapsed — clients first)
@@ -122,8 +133,9 @@ export default function RedsList({ data: propData, loading: propLoading, error: 
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg border border-gray-300 overflow-hidden text-xs">
             {[
-              { key: '7days',        label: 'Last 7 days' },
+              { key: 'lastWeek',     label: 'Last week'   },
               { key: 'calendarWeek', label: 'This week'   },
+              { key: '7days',        label: 'Last 7 days' },
             ].map(({ key, label }) => (
               <button
                 key={key}
