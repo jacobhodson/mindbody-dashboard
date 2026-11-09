@@ -377,7 +377,9 @@ export const handler = async (event) => {
       return [...prevClients]
         .filter(id => !curClients.has(id))
         .map(id => {
-          const past = ptsp.filter(a => a._id === id && a._date <= localNow).sort((a, b) => b._date - a._date);
+          // "Last seen" = last session actually attended — a NoShow/cancel
+          // today must not read as "Last seen today" on the list.
+          const past = ptsp.filter(a => a._id === id && a._date <= localNow && !SKIP_STATUS.has(a.Status)).sort((a, b) => b._date - a._date);
           const last = past[0] || ptsp.find(a => a._id === id);
           const row = {
             id,
