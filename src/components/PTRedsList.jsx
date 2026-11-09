@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingDown, CheckCircle, ChevronDown, Contact } from 'lucide-react';
+import { TrendingDown, CheckCircle, ChevronDown, Contact, CalendarCheck } from 'lucide-react';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import ContactModal          from './ContactModal.jsx';
 import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
@@ -7,8 +7,19 @@ import WeeklyAttendancePanel from './WeeklyAttendancePanel.jsx';
 export default function PTRedsList({ data, loading, error, contactLog, onViewClient }) {
   const [selected, setSelected]     = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const [period, setPeriod]         = useState('lastWeek');
 
-  const clients = data?.ptReds || [];
+  // Same period structure as the Group Training Red's List. All three lists
+  // come back in one mb-pt-analytics response, so switching needs no fetch.
+  // Older responses without ptRedsByPeriod fall back to the rolling list.
+  const byPeriod = data?.ptRedsByPeriod;
+  const clients  = (byPeriod ? byPeriod[period] : data?.ptReds) || [];
+  const subtitle = {
+    lastWeek:     'Had PT/SP the week before · missed last week',
+    calendarWeek: 'Had PT/SP last week · none yet this week',
+    '7days':      'Had PT/SP the 7 days before · missed the last 7 days',
+  }[period];
+  const bookedCount = period === 'calendarWeek' ? clients.filter((c) => c.upcoming?.length).length : 0;
 
   const isContacted   = contactLog?.isContacted  ?? (() => false);
   const logContact    = contactLog?.logContact    ?? null;
@@ -27,9 +38,34 @@ export default function PTRedsList({ data, loading, error, contactLog, onViewCli
               {clients.length}
             </span>
           )}
+          {!loading && bookedCount > 0 && (
+            <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 border border-emerald-500/20">
+              <CalendarCheck className="h-3 w-3" />
+              {bookedCount} booked later this week
+            </span>
+          )}
         </div>
-        <p className="text-xs text-gray-500">Had PT/SP last week · missed this week</p>
+        <div className="flex rounded-lg border border-gray-300 overflow-hidden text-xs">
+          {[
+            { key: 'lastWeek',     label: 'Last week'   },
+            { key: 'calendarWeek', label: 'This week'   },
+            { key: '7days',        label: 'Last 7 days' },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setPeriod(key)}
+              className={`px-3 py-1.5 transition-colors ${
+                period === key
+                  ? 'bg-gray-300 text-gray-900'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
+      <p className="px-5 pt-2 text-xs text-gray-500">{subtitle}</p>
 
       <div className="overflow-y-auto max-h-80 scrollbar-thin">
         {loading && (
@@ -47,7 +83,7 @@ export default function PTRedsList({ data, loading, error, contactLog, onViewCli
         {!loading && !error && clients.length === 0 && (
           <div className="py-10 text-center">
             <CheckCircle className="h-7 w-7 text-emerald-500/40 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">No PT clients missed this week</p>
+            <p className="text-sm text-gray-500">PT Red's List is clear</p>
           </div>
         )}
 
@@ -76,6 +112,16 @@ export default function PTRedsList({ data, loading, error, contactLog, onViewCli
                     {client.service && (
                       <span className="shrink-0 text-[10px] font-medium text-gray-400 bg-gray-200 rounded px-1.5 py-0.5">
                         {client.service}
+                      </span>
+                    )}
+                    {period === 'calendarWeek' && client.upcoming?.length > 0 && (
+                      <span
+                        className="shrink-0 flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 border border-emerald-500/20"
+                        title={client.upcoming.map((u) => `${format(parseISO(u.start), 'EEE d MMM h:mmaaa')} · ${u.service}${u.staffName ? ` with ${u.staffName}` : ''}`).join('\n')}
+                      >
+                        <CalendarCheck className="h-2.5 w-2.5" />
+                        Booked {format(parseISO(client.upcoming[0].start), 'EEE h:mmaaa')}
+                        {client.upcoming.length > 1 && ` +${client.upcoming.length - 1}`}
                       </span>
                     )}
                   </div>

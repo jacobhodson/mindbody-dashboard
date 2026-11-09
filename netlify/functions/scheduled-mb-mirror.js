@@ -15,7 +15,8 @@
  *                                 and yesterday's classes, visits for
  *                                 classes that have started (each class is
  *                                 re-fetched until one fetch lands after it
- *                                 ended), appointments for the last week.
+ *                                 ended), appointments for the last week
+ *                                 and the week ahead.
  *   nightly                      – wider windows to catch late edits
  *                                 (returns, sign-offs, late check-ins):
  *                                 35 days of sales/appointments, 3 days of
@@ -137,13 +138,28 @@ async function syncTransactions(token, fromDate, toDate) {
   return upsert('mb_transactions', rows);
 }
 
-async function syncAppointments(token, fromDate, toDate) {
+// Mindbody drops cancelled appointments from /appointment/staffappointments
+// rather than returning them as Cancelled, so a future booking that gets
+// cancelled would otherwise linger in the mirror as "Booked". With
+// `pruneFuture`, rows from today onward inside the synced window that this
+// fetch didn't return (synced_at older than the run) are deleted. Past rows
+// are left alone so historical counts don't shift.
+async function syncAppointments(token, fromDate, toDate, { pruneFuture = false } = {}) {
+  const runStart = new Date().toISOString();
   const appts = await fetchAllPages('/appointment/staffappointments', token,
     { StartDate: `${fromDate}T00:00:00`, EndDate: `${toDate}T23:59:59` }, 'Appointments');
   const rows = dedupeById(appts
     .map((a) => ({ id: String(a.Id), local_ts: toLocalTs(a.StartDateTime), raw: a, synced_at: new Date().toISOString() }))
     .filter((r) => r.local_ts));
-  return upsert('mb_appointments', rows);
+  const n = await upsert('mb_appointments', rows);
+  if (pruneFuture && appts.length < 20000) {
+    const pruneFrom = localDate(0) > fromDate ? localDate(0) : fromDate;
+    const { error } = await supabase.from('mb_appointments').delete()
+      .gte('local_ts', `${pruneFrom}T00:00:00`).lte('local_ts', `${toDate}T23:59:59`)
+      .lt('synced_at', runStart);
+    if (error) throw new Error(`mb_appointments prune: ${error.message}`);
+  }
+  return n;
 }
 
 // Class list only — visits are a separate per-class call (syncVisits).
@@ -279,7 +295,7 @@ async function runMode(mode, qs, token) {
         syncSales(token, localDate(-2), localDate(0)),
         syncTransactions(token, localDate(-2), localDate(0)),
         syncClasses(token, localDate(-1), localDate(0)),
-        syncAppointments(token, localDate(-7), localDate(1)),
+        syncAppointments(token, localDate(-7), localDate(7), { pruneFuture: true }), // a week ahead: upcoming PT bookings (PT Red's List)
       ]);
       const visits = await syncVisits(token, localDate(-1), localDate(0), { deadline });
       return { roster, sales, txns, classes, appts, visits };
@@ -292,7 +308,7 @@ async function runMode(mode, qs, token) {
         syncSales(token, localDate(-35), localDate(0)),
         syncTransactions(token, localDate(-31), localDate(0)),
         syncClasses(token, localDate(-3), localDate(0)),
-        syncAppointments(token, localDate(-35), localDate(1)),
+        syncAppointments(token, localDate(-35), localDate(7), { pruneFuture: true }),
       ]);
       const visits = await syncVisits(token, localDate(-3), localDate(0), { force: true, deadline });
       return { types, products, roster, sales, txns, classes, appts, visits };

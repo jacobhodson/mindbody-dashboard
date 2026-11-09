@@ -4,6 +4,10 @@
  * Returns data for the Personal Training tab:
  *   stats         – PT and SP session counts across 4 time windows
  *   ptReds        – clients who had PT/SP last week but not this week
+ *                   (rolling 7 days; kept for compatibility)
+ *   ptRedsByPeriod – the same list for lastWeek / calendarWeek / 7days; the
+ *                   calendarWeek list also carries each client's upcoming
+ *                   PT/SP bookings for the rest of this week
  *   openGym       – clients with 1+ open-gym sessions this week
  *   unchecked     – past PT/SP sessions still in "Booked" status
  *   sessionCredits– clients with accumulated unused PT/SP session credits
@@ -223,8 +227,11 @@ export const handler = async (event) => {
     // actually be in the fetched pool. Purely additive: everything below
     // that still filters up to `yesterday` (w1-w4, the old thisMonthEnd)
     // sees the exact same rows it always did.
+    // Through the end of this Mon–Sun week so the PT Red's List can flag
+    // upcoming bookings. Everything else below filters by an explicit end
+    // (now / yesterday), so the extra future rows don't leak into it.
     const fetchStart = format(lastMonthStart, "yyyy-MM-dd'T'00:00:00");
-    const fetchEnd   = format(now,            "yyyy-MM-dd'T'23:59:59");
+    const fetchEnd   = format(endOfWeek(now, { weekStartsOn: 1 }), "yyyy-MM-dd'T'23:59:59");
 
     // ── Fetch session types + appointments + PT/SP sale rates in parallel ──
     const [sessionTypeMap, raw, rates] = await Promise.all([
@@ -353,26 +360,52 @@ export const handler = async (event) => {
     };
 
     // ── PT Red's List ──────────────────────────────────────────────────────
-    const thisWeekClients = clientsIn(ptsp, w1Start, w1End);
-    const lastWeekClients = clientsIn(ptsp, w2Start, w2End);
+    // Had PT/SP in the previous window (W2) but not in the current one (W1).
+    // Appointment times are Sydney wall-clock strings parsed as if UTC, so
+    // compare them against Sydney wall-clock "now", not the server's clock.
+    const localNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Australia/Sydney' }));
+    const lnWeekStart     = startOfWeek(localNow, { weekStartsOn: 1 });
+    const lnWeekEnd       = endOfWeek(localNow, { weekStartsOn: 1 });
+    const lnLastWeekStart = startOfWeek(subWeeks(localNow, 1), { weekStartsOn: 1 });
+    const lnLastWeekEnd   = endOfWeek(subWeeks(localNow, 1), { weekStartsOn: 1 });
+    const lnPrevWeekStart = startOfWeek(subWeeks(localNow, 2), { weekStartsOn: 1 });
+    const lnPrevWeekEnd   = endOfWeek(subWeeks(localNow, 2), { weekStartsOn: 1 });
 
-    const ptReds = [...lastWeekClients]
-      .filter(id => !thisWeekClients.has(id))
-      .map(id => {
-        const clientAppts = ptsp.filter(a => a._id === id).sort((a, b) => b._date - a._date);
-        const last = clientAppts[0];
-        return {
-          id,
-          name:             last._name,
-          email:            last._email,
-          phone:            last._phone,
-          service:          last._typeName,
-          staffName:        last._staffName,
-          lastSession:      format(last._date, 'yyyy-MM-dd'),
-          weeklyAttendance: weekCounts(ptsp, id),
-        };
-      })
-      .sort((a, b) => b.lastSession.localeCompare(a.lastSession));
+    function buildPtReds(cur, prev, { withUpcoming = false } = {}) {
+      const curClients  = clientsIn(ptsp, cur[0], cur[1]);
+      const prevClients = clientsIn(ptsp, prev[0], prev[1]);
+      return [...prevClients]
+        .filter(id => !curClients.has(id))
+        .map(id => {
+          const past = ptsp.filter(a => a._id === id && a._date <= localNow).sort((a, b) => b._date - a._date);
+          const last = past[0] || ptsp.find(a => a._id === id);
+          const row = {
+            id,
+            name:             last._name,
+            email:            last._email,
+            phone:            last._phone,
+            service:          last._typeName,
+            staffName:        last._staffName,
+            lastSession:      format(last._date, 'yyyy-MM-dd'),
+            weeklyAttendance: weekCounts(ptsp, id),
+          };
+          if (withUpcoming) {
+            row.upcoming = ptsp
+              .filter(a => a._id === id && !SKIP_STATUS.has(a.Status) && a._date > localNow && a._date <= lnWeekEnd)
+              .sort((a, b) => a._date - b._date)
+              .map(a => ({ start: a.StartDateTime, service: a._typeName, staffName: a._staffName }));
+          }
+          return row;
+        })
+        .sort((a, b) => b.lastSession.localeCompare(a.lastSession));
+    }
+
+    const ptRedsByPeriod = {
+      '7days':      buildPtReds([w1Start, w1End], [w2Start, w2End]),
+      calendarWeek: buildPtReds([lnWeekStart, localNow], [lnLastWeekStart, lnLastWeekEnd], { withUpcoming: true }),
+      lastWeek:     buildPtReds([lnLastWeekStart, lnLastWeekEnd], [lnPrevWeekStart, lnPrevWeekEnd]),
+    };
+    const ptReds = ptRedsByPeriod['7days'];
 
     // ── Open Gym (this week, 1+) ──────────────────────────────────────────
     const gymMap = {};
@@ -402,7 +435,7 @@ export const handler = async (event) => {
 
     // ── Session Credits ───────────────────────────────────────────────────
     const recentIds = [...new Set(
-      ptsp.filter(a => a._date >= w4Start).map(a => a._id)
+      ptsp.filter(a => a._date >= w4Start && a._date <= now).map(a => a._id)
     )]; // no cap: credits come from the Supabase mirror now, not per-client Mindbody calls
 
     const creditMap = {};
@@ -440,7 +473,7 @@ export const handler = async (event) => {
     console.log(`[mb-pt-analytics] total=${raw.length} pt=${ptAppts.length} sp=${spAppts.length} gym=${gymAppts.length}`);
 
     return ok({
-      stats, ptReds, openGym, unchecked, sessionCredits, coachPerformance,
+      stats, ptReds, ptRedsByPeriod, openGym, unchecked, sessionCredits, coachPerformance,
       _debug: {
         sampleTypes,
         totalRaw: raw.length,
