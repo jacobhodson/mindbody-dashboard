@@ -55,6 +55,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
 import { getXeroAuth, xeroPayrollGet, parseXeroDate } from './utils/xero-auth.js';
 import { classifySession as classify } from './utils/session-classify.js';
+import { loadAttendanceRules, ptCategory } from './utils/attendance-rules.js';
 import {
   subDays, subMonths, format, parseISO,
   startOfMonth, endOfMonth, startOfDay, getDaysInMonth,
@@ -99,11 +100,12 @@ async function fetchAll(path, token, params) {
 async function buildBundle(token, start, end) {
   const s = format(start, "yyyy-MM-dd'T'00:00:00");
   const e = format(end,   "yyyy-MM-dd'T'23:59:59");
-  const [sessionTypeData, appts, sales, classes] = await Promise.all([
+  const [sessionTypeData, appts, sales, classes, rules] = await Promise.all([
     mbGet('/site/sessiontypes', token, { OnlineOnly: false }),
     fetchAll('/appointment/staffappointments', token, { StartDate: s, EndDate: e }),
     fetchAll('/sale/sales', token, { StartSaleDateTime: s, EndSaleDateTime: e }),
     fetchAll('/class/classes', token, { StartDateTime: s, EndDateTime: e }),
+    loadAttendanceRules(),
   ]);
   const typeMap = {};
   for (const t of (sessionTypeData.SessionTypes || [])) typeMap[t.Id] = t.Name || '';
@@ -114,7 +116,8 @@ async function buildBundle(token, start, end) {
       .map((x) => ({ date: parseISO(x.SaleDate), items: x.PurchasedItems || [] })),
     signedOff: appts
       .map((a) => ({
-        type:      classify(typeMap[a.SessionTypeId] || ''),
+        // Settings → Attendance decides which appointment types are PT/SP.
+        type:      ptCategory(rules, a.SessionTypeId, typeMap[a.SessionTypeId] || ''),
         staffId:   String(a.StaffId ?? a.Staff?.Id ?? ''),
         staffName: `${a.Staff?.FirstName || ''} ${a.Staff?.LastName || ''}`.trim(),
         status:    a.Status,

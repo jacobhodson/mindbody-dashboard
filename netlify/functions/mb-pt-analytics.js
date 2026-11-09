@@ -36,6 +36,7 @@ import { ok, err, CORS, formatPhone } from './utils/mb-auth.js';
 // Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
 import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
 import { classifySession as classify } from './utils/session-classify.js';
+import { loadAttendanceRules, ptCategory } from './utils/attendance-rules.js';
 import {
   subDays, format, parseISO,
   startOfMonth, endOfMonth, endOfDay, subMonths,
@@ -234,17 +235,20 @@ export const handler = async (event) => {
     const fetchEnd   = format(endOfWeek(now, { weekStartsOn: 1 }), "yyyy-MM-dd'T'23:59:59");
 
     // ── Fetch session types + appointments + PT/SP sale rates in parallel ──
-    const [sessionTypeMap, raw, rates] = await Promise.all([
+    const [sessionTypeMap, raw, rates, rules] = await Promise.all([
       fetchSessionTypeMap(token),
       fetchAppointments(token, fetchStart, fetchEnd),
       avgSessionRates(token, now),
+      loadAttendanceRules(),
     ]);
 
     // ── Classify & enrich (names placeholder — filled after client fetch) ─
     const appts = raw.map(a => ({
       ...a,
       _typeName:  sessionTypeMap[a.SessionTypeId] || '',
-      _type:      classify(sessionTypeMap[a.SessionTypeId] || ''),
+      // Settings → Attendance can tick/untick appointment types; untouched
+      // types fall back to classify() on the name.
+      _type:      ptCategory(rules, a.SessionTypeId, sessionTypeMap[a.SessionTypeId] || ''),
       _date:      parseISO(a.StartDateTime),
       _id:        String(a.ClientId),
       _name:      `Client ${a.ClientId}`,

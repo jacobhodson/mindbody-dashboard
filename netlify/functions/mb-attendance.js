@@ -1,7 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
 import { ok, err, CORS } from './utils/mb-auth.js';
 // Reads the Supabase Mindbody mirror (synced by scheduled-mb-mirror.js), never Mindbody itself.
 import { getMirrorToken as getStaffToken, mirrorGet as mbGet } from './utils/mb-mirror.js';
+import { loadAttendanceRules, classCounts } from './utils/attendance-rules.js';
 import {
   subDays, format, parseISO,
   startOfWeek, endOfWeek,
@@ -9,8 +9,6 @@ import {
   subMonths, subWeeks,
   eachDayOfInterval,
 } from 'date-fns';
-
-const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 /**
  * Supported period values (passed as ?period=xxx):
@@ -67,50 +65,23 @@ async function fetchClassesInRange(token, start, end) {
   return allClasses;
 }
 
-// 4-week rolling day-of-week average, sourced from the `client_class_visits`
-// ledger (synced nightly by scheduled-client-sync.js) rather than a second
-// live Mindbody fetch — one cheap Supabase query instead of doubling the
-// Mindbody API calls on every period switch. Each visit row is one booking
-// on one class, so a plain row count per day is the same unit as the
-// TotalBooked sum used for `visits` elsewhere in this file.
-//
-// Anchored to the ledger's own latest synced date rather than "today": if
-// the nightly sync ever falls behind, the window slides back with it
-// instead of silently diluting the average with empty not-yet-synced days.
-// Returns { Mon: avg, ... } with a day omitted entirely if it never occurs
-// in the window (shouldn't happen at 28 days, but keeps this defensive).
-async function rollingAvgByDowFromLedger() {
-  const { data: latestRow, error: latestErr } = await supabase
-    .from('client_class_visits')
-    .select('class_date')
-    .order('class_date', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (latestErr || !latestRow?.class_date) return {};
-
-  const anchor    = parseISO(latestRow.class_date);
+// 4-week rolling day-of-week average over the 28 days ending yesterday,
+// from the same mirrored class list (and the same Settings → Attendance
+// class filter) as the selected period, so the two always agree. Used to
+// read the client_class_visits ledger, which carries no class type and so
+// couldn't honour the setting; the mirror syncs hourly, so the old
+// "anchor to the ledger's latest synced date" guard isn't needed.
+// Returns { Mon: avg, ... }.
+async function rollingAvgByDow(token, rules) {
+  const anchor    = subDays(new Date(), 1);
   const rollStart = subDays(anchor, 27);
+  const classes   = (await fetchClassesInRange(token, rollStart, anchor)).filter((c) => classCounts(rules, c));
 
-  // Paginate — PostgREST caps a single request at 1000 rows, and a 28-day
-  // window across the whole roster comfortably exceeds that (same pattern
-  // as scheduled-client-sync.js's roster fetch).
   const visits = {};
-  let from = 0;
-  while (true) {
-    const { data: rows, error } = await supabase
-      .from('client_class_visits')
-      .select('class_date')
-      .gte('class_date', format(rollStart, 'yyyy-MM-dd'))
-      .lte('class_date', format(anchor, 'yyyy-MM-dd'))
-      .range(from, from + 999);
-    if (error || !rows) return {};
-
-    for (const row of rows) {
-      const dow = format(parseISO(row.class_date), 'EEE');
-      visits[dow] = (visits[dow] || 0) + 1;
-    }
-    if (rows.length < 1000) break;
-    from += 1000;
+  for (const cls of classes) {
+    if (!cls.StartDateTime) continue;
+    const dow = format(parseISO(cls.StartDateTime), 'EEE');
+    visits[dow] = (visits[dow] || 0) + (cls.TotalBooked || 0);
   }
   const occurrences = {};
   for (const d of eachDayOfInterval({ start: rollStart, end: anchor })) {
@@ -131,11 +102,13 @@ export const handler = async (event) => {
     const period = event.queryStringParameters?.period || '7days';
     const { start, end } = getDateRange(period);
 
-    const [token, rollingAvgByDow] = await Promise.all([
-      getStaffToken(),
-      rollingAvgByDowFromLedger(),
+    const [token, rules] = await Promise.all([getStaffToken(), loadAttendanceRules()]);
+    // Settings → Attendance: class types unticked there don't count.
+    const [periodClasses, rollingAvg] = await Promise.all([
+      fetchClassesInRange(token, start, end),
+      rollingAvgByDow(token, rules),
     ]);
-    const allClasses = await fetchClassesInRange(token, start, end);
+    const allClasses = periodClasses.filter((c) => classCounts(rules, c));
 
     // Aggregate by date, day-of-week, and (day-of-week + class) for the
     // "which classes drove this?" breakdown.
@@ -187,7 +160,7 @@ export const handler = async (event) => {
         visits,
         occurrences,
         avg: occurrences > 0 ? Math.round(visits / occurrences) : 0,
-        rollingAvg28: rollingAvgByDow[day] ?? null,
+        rollingAvg28: rollingAvg[day] ?? null,
         topClasses,
       };
     });

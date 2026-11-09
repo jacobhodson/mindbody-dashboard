@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Settings, UserRound, Users, ShieldCheck, Palette, Plug } from 'lucide-react';
+import { Settings, UserRound, Users, ShieldCheck, Palette, Plug, CalendarCheck } from 'lucide-react';
 import ProfileSettings      from './ProfileSettings.jsx';
 import TeamAccessSettings   from './TeamAccessSettings.jsx';
 import PermissionsSettings  from './PermissionsSettings.jsx';
 import BrandingSettings     from './BrandingSettings.jsx';
 import IntegrationsSettings from './IntegrationsSettings.jsx';
+import AttendanceSettings   from './AttendanceSettings.jsx';
 
 // Everyone gets My Profile; managers get team/permissions/branding; only
 // the admin (owner) gets Integrations, where API connections live.
@@ -12,6 +13,7 @@ const SECTIONS = [
   { key: 'profile',      label: 'My profile',     Icon: UserRound },
   { key: 'team',         label: 'Team & access',  Icon: Users,       level: 'manager' },
   { key: 'permissions',  label: 'Permissions',    Icon: ShieldCheck, level: 'manager' },
+  { key: 'attendance',   label: 'Attendance',     Icon: CalendarCheck, level: 'manager' },
   { key: 'branding',     label: 'Branding',       Icon: Palette,     level: 'manager' },
   { key: 'integrations', label: 'Integrations',   Icon: Plug,        level: 'admin' },
 ];
@@ -52,6 +54,7 @@ export default function SettingsTab({ staff, isManager, isAdmin, reloadStaff, ta
       {section === 'profile'      && <ProfileSettings staff={staff} reloadStaff={reloadStaff} />}
       {section === 'team'         && isManager && <TeamAccessSettings staff={staff} isAdmin={isAdmin} reloadStaff={reloadStaff} />}
       {section === 'permissions'  && isManager && <PermissionsSettings staff={staff} tabs={tabs} tabAccess={tabAccess} />}
+      {section === 'attendance'   && isManager && <AttendanceSettings staff={staff} />}
       {section === 'branding'     && isManager && <BrandingSettings staff={staff} appSettings={appSettings} />}
       {section === 'integrations' && isAdmin   && <IntegrationsSettings />}
     </div>
