@@ -155,6 +155,11 @@ export function useClientDetail(mindbodyId) {
     callFieldRpc('set_client_next_program_due', { p_due: dateStr || null }, { next_program_due: dateStr || null }),
   [callFieldRpc]);
 
+  // When they really started with us; anniversaries use it over Mindbody's creation date.
+  const updateStartDate = useCallback((dateStr) =>
+    callFieldRpc('set_client_start_date', { p_start: dateStr || null }, { start_date: dateStr || null }),
+  [callFieldRpc]);
+
   // null clears the override, falling back to the Mindbody-synced `status`.
   const updateStatusOverride = useCallback((value) =>
     callFieldRpc('set_client_status_override', { p_status: value || null }, { status_override: value || null }),
@@ -207,7 +212,7 @@ export function useClientDetail(mindbodyId) {
 
   return {
     client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, strategySessions, loading, error,
-    updateCaseload, updatePackage, updateNextProgramDue, updateStatusOverride, addNote, deleteNote,
+    updateCaseload, updatePackage, updateNextProgramDue, updateStartDate, updateStatusOverride, addNote, deleteNote,
     addStrategySession, deleteStrategySession, reload: load,
   };
 }

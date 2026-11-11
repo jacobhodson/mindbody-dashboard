@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact, Mountain, CalendarCheck, BookOpen, Plane, TrendingUp, Settings as SettingsIcon } from 'lucide-react';
+import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact, Mountain, CalendarCheck, BookOpen, Plane, TrendingUp, Trophy, Settings as SettingsIcon } from 'lucide-react';
 import Sidebar             from './Sidebar.jsx';
 import Home                from './Home.jsx';
 import AiAssistant         from './AiAssistant.jsx';
@@ -15,7 +15,7 @@ import FringeClientsTable from './FringeClientsTable.jsx';
 import FinancesTab        from './FinancesTab.jsx';
 import OnboardingTab          from './OnboardingTab.jsx';
 import PersonalTrainingTab    from './PersonalTrainingTab.jsx';
-import CelebrationsPanel   from './CelebrationsPanel.jsx';
+import MilestonesTab       from './MilestonesTab.jsx';
 import ClientsList         from './ClientsList.jsx';
 import ClientDetail        from './ClientDetail.jsx';
 import TeamTab             from './TeamTab.jsx';
@@ -44,6 +44,7 @@ const TABS = [
   { key: 'onboarding',        label: 'Onboarding',        Icon: Users2,        group: 'Coaching' },
   { key: 'personalTraining',  label: 'Personal Training', Icon: Dumbbell,      group: 'Coaching' },
   { key: 'operations',        label: 'Group Training',    Icon: Activity,      group: 'Coaching' },
+  { key: 'milestones',        label: 'Milestones',        Icon: Trophy,        group: 'Coaching' },
   { key: 'finances',          label: 'Finances',          Icon: DollarSign,    group: 'Business', managerOnly: true, lockedManagerOnly: true },
   { key: 'scorecard',         label: 'Scorecard',         Icon: BarChart3,     group: 'Business' },
   { key: 'acquisition',       label: 'Acquisition',       Icon: TrendingUp,    group: 'Business' },
@@ -249,12 +250,18 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
               onboardingIds={onboardingIds}
               onViewClient={onViewClient}
             />
-            <CelebrationsPanel
-              data={data.celebrations}
-              loading={loading.celebrations}
-              error={errors.celebrations}
-            />
           </>
+        )}
+
+        {/* ─ Milestones ─ */}
+        {tab === 'milestones' && (
+          <MilestonesTab
+            pipelineIds={tradeOnboardingIds}
+            onViewClient={onViewClient}
+            appSettings={appSettings}
+            staff={staff}
+            isManager={isManager}
+          />
         )}
 
         {/* ─ Acquisition (GHL Leads Pipeline) ─ */}

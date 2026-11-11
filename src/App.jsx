@@ -12,7 +12,7 @@ import { useStaff } from './utils/useStaff.js';
 // by scheduled-mb-mirror.js), never Mindbody itself — so loading or
 // refreshing the dashboard costs no Mindbody API calls.
 
-const LOADING_ALL = { attendance: true, clientAnalytics: true, payments: true, revenue: true, onboarding: true, pt: true, celebrations: true };
+const LOADING_ALL = { attendance: true, clientAnalytics: true, payments: true, revenue: true, onboarding: true, pt: true };
 
 const ENDPOINTS = {
   attendance:      '/api/mb-attendance',
@@ -21,7 +21,6 @@ const ENDPOINTS = {
   revenue:         '/api/mb-revenue',
   onboarding:      '/api/mb-onboarding',
   pt:              '/api/mb-pt-analytics',
-  celebrations:    '/api/mb-celebrations',
 };
 
 async function safeFetch(url, options) {
@@ -47,7 +46,7 @@ export default function App() {
       setLinkState(null);
     });
   }, []);
-  const [data, setData]               = useState({ attendance: null, clientAnalytics: null, payments: null, revenue: null, onboarding: null, pt: null, celebrations: null });
+  const [data, setData]               = useState({ attendance: null, clientAnalytics: null, payments: null, revenue: null, onboarding: null, pt: null });
   const [loading, setLoading]         = useState(LOADING_ALL);
   const [errors, setErrors]           = useState({});
   const [lastRefresh, setLastRefresh] = useState(null);

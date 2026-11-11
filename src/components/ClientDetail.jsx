@@ -47,7 +47,7 @@ function Field({ label, value, Icon }) {
 export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds, onBack }) {
   const {
     client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, strategySessions, loading, error,
-    updateCaseload, updatePackage, updateNextProgramDue, updateStatusOverride, addNote, deleteNote,
+    updateCaseload, updatePackage, updateNextProgramDue, updateStartDate, updateStatusOverride, addNote, deleteNote,
     addStrategySession, deleteStrategySession,
   } = useClientDetail(mindbodyId);
   const { staffList } = useAllStaff();
@@ -196,7 +196,7 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
           <Field label="Date of birth" value={fmtDate(client.birth_date)} Icon={Cake} />
           <Field label="Address" value={[client.address_line1, client.city].filter(Boolean).join(', ')} Icon={MapPin} />
           <Field label="Last visit" value={fmtDate(client.last_visit_date)} Icon={CalendarDays} />
-          <Field label="Member since" value={fmtDate(client.first_class_date || client.first_appointment_date)} Icon={CalendarDays} />
+          <Field label="Member since" value={fmtDate(client.start_date || client.first_class_date || client.first_appointment_date)} Icon={CalendarDays} />
         </div>
 
         {client.mindbody_notes && (
@@ -261,6 +261,20 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
               />
             </div>
           )}
+          <div>
+            <p
+              className="text-[10px] uppercase tracking-wide text-gray-400 mb-1"
+              title="When they really started with Newstrength. Anniversaries use this; leave blank to use their Mindbody sign-up date."
+            >
+              Start date
+            </p>
+            <input
+              type="date"
+              value={client.start_date || ''}
+              onChange={(e) => updateStartDate(e.target.value || null)}
+              className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-900"
+            />
+          </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Status</p>
             <div className="flex items-center gap-1.5">
