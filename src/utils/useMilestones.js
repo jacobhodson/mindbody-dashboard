@@ -118,12 +118,23 @@ export function upcomingMilestones(rows, targets, within, today = startOfDay(new
   }).sort((a, b) => a.remaining - b.remaining || (a.eta || Infinity) - (b.eta || Infinity));
 }
 
-// Milestones reached since `since` (a Date), newest first.
-export function recentMilestoneHits(rows, since) {
+// Milestones reached between `since` and `until` (Dates, inclusive), newest first.
+export function recentMilestoneHits(rows, since, until = new Date(8.64e15)) {
   return rows.flatMap((r) => (r.recent_hits || [])
     .map((h) => ({ ...r, n: h.n, date: parseDate(h.date) }))
-    .filter((h) => h.date >= since))
+    .filter((h) => h.date >= since && h.date <= until))
     .sort((a, b) => b.date - a.date || b.n - a.n);
+}
+
+// The date a yearly event (birthday, anniversary) falls on within
+// [start, end], or null. years = how many years it marks.
+export function occurrenceIn(origin, start, end) {
+  if (!origin) return null;
+  for (let y = start.getFullYear() - 1; y <= end.getFullYear() + 1; y++) {
+    const d = occurrence(y, origin.getMonth(), origin.getDate());
+    if (d >= start && d <= end) return { date: d, years: y - origin.getFullYear() };
+  }
+  return null;
 }
 
 export { parseDate, startOfDay };

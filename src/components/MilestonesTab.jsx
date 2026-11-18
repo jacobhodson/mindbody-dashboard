@@ -1,37 +1,59 @@
 import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { Trophy, Cake, Star, Pencil, Check, X, CheckCircle } from 'lucide-react';
+import { Trophy, Cake, PartyPopper, Pencil, Check, X, CheckCircle } from 'lucide-react';
 import {
-  useMilestones, upcomingMilestones, recentMilestoneHits, yearlyBucket,
-  DATE_BUCKETS, DEFAULT_MILESTONE_TARGETS, parseDate, startOfDay,
+  useMilestones, upcomingMilestones, recentMilestoneHits, occurrenceIn,
+  DEFAULT_MILESTONE_TARGETS, parseDate, startOfDay,
 } from '../utils/useMilestones.js';
 
+const DAY = 86400000;
 const WITHIN_OPTIONS = [1, 2, 3, 5];
-const HIT_WINDOWS = [
-  { key: 'week', label: 'This week' },
-  { key: '14',   label: '14 days' },
-  { key: '30',   label: '30 days' },
-];
 
-function sinceFor(key, today) {
-  if (key === 'week') {
-    const d = new Date(today);
-    d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday
-    return d;
-  }
-  return new Date(today.getTime() - Number(key) * 86400000);
+// Card accents: hits/today in our emerald, upcoming in amber, past in grey.
+const TONES = {
+  hit:      { card: 'border-gray-200',  head: 'bg-white',     title: 'text-gray-900',   chip: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+  upcoming: { card: 'border-amber-200', head: 'bg-amber-50',  title: 'text-amber-900',  chip: 'bg-amber-100 text-amber-800 border border-amber-200' },
+  today:    { card: 'border-emerald-300', head: 'bg-emerald-50', title: 'text-emerald-900', chip: 'bg-emerald-100 text-emerald-800 border border-emerald-200' },
+  past:     { card: 'border-gray-200',  head: 'bg-gray-50',   title: 'text-gray-600',   chip: 'bg-gray-100 text-gray-600' },
+};
+
+function ordinal(n) {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
 }
+
+function addDays(d, n) { return new Date(d.getTime() + n * DAY); }
+function endOfWeek(d) { return addDays(d, (7 - d.getDay()) % 7); } // Sunday
+function monthRange(d, offset) {
+  return [new Date(d.getFullYear(), d.getMonth() + offset, 1), new Date(d.getFullYear(), d.getMonth() + offset + 1, 0)];
+}
+
+function readPref(key, fallback) {
+  try { return localStorage.getItem(key) || fallback; } catch { return fallback; }
+}
+function writePref(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* private window */ }
+}
+
+function displayName(person, mode) {
+  if (mode === 'full') return person.name;
+  const last = (person.last_name || '').trim();
+  return `${(person.first_name || '').trim()}${last ? ` ${last[0].toUpperCase()}.` : ''}` || person.name;
+}
+
+// ── Building blocks ─────────────────────────────────────────────────────────
 
 function Segmented({ options, value, onChange }) {
   return (
-    <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 text-xs">
+    <div className="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-0.5 text-sm">
       {options.map((o) => (
         <button
           key={o.key}
           onClick={() => onChange(o.key)}
-          className={`rounded-md px-2.5 py-1 transition-colors ${
-            value === o.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700'
-          }`}
+          className={`rounded-md px-3 py-1.5 transition-colors ${
+            value === o.key ? 'bg-white text-gray-900 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-800'
+          } ${o.key === 'upcoming' && value === o.key ? '!text-amber-700' : ''}`}
         >
           {o.label}
         </button>
@@ -40,69 +62,72 @@ function Segmented({ options, value, onChange }) {
   );
 }
 
-function Panel({ icon: Icon, iconClass, title, subtitle, actions, children }) {
+function GroupCard({ title, count, tone = 'hit', rows }) {
+  const t = TONES[tone];
+  return (
+    <div className={`rounded-xl border bg-white overflow-hidden ${t.card}`}>
+      <div className={`flex items-baseline justify-between gap-3 px-4 py-3 border-b border-gray-200/70 ${t.head}`}>
+        <h3 className={`text-lg font-semibold ${t.title}`}>{title}</h3>
+        <span className="text-xs text-gray-500 shrink-0">{count} {count === 1 ? 'member' : 'members'}</span>
+      </div>
+      {rows.map((r) => (
+        <div key={r.key} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-gray-100 last:border-0">
+          <div className="min-w-0">
+            <button
+              onClick={r.onClick}
+              className="text-sm font-medium text-gray-800 hover:text-emerald-700 hover:underline truncate text-left max-w-full"
+            >
+              {r.name}
+            </button>
+            {r.sub && <p className="text-xs text-gray-500">{r.sub}</p>}
+          </div>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${r.chipTone ? TONES[r.chipTone].chip : 'text-gray-500'}`}>
+            {r.right}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CardGrid({ groups, emptyMessage, loading }) {
+  if (loading) {
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-32 animate-pulse rounded-xl bg-gray-100" />)}
+      </div>
+    );
+  }
+  if (!groups.length) {
+    return (
+      <div className="py-12 text-center">
+        <CheckCircle className="h-6 w-6 text-gray-300 mx-auto mb-2" />
+        <p className="text-sm text-gray-500">{emptyMessage}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 items-start">
+      {groups.map(({ key, ...g }) => <GroupCard key={key} {...g} count={g.rows.length} />)}
+    </div>
+  );
+}
+
+function Section({ icon: Icon, title, subtitle, actions, children }) {
   return (
     <section className="rounded-xl border border-gray-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 pb-4 border-b border-gray-200">
-        <div className="flex items-center gap-2">
-          <Icon className={`h-4 w-4 ${iconClass}`} />
-          <h2 className="font-semibold text-gray-900">{title}</h2>
-          {subtitle && <span className="text-xs text-gray-500">{subtitle}</span>}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-gray-200">
+        <div className="flex items-start gap-2.5">
+          <Icon className="h-4 w-4 text-gray-500 mt-1" />
+          <div>
+            <h2 className="font-semibold text-gray-900">{title}</h2>
+            {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+          </div>
         </div>
         {actions}
       </div>
-      {children}
+      <div className="p-5">{children}</div>
     </section>
-  );
-}
-
-function Empty({ message }) {
-  return (
-    <div className="py-8 text-center">
-      <CheckCircle className="h-6 w-6 text-gray-300 mx-auto mb-2" />
-      <p className="text-sm text-gray-500">{message}</p>
-    </div>
-  );
-}
-
-function Row({ name, onClick, sub, chip }) {
-  return (
-    <div className="flex items-center justify-between gap-3 px-5 py-2.5 border-b border-gray-200/60 last:border-0">
-      <div className="min-w-0">
-        <button onClick={onClick} className="text-sm font-medium text-gray-800 hover:text-emerald-700 hover:underline truncate text-left">
-          {name}
-        </button>
-        <p className="text-xs text-gray-500">{sub}</p>
-      </div>
-      {chip}
-    </div>
-  );
-}
-
-function Chip({ tone = 'gray', children }) {
-  const tones = {
-    gray:    'bg-gray-100 text-gray-600',
-    emerald: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-    amber:   'bg-amber-50 text-amber-700 border border-amber-200',
-    pink:    'bg-pink-50 text-pink-700 border border-pink-200',
-  };
-  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${tones[tone]}`}>{children}</span>;
-}
-
-function SkeletonRows() {
-  return (
-    <div className="space-y-2 p-5">
-      {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-10 animate-pulse rounded-lg bg-gray-100" />)}
-    </div>
-  );
-}
-
-function StatTile({ label, value, tone }) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold tabular-nums ${tone}`}>{value}</p>
-    </div>
   );
 }
 
@@ -130,7 +155,7 @@ function TargetsEditor({ targets, onSave }) {
     );
   }
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       <input
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -146,183 +171,255 @@ function TargetsEditor({ targets, onSave }) {
   );
 }
 
-function dayLabel(info) {
-  if (info.days === 0) return 'Today';
-  if (info.days === 1) return 'Tomorrow';
-  if (info.days === -1) return 'Yesterday';
-  if (info.days < 0) return `${-info.days}d ago`;
-  return `in ${info.days}d`;
+function relDay(date, today) {
+  const d = Math.round((date - today) / DAY);
+  if (d === 0) return 'Today';
+  if (d === 1) return 'Tomorrow';
+  if (d === -1) return 'Yesterday';
+  return format(date, 'EEE d MMM');
 }
 
-function YearlyList({ entries, emptyMessage, sub, onViewClient }) {
-  const grouped = DATE_BUCKETS
-    .map((b) => ({ ...b, items: entries.filter((e) => e.info.bucket === b.key) }))
-    .filter((g) => g.items.length);
-  if (!grouped.length) return <Empty message={emptyMessage} />;
-  return grouped.map((g) => (
-    <div key={g.key}>
-      <p className="px-5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200/60">
-        {g.label} <span className="font-normal normal-case tracking-normal text-gray-400">· {g.items.length}{g.hint ? ` · ${g.hint}` : ''}</span>
-      </p>
-      {g.items.map((e) => (
-        <Row
-          key={e.person.id}
-          name={e.person.name}
-          onClick={() => onViewClient(e.person.mindbody_id)}
-          sub={`${format(e.info.date, 'EEE d MMM')} · ${sub(e)}${e.person.simple === 'Inactive' ? ' · lapsed' : ''}`}
-          chip={<Chip tone={e.info.bucket === 'today' ? 'emerald' : e.info.bucket === 'past' ? 'gray' : 'pink'}>{dayLabel(e.info)}</Chip>}
-        />
-      ))}
-    </div>
-  ));
-}
+// ── Page ────────────────────────────────────────────────────────────────────
+
+const VISIT_PERIODS = [
+  { key: 'upcoming',  label: 'Upcoming' },
+  { key: 'thisMonth', label: 'This month' },
+  { key: 'lastMonth', label: 'Last month' },
+];
+const DATE_PERIODS = [
+  { key: 'week',      label: 'This week' },
+  { key: 'month',     label: 'This month' },
+  { key: 'nextMonth', label: 'Next month' },
+  { key: 'past',      label: 'Just had' },
+];
+const NAME_MODES = [
+  { key: 'short', label: 'First name + initial' },
+  { key: 'full',  label: 'Full names' },
+];
 
 export default function MilestonesTab({ pipelineIds, onViewClient, appSettings, staff, isManager }) {
   const { people, sessionRows, coverage, loading, error } = useMilestones({ pipelineIds });
-  const [within, setWithin]       = useState('3');
-  const [hitWindow, setHitWindow] = useState('14');
+  const [tab, setTabState]         = useState(() => readPref('milestones-tab', 'visits'));
+  const [visitPeriod, setVisitPeriod] = useState('upcoming');
+  const [datePeriod, setDatePeriod]   = useState('week');
+  const [within, setWithin]        = useState('3');
+  const [nameMode, setNameModeState] = useState(() => readPref('milestones-names', 'short'));
   const [showLapsed, setShowLapsed] = useState(false);
 
+  const setTab = (v) => { setTabState(v); writePref('milestones-tab', v); };
+  const setNameMode = (v) => { setNameModeState(v); writePref('milestones-names', v); };
+
+  const today = useMemo(() => startOfDay(new Date()), []);
   const targets = appSettings?.settings?.milestone_targets?.length
     ? appSettings.settings.milestone_targets
     : DEFAULT_MILESTONE_TARGETS;
-  const today = useMemo(() => startOfDay(new Date()), []);
 
+  const view = (p) => () => onViewClient(p.mindbody_id);
+
+  // Visit milestones: upcoming (amber) or hits in a month, one card per milestone.
   const upcoming = useMemo(() => upcomingMilestones(sessionRows, targets, Number(within), today), [sessionRows, targets, within, today]);
-  const hits     = useMemo(() => recentMilestoneHits(sessionRows, sinceFor(hitWindow, today)), [sessionRows, hitWindow, today]);
+  const visitGroups = useMemo(() => {
+    const byN = new Map();
+    if (visitPeriod === 'upcoming') {
+      for (const u of upcoming) {
+        if (!byN.has(u.next)) byN.set(u.next, []);
+        byN.get(u.next).push({
+          key: u.mindbody_id,
+          name: displayName(u.client, nameMode),
+          onClick: view(u.client),
+          sub: `${u.total} so far`,
+          right: `${u.remaining} to go${u.eta ? ` · ~${format(u.eta, 'EEE d MMM')}` : ''}`,
+          chipTone: 'upcoming',
+        });
+      }
+    } else {
+      const [start, end] = monthRange(today, visitPeriod === 'thisMonth' ? 0 : -1);
+      for (const h of recentMilestoneHits(sessionRows, start, end)) {
+        if (!byN.has(h.n)) byN.set(h.n, []);
+        byN.get(h.n).push({
+          key: `${h.mindbody_id}-${h.n}`,
+          name: displayName(h.client, nameMode),
+          onClick: view(h.client),
+          right: format(h.date, 'EEE d MMM'),
+        });
+      }
+    }
+    return [...byN.entries()].sort((a, b) => b[0] - a[0]).map(([n, rows]) => ({
+      key: n, title: `${ordinal(n)} visit`, rows, tone: visitPeriod === 'upcoming' ? 'upcoming' : 'hit',
+    }));
+  }, [visitPeriod, upcoming, sessionRows, nameMode, today]);
 
-  const birthdays = useMemo(() => people
+  const dateRange = useMemo(() => {
+    if (datePeriod === 'week') return [today, endOfWeek(today)];
+    if (datePeriod === 'month') return [today, monthRange(today, 0)[1]];
+    if (datePeriod === 'nextMonth') return monthRange(today, 1);
+    return [addDays(today, -7), addDays(today, -1)];
+  }, [datePeriod, today]);
+
+  // Birthdays: one card per day.
+  const birthdayEntries = useMemo(() => people
     .filter((p) => showLapsed || p.simple !== 'Inactive')
-    .map((p) => ({ person: p, info: yearlyBucket(parseDate(p.birth_date), today) }))
-    .filter((e) => e.info && parseDate(e.person.birth_date).getFullYear() > 1900)
-    .sort((a, b) => a.info.days - b.info.days), [people, showLapsed, today]);
+    .map((p) => {
+      const origin = parseDate(p.birth_date);
+      if (!origin || origin.getFullYear() <= 1900) return null;
+      const hit = occurrenceIn(origin, dateRange[0], dateRange[1]);
+      return hit && { person: p, ...hit };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date - b.date), [people, showLapsed, dateRange]);
 
-  const anniversaries = useMemo(() => people
-    .filter((p) => p.simple !== 'Inactive')
-    // start_date = real start (set for members imported from the old system); else Mindbody's creation date.
-    .map((p) => ({ person: p, info: yearlyBucket(parseDate(p.start_date || p.creation_date), today) }))
-    .filter((e) => e.info && e.info.years >= 1)
-    .sort((a, b) => a.info.days - b.info.days), [people, today]);
+  const birthdayGroups = useMemo(() => {
+    const byDay = new Map();
+    for (const e of birthdayEntries) {
+      const k = e.date.getTime();
+      if (!byDay.has(k)) byDay.set(k, []);
+      byDay.get(k).push(e);
+    }
+    return [...byDay.entries()].map(([k, list]) => {
+      const date = new Date(k);
+      const tone = date < today ? 'past' : date.getTime() === today.getTime() ? 'today' : 'upcoming';
+      return {
+        key: k,
+        title: relDay(date, today) === format(date, 'EEE d MMM') ? format(date, 'EEE d MMM') : `${relDay(date, today)} · ${format(date, 'd MMM')}`,
+        tone,
+        rows: list.map((e) => ({
+          key: e.person.id,
+          name: displayName(e.person, nameMode),
+          onClick: view(e.person),
+          sub: e.person.simple === 'Inactive' ? 'Lapsed member' : null,
+          right: tone === 'past' ? `Turned ${e.years}` : `Turning ${e.years}`,
+          chipTone: tone,
+        })),
+      };
+    });
+  }, [birthdayEntries, nameMode, today]);
 
-  const weekCount = (list) => list.filter((e) => e.info.bucket === 'today' || e.info.bucket === 'week').length;
+  // Anniversaries: one card per number of years. start_date = real start for
+  // members imported from the old system; otherwise Mindbody's creation date.
+  const anniversaryGroups = useMemo(() => {
+    const byYears = new Map();
+    for (const p of people) {
+      if (p.simple === 'Inactive') continue;
+      const hit = occurrenceIn(parseDate(p.start_date || p.creation_date), dateRange[0], dateRange[1]);
+      if (!hit || hit.years < 1) continue;
+      if (!byYears.has(hit.years)) byYears.set(hit.years, []);
+      byYears.get(hit.years).push({ person: p, ...hit });
+    }
+    return [...byYears.entries()].sort((a, b) => b[0] - a[0]).map(([years, list]) => ({
+      key: years,
+      title: `${years} ${years === 1 ? 'year' : 'years'}`,
+      tone: datePeriod === 'past' ? 'past' : 'upcoming',
+      rows: list.sort((a, b) => a.date - b.date).map((e) => {
+        const isToday = e.date.getTime() === today.getTime();
+        return {
+          key: e.person.id,
+          name: displayName(e.person, nameMode),
+          onClick: view(e.person),
+          right: relDay(e.date, today),
+          chipTone: isToday ? 'today' : e.date < today ? 'past' : 'upcoming',
+        };
+      }),
+    }));
+  }, [people, dateRange, datePeriod, nameMode, today]);
+
+  const count = (groups) => groups.reduce((n, g) => n + g.rows.length, 0);
+  const periodLabel = DATE_PERIODS.find((p) => p.key === datePeriod)?.label.toLowerCase();
+
+  const TABS = [
+    { key: 'visits',        label: 'Visit milestones', short: 'Visits', Icon: Trophy },
+    { key: 'birthdays',     label: 'Birthdays',        Icon: Cake },
+    { key: 'anniversaries', label: 'Anniversaries',    Icon: PartyPopper },
+  ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">Milestones</h1>
-        <p className="text-sm text-gray-500">Session milestones, birthdays and anniversaries to celebrate on the floor.</p>
+        <h1 className="text-2xl font-semibold text-gray-900">Milestones</h1>
+        <p className="text-sm text-gray-500">Mindbody data · visits, birthdays and anniversaries to celebrate on the floor</p>
       </div>
 
       {error && <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">Could not load: {error}</p>}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile label={`Milestones within ${within}`} value={loading ? '–' : upcoming.length} tone="text-amber-600" />
-        <StatTile label="Milestones just hit"           value={loading ? '–' : hits.length}     tone="text-emerald-600" />
-        <StatTile label="Birthdays this week"           value={loading ? '–' : weekCount(birthdays)} tone="text-pink-600" />
-        <StatTile label="Anniversaries this week"       value={loading ? '–' : weekCount(anniversaries)} tone="text-violet-600" />
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+        {TABS.map(({ key, label, short, Icon }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-3 text-sm whitespace-nowrap border-b-2 -mb-px transition-colors ${
+              tab === key ? 'border-emerald-600 text-gray-900 font-medium' : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <Icon className="hidden sm:block h-4 w-4" />
+            {short ? <><span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span></> : label}
+            {key === 'visits' && !loading && upcoming.length > 0 && (
+              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800" title="Upcoming milestones">
+                {upcoming.length}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
-      <Panel
-        icon={Trophy}
-        iconClass="text-amber-500"
-        title="Session milestones"
-        subtitle={`Targets: ${targets.join(', ')}`}
-        actions={isManager && (
-          <TargetsEditor targets={targets} onSave={(list) => appSettings.save({ milestone_targets: list }, staff?.id)} />
-        )}
-      >
-        {coverage.partial && (
-          <p className="px-5 py-2.5 text-xs text-amber-800 bg-amber-50 border-b border-amber-200">
-            Check-in history only goes back to {format(coverage.historyFrom, 'd MMM yyyy')} (Mindbody starts {format(coverage.gymStart, 'd MMM yyyy')}),
-            so session counts are short for longer-standing members until the history backfill runs.
-          </p>
-        )}
-        <div className="grid md:grid-cols-2 md:divide-x divide-gray-200">
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 border-b border-gray-200">
-              <p className="text-sm font-medium text-gray-700">Coming up</p>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                within
-                <Segmented options={WITHIN_OPTIONS.map((n) => ({ key: String(n), label: String(n) }))} value={within} onChange={setWithin} />
-                sessions
-              </div>
-            </div>
-            <div className="max-h-96 overflow-y-auto">
-              {loading ? <SkeletonRows /> : upcoming.length === 0
-                ? <Empty message={`Nobody within ${within} session${within === '1' ? '' : 's'} of a milestone`} />
-                : upcoming.map((u) => (
-                    <Row
-                      key={u.mindbody_id}
-                      name={u.client.name}
-                      onClick={() => onViewClient(u.mindbody_id)}
-                      sub={`${u.total} sessions · ${u.remaining} to go${u.eta ? ` · likely ~${format(u.eta, 'EEE d MMM')}` : ''}`}
-                      chip={<Chip tone="amber">{u.next}</Chip>}
-                    />
-                  ))}
-            </div>
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3">
+        {tab === 'visits'
+          ? <Segmented options={VISIT_PERIODS} value={visitPeriod} onChange={setVisitPeriod} />
+          : <Segmented options={DATE_PERIODS} value={datePeriod} onChange={setDatePeriod} />}
+        <Segmented options={NAME_MODES} value={nameMode} onChange={setNameMode} />
+        {tab === 'visits' && visitPeriod === 'upcoming' && (
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            within
+            <Segmented options={WITHIN_OPTIONS.map((n) => ({ key: String(n), label: String(n) }))} value={within} onChange={setWithin} />
+            sessions
           </div>
-          <div className="border-t md:border-t-0 border-gray-200">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 border-b border-gray-200">
-              <p className="text-sm font-medium text-gray-700">Just hit</p>
-              <Segmented options={HIT_WINDOWS} value={hitWindow} onChange={setHitWindow} />
-            </div>
-            <div className="max-h-96 overflow-y-auto">
-              {loading ? <SkeletonRows /> : hits.length === 0
-                ? <Empty message="No milestones hit in this window" />
-                : hits.map((h) => (
-                    <Row
-                      key={`${h.mindbody_id}-${h.n}`}
-                      name={h.client.name}
-                      onClick={() => onViewClient(h.mindbody_id)}
-                      sub={`Hit ${h.n} on ${format(h.date, 'EEE d MMM')} · now ${h.total_visits}`}
-                      chip={<Chip tone="emerald">{h.n}</Chip>}
-                    />
-                  ))}
-            </div>
-          </div>
-        </div>
-        <p className="px-5 py-2.5 text-xs text-gray-400 border-t border-gray-200">
-          Counts every signed-in class and completed appointment in Mindbody. "Likely" dates use each client's last 4 weeks of visits.
-        </p>
-      </Panel>
+        )}
+        {tab === 'birthdays' && (
+          <label className="flex items-center gap-1.5 text-sm text-gray-500">
+            <input type="checkbox" checked={showLapsed} onChange={(e) => setShowLapsed(e.target.checked)} />
+            Include lapsed members
+          </label>
+        )}
+      </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Panel
-          icon={Cake}
-          iconClass="text-pink-500"
-          title="Birthdays"
-          actions={(
-            <label className="flex items-center gap-1.5 text-xs text-gray-500">
-              <input type="checkbox" checked={showLapsed} onChange={(e) => setShowLapsed(e.target.checked)} />
-              Include lapsed members
-            </label>
+      {tab === 'visits' && (
+        <Section
+          icon={Trophy}
+          title={visitPeriod === 'upcoming' ? 'Coming up' : 'Visit milestones'}
+          subtitle={`${visitPeriod === 'upcoming'
+            ? `Within ${within} session${within === '1' ? '' : 's'} · "~" dates use each client's last 4 weeks`
+            : format(monthRange(today, visitPeriod === 'thisMonth' ? 0 : -1)[0], 'MMMM yyyy')} · targets ${targets.join(', ')}`}
+          actions={isManager && (
+            <TargetsEditor targets={targets} onSave={(list) => appSettings.save({ milestone_targets: list }, staff?.id)} />
           )}
         >
-          <div className="max-h-[32rem] overflow-y-auto">
-            {loading ? <SkeletonRows /> : (
-              <YearlyList
-                entries={birthdays}
-                emptyMessage="No birthdays from last week to the end of next month"
-                sub={(e) => (e.info.bucket === 'past' ? `turned ${e.info.years}` : `turning ${e.info.years}`)}
-                onViewClient={onViewClient}
-              />
-            )}
-          </div>
-        </Panel>
+          {coverage.partial && (
+            <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Check-in history only goes back to {format(coverage.historyFrom, 'd MMM yyyy')} (Mindbody starts {format(coverage.gymStart, 'd MMM yyyy')}),
+              so session counts are short for longer-standing members until the history backfill runs.
+            </p>
+          )}
+          <CardGrid
+            loading={loading}
+            groups={visitGroups}
+            emptyMessage={visitPeriod === 'upcoming'
+              ? `Nobody within ${within} session${within === '1' ? '' : 's'} of a milestone`
+              : 'No milestones hit in this month'}
+          />
+        </Section>
+      )}
 
-        <Panel icon={Star} iconClass="text-violet-500" title="Anniversaries" subtitle="Active members">
-          <div className="max-h-[32rem] overflow-y-auto">
-            {loading ? <SkeletonRows /> : (
-              <YearlyList
-                entries={anniversaries}
-                emptyMessage="No anniversaries from last week to the end of next month"
-                sub={(e) => `${e.info.years} ${e.info.years === 1 ? 'year' : 'years'}`}
-                onViewClient={onViewClient}
-              />
-            )}
-          </div>
-        </Panel>
-      </div>
+      {tab === 'birthdays' && (
+        <Section icon={Cake} title="Birthdays" subtitle={`${count(birthdayGroups)} ${periodLabel}${showLapsed ? ' · including lapsed members' : ' · active and trial members'}`}>
+          <CardGrid loading={loading} groups={birthdayGroups} emptyMessage={`No birthdays ${periodLabel}`} />
+        </Section>
+      )}
+
+      {tab === 'anniversaries' && (
+        <Section icon={PartyPopper} title="Anniversaries" subtitle={`${count(anniversaryGroups)} ${periodLabel} · active members, from their start date`}>
+          <CardGrid loading={loading} groups={anniversaryGroups} emptyMessage={`No anniversaries ${periodLabel}`} />
+        </Section>
+      )}
     </div>
   );
 }
