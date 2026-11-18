@@ -175,6 +175,11 @@ export function useClientDetail(mindbodyId) {
     return data;
   }, [client]);
 
+  // Stamps a note as posted to Slack after /api/slack-publish succeeds.
+  const markNoteSlackPosted = useCallback((noteId, postedAt, postedBy) => {
+    setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, slack_posted_at: postedAt, slack_posted_by: postedBy } : n)));
+  }, []);
+
   const deleteNote = useCallback(async (noteId) => {
     const { error: delErr } = await supabase.from('client_notes').delete().eq('id', noteId);
     if (delErr) { setError(delErr.message); return false; }
@@ -212,7 +217,7 @@ export function useClientDetail(mindbodyId) {
 
   return {
     client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, strategySessions, loading, error,
-    updateCaseload, updatePackage, updateNextProgramDue, updateStartDate, updateStatusOverride, addNote, deleteNote,
+    updateCaseload, updatePackage, updateNextProgramDue, updateStartDate, updateStatusOverride, addNote, deleteNote, markNoteSlackPosted,
     addStrategySession, deleteStrategySession, reload: load,
   };
 }

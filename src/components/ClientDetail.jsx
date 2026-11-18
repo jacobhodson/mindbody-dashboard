@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react';
 import {
   ArrowLeft, Phone, Mail, Cake, MapPin, AlertTriangle, CalendarDays,
-  MessageSquare, ClipboardList, Trash2, Dumbbell, Activity, Target,
+  MessageSquare, ClipboardList, Trash2, Dumbbell, Activity, Target, Send, Check, Loader2,
 } from 'lucide-react';
 import { format, parseISO, startOfDay } from 'date-fns';
 import { useClientDetail } from '../utils/useClientDetail.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useMembershipPackages } from '../utils/useMembershipPackages.js';
 import { renderFormatted } from '../utils/richText.js';
+import { publishNoteToSlack } from '../utils/slackPublish.js';
 import { GROUP_VALUE, caseloadSelectValue as caseloadValueFor, caseloadPayloadFor } from '../utils/caseload.js';
 import { SIMPLE_STATUSES, simplifiedStatus, hasStatusOverride } from '../utils/clientStatus.js';
 import { STRATEGY_FOLLOWUP_DAYS, strategyStatus } from '../utils/strategySessions.js';
@@ -47,13 +48,15 @@ function Field({ label, value, Icon }) {
 export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds, onBack }) {
   const {
     client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, strategySessions, loading, error,
-    updateCaseload, updatePackage, updateNextProgramDue, updateStartDate, updateStatusOverride, addNote, deleteNote,
+    updateCaseload, updatePackage, updateNextProgramDue, updateStartDate, updateStatusOverride, addNote, deleteNote, markNoteSlackPosted,
     addStrategySession, deleteStrategySession,
   } = useClientDetail(mindbodyId);
   const { staffList } = useAllStaff();
   const { packages, createPackage } = useMembershipPackages();
   const [noteDraft, setNoteDraft] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [slackBusyId, setSlackBusyId] = useState(null);
+  const [slackError, setSlackError] = useState(null);
   const [addingPackage, setAddingPackage] = useState(false);
   const [newPackageName, setNewPackageName] = useState('');
   const [visitsExpanded, setVisitsExpanded] = useState(false);
@@ -84,6 +87,16 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
   }
 
   const fullName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Unknown';
+
+  const publishToSlack = async (n) => {
+    if (n.slack_posted_at && !window.confirm('This note is already in #client-headlines. Post it again?')) return;
+    setSlackBusyId(n.id);
+    setSlackError(null);
+    const res = await publishNoteToSlack(n.id);
+    setSlackBusyId(null);
+    if (res.error) { setSlackError({ id: n.id, message: res.error }); return; }
+    markNoteSlackPosted(n.id, res.slack_posted_at, res.slack_posted_by);
+  };
 
   const submitNote = async (e) => {
     e.preventDefault();
@@ -439,6 +452,25 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
                 <p className="text-xs font-medium text-gray-700">{staffNameById[n.staff_id] || 'Staff'}</p>
                 <div className="flex items-center gap-2">
                   <p className="text-[10px] text-gray-400">{format(parseISO(n.created_at), 'd MMM yyyy, h:mm a')}</p>
+                  {staff && (
+                    <button
+                      onClick={() => publishToSlack(n)}
+                      disabled={slackBusyId === n.id}
+                      title={n.slack_posted_at
+                        ? `Posted to #client-headlines ${format(parseISO(n.slack_posted_at), 'd MMM, h:mm a')}${staffNameById[n.slack_posted_by] ? ` by ${staffNameById[n.slack_posted_by]}` : ''} — click to post again`
+                        : 'Publish this note to #client-headlines in Slack'}
+                      className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-60 ${
+                        n.slack_posted_at
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-900'
+                      }`}
+                    >
+                      {slackBusyId === n.id
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : n.slack_posted_at ? <Check className="h-3 w-3" /> : <Send className="h-3 w-3" />}
+                      {n.slack_posted_at ? 'In Slack' : 'Publish to Slack'}
+                    </button>
+                  )}
                   {(isManager || n.staff_id === staff?.id) && (
                     <button onClick={() => deleteNote(n.id)} className="text-gray-300 hover:text-red-600">
                       <Trash2 className="h-3 w-3" />
@@ -447,6 +479,7 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
                 </div>
               </div>
               <p className="text-sm text-gray-800 whitespace-pre-wrap">{renderFormatted(n.note)}</p>
+              {slackError?.id === n.id && <p className="mt-1 text-xs text-red-600">Couldn't post to Slack: {slackError.message}</p>}
             </li>
           ))}
         </ul>
