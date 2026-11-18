@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { format, isToday } from 'date-fns';
-import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact, Mountain, CalendarCheck, BookOpen, Plane, TrendingUp, Trophy, Settings as SettingsIcon } from 'lucide-react';
+import { RefreshCw, Home as HomeIcon, Activity, DollarSign, Users2, Users, Dumbbell, LogOut, BarChart3, Menu, Contact, Mountain, CalendarCheck, BookOpen, Plane, TrendingUp, Trophy, ClipboardList, Settings as SettingsIcon } from 'lucide-react';
 import Sidebar             from './Sidebar.jsx';
 import Home                from './Home.jsx';
 import AiAssistant         from './AiAssistant.jsx';
@@ -23,6 +23,7 @@ import RocksTab            from './RocksTab.jsx';
 import MeetingsTab         from './MeetingsTab.jsx';
 import PlaybookTab         from './playbook/PlaybookTab.jsx';
 import HRTab               from './hr/HRTab.jsx';
+import AdminTab            from './admin/AdminTab.jsx';
 import AcquisitionTab      from './acquisition/AcquisitionTab.jsx';
 import NotificationBell    from './NotificationBell.jsx';
 import SettingsTab         from './settings/SettingsTab.jsx';
@@ -52,6 +53,7 @@ const TABS = [
   { key: 'rocks',             label: 'Rocks',             Icon: Mountain,      group: 'Business' },
   { key: 'meetings',          label: 'Meetings',          Icon: CalendarCheck, group: 'Business' },
   { key: 'hr',                label: 'HR',                Icon: Plane,         group: 'Business' },
+  { key: 'admin',             label: 'Admin',             Icon: ClipboardList, group: 'Business' },
   { key: 'playbook',          label: 'Playbook',          Icon: BookOpen  },
   { key: 'settings',          label: 'Settings',          Icon: SettingsIcon,  alwaysVisible: true, pinBottom: true },
 ];
@@ -207,6 +209,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
             onboardingData={data.onboarding} pipelineIds={tradeOnboardingIds}
             week4Clients={data.onboarding?.week4} decisions={decisions} setDecision={setDecision}
             onOpenHR={() => setTab('hr')}
+            onOpenAdmin={() => setTab('admin')}
           />
         )}
 
@@ -353,6 +356,9 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
 
         {/* ─ HR (Leave Planner) ─ */}
         {tab === 'hr' && <HRTab staff={staff} isManager={isManager} />}
+
+        {/* ─ Admin (debit adjustments log) ─ */}
+        {tab === 'admin' && <AdminTab staff={staff} isManager={isManager} />}
 
         {/* ─ Settings ─ */}
         {tab === 'settings' && (

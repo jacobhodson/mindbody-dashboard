@@ -12,14 +12,19 @@ import LeaveApprovalsCard from './hr/LeaveApprovalsCard.jsx';
 import TerminationReviewCard from './TerminationReviewCard.jsx';
 import MyLeaveCard from './hr/MyLeaveCard.jsx';
 import HomeAutomationsPanel from './HomeAutomationsPanel.jsx';
+import DebitAdjustmentForm from './admin/DebitAdjustmentForm.jsx';
+import DebitAdjustmentsCard from './admin/DebitAdjustmentsCard.jsx';
+import { CalendarClock } from 'lucide-react';
 import { useReminders } from '../utils/useReminders.js';
 import { useAllClients } from '../utils/useAllClients.js';
 
 export default function Home({
   user, staff, isManager, onViewClient,
   onboardingData, pipelineIds,
-  week4Clients, decisions, setDecision, onOpenHR,
+  week4Clients, decisions, setDecision, onOpenHR, onOpenAdmin,
 }) {
+  const [debitFormOpen, setDebitFormOpen] = useState(false);
+  const [debitVersion, setDebitVersion] = useState(0); // refreshes the office-admin card after a submit
   const rem = useReminders();
   const { clientsList } = useAllClients();
   const [tasksVersion, setTasksVersion] = useState(0); // remounts the checklist after a task goes Active/Draft
@@ -28,12 +33,28 @@ export default function Home({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-gray-900">
-          Hey {staff?.full_name?.split(' ')[0] || 'there'} 👋
-        </h1>
-        <p className="text-sm text-gray-500">Here's what's due, and how the week's tracking.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-gray-900">
+            Hey {staff?.full_name?.split(' ')[0] || 'there'} 👋
+          </h1>
+          <p className="text-sm text-gray-500">Here's what's due, and how the week's tracking.</p>
+        </div>
+        <button
+          onClick={() => setDebitFormOpen(true)}
+          className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+        >
+          <CalendarClock className="h-4 w-4 text-violet-600" /> Debit adjustment
+        </button>
       </div>
+      {debitFormOpen && (
+        <DebitAdjustmentForm
+          clients={clientsList}
+          onSubmitted={() => setDebitVersion((v) => v + 1)}
+          onClose={() => setDebitFormOpen(false)}
+        />
+      )}
+      <DebitAdjustmentsCard key={debitVersion} enabled={!!staff?.is_office_admin} onOpenAdmin={onOpenAdmin} />
       <HomeReminders
         rem={rem} clients={clientsList} pipelineIds={pipelineIds}
         staff={staff} isManager={isManager} onViewClient={onViewClient}

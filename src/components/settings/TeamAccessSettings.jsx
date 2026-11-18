@@ -85,6 +85,7 @@ export default function TeamAccessSettings({ staff: me, isAdmin, reloadStaff }) 
                   <th className="px-6 py-2">Name</th>
                   <th className="px-3 py-2">Access level</th>
                   <th className="px-3 py-2">Coach</th>
+                  <th className="px-3 py-2" title="Gets debit adjustments to process on Home + in the bell">Office admin</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-6 py-2 text-right">Actions</th>
                 </tr>
@@ -193,6 +194,16 @@ function StaffRow({ person: p, isSelf, editable, isAdmin, onUpdate, onChangeEmai
           onChange={(e) => onUpdate({ is_coach: e.target.checked })}
           title="Counts as a coach in Team tab, LER and coach pickers"
           className="h-4 w-4 accent-emerald-600"
+        />
+      </td>
+      <td className="px-3 py-3">
+        <input
+          type="checkbox"
+          checked={!!p.is_office_admin}
+          disabled={!editable}
+          onChange={(e) => onUpdate({ is_office_admin: e.target.checked })}
+          title="Gets debit adjustments to process on Home and in the bell"
+          className="h-4 w-4 accent-violet-600"
         />
       </td>
       <td className="px-3 py-3">

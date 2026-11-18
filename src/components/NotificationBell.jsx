@@ -9,6 +9,7 @@ const KIND = {
   leave_decided:   { Icon: Plane,         tone: 'bg-sky-100 text-sky-700' },
   leave_requested: { Icon: CalendarClock, tone: 'bg-amber-100 text-amber-700' },
   termination_review: { Icon: UserMinus,  tone: 'bg-red-100 text-red-700' },
+  debit_adjustment:   { Icon: CalendarClock, tone: 'bg-violet-100 text-violet-700' },
 };
 
 /**
