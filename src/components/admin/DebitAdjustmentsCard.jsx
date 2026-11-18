@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { CalendarClock, Check, Loader2, PlayCircle } from 'lucide-react';
 import { useDebitAdjustments, DEBIT_STATUS, fmtDebitDate } from '../../utils/useDebitAdjustments.js';
@@ -8,8 +8,10 @@ import { useDebitAdjustments, DEBIT_STATUS, fmtDebitDate } from '../../utils/use
  * every open debit adjustment, oldest first, with a tick to mark it done
  * once it's been actioned in Mindbody. Full history lives in the Admin tab.
  */
-export default function DebitAdjustmentsCard({ enabled, onOpenAdmin }) {
-  const { rows, update } = useDebitAdjustments({ openOnly: true, enabled });
+export default function DebitAdjustmentsCard({ enabled, refreshKey, onOpenAdmin }) {
+  const { rows, update, reload } = useDebitAdjustments({ openOnly: true, enabled });
+  // Re-fetch in place after someone submits from Home (no remount).
+  useEffect(() => { if (enabled && refreshKey) reload(); }, [enabled, refreshKey, reload]);
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState(null);
 

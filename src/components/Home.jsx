@@ -54,7 +54,7 @@ export default function Home({
           onClose={() => setDebitFormOpen(false)}
         />
       )}
-      <DebitAdjustmentsCard key={debitVersion} enabled={!!staff?.is_office_admin} onOpenAdmin={onOpenAdmin} />
+      <DebitAdjustmentsCard refreshKey={debitVersion} enabled={!!staff?.is_office_admin} onOpenAdmin={onOpenAdmin} />
       <HomeReminders
         rem={rem} clients={clientsList} pipelineIds={pipelineIds}
         staff={staff} isManager={isManager} onViewClient={onViewClient}
