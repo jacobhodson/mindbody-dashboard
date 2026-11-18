@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import {
   ArrowLeft, Phone, Mail, Cake, MapPin, AlertTriangle, CalendarDays,
-  MessageSquare, ClipboardList, Trash2, Dumbbell, Activity, Target, Send, Check, Loader2,
+  MessageSquare, ClipboardList, Trash2, Dumbbell, Activity, Target, Send, Check, Loader2, MailPlus,
 } from 'lucide-react';
 import { format, parseISO, startOfDay } from 'date-fns';
 import { useClientDetail } from '../utils/useClientDetail.js';
@@ -9,6 +9,8 @@ import { useAllStaff } from '../utils/useAllStaff.js';
 import { useMembershipPackages } from '../utils/useMembershipPackages.js';
 import { renderFormatted } from '../utils/richText.js';
 import { publishNoteToSlack, publishStrategyToSlack } from '../utils/slackPublish.js';
+import { openGmailDraft, draftBody } from '../utils/gmailDraft.js';
+import { useAppSettings } from '../utils/useAppSettings.js';
 import { GROUP_VALUE, caseloadSelectValue as caseloadValueFor, caseloadPayloadFor } from '../utils/caseload.js';
 import { SIMPLE_STATUSES, simplifiedStatus, hasStatusOverride } from '../utils/clientStatus.js';
 import { STRATEGY_FOLLOWUP_DAYS, strategyStatus } from '../utils/strategySessions.js';
@@ -55,6 +57,20 @@ function SlackButton({ row, channel, busy, postedByName, onClick }) {
   );
 }
 
+// Opens a Gmail draft to the client; disabled when we have no email for them.
+function EmailDraftButton({ hasEmail, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={!hasEmail}
+      title={hasEmail ? 'Draft this as an email to the member in Gmail' : 'No email on file for this member'}
+      className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      <MailPlus className="h-3 w-3" /> Draft email
+    </button>
+  );
+}
+
 function Field({ label, value, Icon }) {
   if (!value) return null;
   return (
@@ -79,6 +95,7 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
   const [noteDraft, setNoteDraft] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [slackBusyId, setSlackBusyId] = useState(null);
+  const { settings: appSettings } = useAppSettings();
   const [slackError, setSlackError] = useState(null);
   const [addingPackage, setAddingPackage] = useState(false);
   const [newPackageName, setNewPackageName] = useState('');
@@ -110,6 +127,19 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
   }
 
   const fullName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Unknown';
+
+  // Gmail draft to the member, signed off by the signed-in coach.
+  const draftEmail = (text, kind, sessionDate) => {
+    const business = appSettings?.business_name || 'Newstrength';
+    openGmailDraft({
+      to: client.email,
+      from: staff?.email,
+      subject: kind === 'strategy'
+        ? `Your strategy session${sessionDate ? ` — ${fmtDate(sessionDate)}` : ''}`
+        : `A note from ${business}`,
+      body: draftBody({ firstName: client.first_name, text, staffName: staff?.full_name, businessName: business }),
+    });
+  };
 
   // kind: 'note' (#client-headlines) or 'strategy' (strategy sessions channel).
   const publishToSlack = async (row, kind) => {
@@ -425,6 +455,9 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
                   </p>
                   <div className="flex items-center gap-2">
                     {staff && (
+                      <EmailDraftButton hasEmail={!!client.email} onClick={() => draftEmail(s.notes || '', 'strategy', s.session_date)} />
+                    )}
+                    {staff && (
                       <SlackButton
                         row={s} channel="the strategy sessions channel" busy={slackBusyId === s.id}
                         postedByName={staffNameById[s.slack_posted_by]} onClick={() => publishToSlack(s, 'strategy')}
@@ -486,6 +519,9 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
                 <p className="text-xs font-medium text-gray-700">{staffNameById[n.staff_id] || 'Staff'}</p>
                 <div className="flex items-center gap-2">
                   <p className="text-[10px] text-gray-400">{format(parseISO(n.created_at), 'd MMM yyyy, h:mm a')}</p>
+                  {staff && (
+                    <EmailDraftButton hasEmail={!!client.email} onClick={() => draftEmail(n.note, 'note')} />
+                  )}
                   {staff && (
                     <SlackButton
                       row={n} channel="#client-headlines" busy={slackBusyId === n.id}
