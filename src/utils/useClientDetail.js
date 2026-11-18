@@ -175,9 +175,11 @@ export function useClientDetail(mindbodyId) {
     return data;
   }, [client]);
 
-  // Stamps a note as posted to Slack after /api/slack-publish succeeds.
-  const markNoteSlackPosted = useCallback((noteId, postedAt, postedBy) => {
-    setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, slack_posted_at: postedAt, slack_posted_by: postedBy } : n)));
+  // Stamps a note ('note') or strategy session ('strategy') as posted to
+  // Slack after /api/slack-publish succeeds.
+  const markSlackPosted = useCallback((kind, id, postedAt, postedBy) => {
+    const stamp = (prev) => prev.map((r) => (r.id === id ? { ...r, slack_posted_at: postedAt, slack_posted_by: postedBy } : r));
+    if (kind === 'strategy') setStrategySessions(stamp); else setNotes(stamp);
   }, []);
 
   const deleteNote = useCallback(async (noteId) => {
@@ -217,7 +219,7 @@ export function useClientDetail(mindbodyId) {
 
   return {
     client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, strategySessions, loading, error,
-    updateCaseload, updatePackage, updateNextProgramDue, updateStartDate, updateStatusOverride, addNote, deleteNote, markNoteSlackPosted,
+    updateCaseload, updatePackage, updateNextProgramDue, updateStartDate, updateStatusOverride, addNote, deleteNote, markSlackPosted,
     addStrategySession, deleteStrategySession, reload: load,
   };
 }

@@ -1,11 +1,13 @@
 /**
  * POST /api/slack-publish   (Authorization: Bearer <Supabase access token>)
- * Body: { note_id }
+ * Body: { note_id } | { strategy_session_id }
  *
- * Posts one client note to the #client-headlines Slack channel through a
- * Slack Incoming Webhook (env SLACK_CLIENT_HEADLINES_WEBHOOK — created in the
- * Slack app's "Incoming Webhooks" page, bound to #client-headlines). Any
- * active staff member can publish any note they can see; the note's
+ * Posts one client note or strategy session to Slack through an Incoming
+ * Webhook, one per channel (created in the Slack app's "Incoming Webhooks"
+ * page, each bound to its channel):
+ *   client notes       → SLACK_CLIENT_HEADLINES_WEBHOOK  (#client-headlines)
+ *   strategy sessions  → SLACK_STRATEGY_SESSIONS_WEBHOOK
+ * Any active staff member can publish anything they can see; the row's
  * slack_posted_at/slack_posted_by are stamped so the UI shows it went out.
  * Re-publishing is allowed (the button asks first).
  */
@@ -22,6 +24,34 @@ async function caller(event) {
   if (error || !data?.user) return null;
   const { data: me } = await supabase.from('staff').select('id, full_name, active').eq('auth_user_id', data.user.id).maybeSingle();
   return me?.active ? me : null;
+}
+
+// Each publishable kind: its table, webhook env var, the select that loads
+// the row with client + author (staff embed must name the FK — these tables
+// have a second staff FK, slack_posted_by), and how to word the post.
+const KINDS = {
+  note: {
+    table: 'client_notes',
+    env: 'SLACK_CLIENT_HEADLINES_WEBHOOK',
+    select: 'id, note, staff_id, client:clients(first_name, last_name), author:staff!client_notes_staff_id_fkey(full_name)',
+    text: (row) => row.note,
+    heading: (name) => `*${name}*`,
+    byline: 'Note by',
+  },
+  strategy: {
+    table: 'strategy_sessions',
+    env: 'SLACK_STRATEGY_SESSIONS_WEBHOOK',
+    select: 'id, notes, session_date, staff_id, client:clients(first_name, last_name), author:staff!strategy_sessions_staff_id_fkey(full_name)',
+    text: (row) => row.notes || 'No notes recorded.',
+    heading: (name, row) => `*Strategy session — ${name}* · ${fmtDay(row.session_date)}`,
+    byline: 'Logged by',
+  },
+};
+
+function fmtDay(d) {
+  if (!d) return '';
+  const [y, m, day] = d.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
 // Slack mrkdwn: escape &<>, then map our **bold** / *italic* / _underline_
@@ -41,28 +71,27 @@ export const handler = async (event) => {
   }
   if (event.httpMethod !== 'POST') return err('POST only', 405);
 
-  const webhook = process.env.SLACK_CLIENT_HEADLINES_WEBHOOK;
-  if (!webhook) return err('Slack is not connected yet — SLACK_CLIENT_HEADLINES_WEBHOOK is not set', 503);
+  let body;
+  try { body = JSON.parse(event.body || '{}'); } catch { return err('Bad JSON', 400); }
+  const kindKey = body.strategy_session_id ? 'strategy' : body.note_id ? 'note' : null;
+  if (!kindKey) return err('note_id or strategy_session_id required', 400);
+  const kind = KINDS[kindKey];
+  const id = body.strategy_session_id || body.note_id;
+
+  const webhook = process.env[kind.env];
+  if (!webhook) return err(`Slack is not connected yet — ${kind.env} is not set`, 503);
 
   const me = await caller(event);
   if (!me) return err('Sign in required', 401);
 
-  let body;
-  try { body = JSON.parse(event.body || '{}'); } catch { return err('Bad JSON', 400); }
-  if (!body.note_id) return err('note_id required', 400);
+  const { data: row, error: rowErr } = await supabase.from(kind.table).select(kind.select).eq('id', id).maybeSingle();
+  if (rowErr) return err(rowErr.message);
+  if (!row) return err('Not found', 404);
 
-  const { data: note, error: noteErr } = await supabase
-    .from('client_notes')
-    .select('id, note, staff_id, created_at, client:clients(first_name, last_name, mindbody_id), author:staff!client_notes_staff_id_fkey(full_name)')
-    .eq('id', body.note_id)
-    .maybeSingle();
-  if (noteErr) return err(noteErr.message);
-  if (!note) return err('Note not found', 404);
-
-  const clientName = [note.client?.first_name, note.client?.last_name].filter(Boolean).join(' ') || 'Client';
-  const author = note.author?.full_name || 'Staff';
+  const clientName = [row.client?.first_name, row.client?.last_name].filter(Boolean).join(' ') || 'Client';
+  const author = row.author?.full_name || 'Staff';
   const origin = event.headers.origin && /netlify\.app$|localhost:\d+$/.test(event.headers.origin) ? event.headers.origin : PROD_URL;
-  const fallback = `${clientName} — ${note.note}`.slice(0, 300);
+  const fallback = `${clientName} — ${kind.text(row)}`.slice(0, 300);
 
   const res = await fetch(webhook, {
     method: 'POST',
@@ -70,13 +99,13 @@ export const handler = async (event) => {
     body: JSON.stringify({
       text: fallback,
       blocks: [
-        { type: 'section', text: { type: 'mrkdwn', text: `*${toSlack(clientName)}*` } },
-        { type: 'section', text: { type: 'mrkdwn', text: toSlack(note.note).slice(0, 2900) } },
+        { type: 'section', text: { type: 'mrkdwn', text: kind.heading(toSlack(clientName), row) } },
+        { type: 'section', text: { type: 'mrkdwn', text: toSlack(kind.text(row)).slice(0, 2900) } },
         {
           type: 'context',
           elements: [{
             type: 'mrkdwn',
-            text: `Note by ${toSlack(author)}${me.id !== note.staff_id ? ` · shared by ${toSlack(me.full_name)}` : ''} · <${origin}|Ops Dashboard>`,
+            text: `${kind.byline} ${toSlack(author)}${me.id !== row.staff_id ? ` · shared by ${toSlack(me.full_name)}` : ''} · <${origin}|Ops Dashboard>`,
           }],
         },
       ],
@@ -88,6 +117,6 @@ export const handler = async (event) => {
   }
 
   const postedAt = new Date().toISOString();
-  await supabase.from('client_notes').update({ slack_posted_at: postedAt, slack_posted_by: me.id }).eq('id', note.id);
+  await supabase.from(kind.table).update({ slack_posted_at: postedAt, slack_posted_by: me.id }).eq('id', row.id);
   return ok({ ok: true, slack_posted_at: postedAt, slack_posted_by: me.id });
 };

@@ -8,7 +8,7 @@ import { useClientDetail } from '../utils/useClientDetail.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useMembershipPackages } from '../utils/useMembershipPackages.js';
 import { renderFormatted } from '../utils/richText.js';
-import { publishNoteToSlack } from '../utils/slackPublish.js';
+import { publishNoteToSlack, publishStrategyToSlack } from '../utils/slackPublish.js';
 import { GROUP_VALUE, caseloadSelectValue as caseloadValueFor, caseloadPayloadFor } from '../utils/caseload.js';
 import { SIMPLE_STATUSES, simplifiedStatus, hasStatusOverride } from '../utils/clientStatus.js';
 import { STRATEGY_FOLLOWUP_DAYS, strategyStatus } from '../utils/strategySessions.js';
@@ -32,6 +32,29 @@ function fmtDate(d) {
   try { return format(parseISO(d), 'd MMM yyyy'); } catch { return d; }
 }
 
+// Publish-to-Slack pill shared by client notes and strategy sessions; turns
+// green ("In Slack") once the row's slack_posted_at is set.
+function SlackButton({ row, channel, busy, postedByName, onClick }) {
+  const posted = !!row.slack_posted_at;
+  return (
+    <button
+      onClick={onClick}
+      disabled={busy}
+      title={posted
+        ? `Posted to ${channel} ${format(parseISO(row.slack_posted_at), 'd MMM, h:mm a')}${postedByName ? ` by ${postedByName}` : ''} — click to post again`
+        : `Publish to ${channel} in Slack`}
+      className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-60 ${
+        posted
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-900'
+      }`}
+    >
+      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : posted ? <Check className="h-3 w-3" /> : <Send className="h-3 w-3" />}
+      {posted ? 'In Slack' : 'Publish to Slack'}
+    </button>
+  );
+}
+
 function Field({ label, value, Icon }) {
   if (!value) return null;
   return (
@@ -48,7 +71,7 @@ function Field({ label, value, Icon }) {
 export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds, onBack }) {
   const {
     client, visits, weeklyAttendance, avgWeekly, notes, contactLogs, linkedTasks, strategySessions, loading, error,
-    updateCaseload, updatePackage, updateNextProgramDue, updateStartDate, updateStatusOverride, addNote, deleteNote, markNoteSlackPosted,
+    updateCaseload, updatePackage, updateNextProgramDue, updateStartDate, updateStatusOverride, addNote, deleteNote, markSlackPosted,
     addStrategySession, deleteStrategySession,
   } = useClientDetail(mindbodyId);
   const { staffList } = useAllStaff();
@@ -88,14 +111,16 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
 
   const fullName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Unknown';
 
-  const publishToSlack = async (n) => {
-    if (n.slack_posted_at && !window.confirm('This note is already in #client-headlines. Post it again?')) return;
-    setSlackBusyId(n.id);
+  // kind: 'note' (#client-headlines) or 'strategy' (strategy sessions channel).
+  const publishToSlack = async (row, kind) => {
+    const what = kind === 'strategy' ? 'strategy session' : 'note';
+    if (row.slack_posted_at && !window.confirm(`This ${what} is already in Slack. Post it again?`)) return;
+    setSlackBusyId(row.id);
     setSlackError(null);
-    const res = await publishNoteToSlack(n.id);
+    const res = await (kind === 'strategy' ? publishStrategyToSlack : publishNoteToSlack)(row.id);
     setSlackBusyId(null);
-    if (res.error) { setSlackError({ id: n.id, message: res.error }); return; }
-    markNoteSlackPosted(n.id, res.slack_posted_at, res.slack_posted_by);
+    if (res.error) { setSlackError({ id: row.id, message: res.error }); return; }
+    markSlackPosted(kind, row.id, res.slack_posted_at, res.slack_posted_by);
   };
 
   const submitNote = async (e) => {
@@ -398,19 +423,28 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
                   <p className="text-xs font-medium text-gray-700">
                     {fmtDate(s.session_date)} · {staffNameById[s.staff_id] || 'Staff'}
                   </p>
-                  {(isManager || s.staff_id === staff?.id) && (
-                    <button
-                      onClick={() => { if (window.confirm('Delete this strategy session?')) deleteStrategySession(s.id); }}
-                      title="Delete session"
-                      className="text-gray-300 hover:text-red-600"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {staff && (
+                      <SlackButton
+                        row={s} channel="the strategy sessions channel" busy={slackBusyId === s.id}
+                        postedByName={staffNameById[s.slack_posted_by]} onClick={() => publishToSlack(s, 'strategy')}
+                      />
+                    )}
+                    {(isManager || s.staff_id === staff?.id) && (
+                      <button
+                        onClick={() => { if (window.confirm('Delete this strategy session?')) deleteStrategySession(s.id); }}
+                        title="Delete session"
+                        className="text-gray-300 hover:text-red-600"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {s.notes
                   ? <p className="text-sm text-gray-800 whitespace-pre-wrap">{renderFormatted(s.notes)}</p>
                   : <p className="text-xs text-gray-400">No notes</p>}
+                {slackError?.id === s.id && <p className="mt-1 text-xs text-red-600">Couldn't post to Slack: {slackError.message}</p>}
               </li>
             ))}
           </ul>
@@ -453,23 +487,10 @@ export default function ClientDetail({ mindbodyId, isManager, staff, pipelineIds
                 <div className="flex items-center gap-2">
                   <p className="text-[10px] text-gray-400">{format(parseISO(n.created_at), 'd MMM yyyy, h:mm a')}</p>
                   {staff && (
-                    <button
-                      onClick={() => publishToSlack(n)}
-                      disabled={slackBusyId === n.id}
-                      title={n.slack_posted_at
-                        ? `Posted to #client-headlines ${format(parseISO(n.slack_posted_at), 'd MMM, h:mm a')}${staffNameById[n.slack_posted_by] ? ` by ${staffNameById[n.slack_posted_by]}` : ''} — click to post again`
-                        : 'Publish this note to #client-headlines in Slack'}
-                      className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-60 ${
-                        n.slack_posted_at
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-900'
-                      }`}
-                    >
-                      {slackBusyId === n.id
-                        ? <Loader2 className="h-3 w-3 animate-spin" />
-                        : n.slack_posted_at ? <Check className="h-3 w-3" /> : <Send className="h-3 w-3" />}
-                      {n.slack_posted_at ? 'In Slack' : 'Publish to Slack'}
-                    </button>
+                    <SlackButton
+                      row={n} channel="#client-headlines" busy={slackBusyId === n.id}
+                      postedByName={staffNameById[n.slack_posted_by]} onClick={() => publishToSlack(n, 'note')}
+                    />
                   )}
                   {(isManager || n.staff_id === staff?.id) && (
                     <button onClick={() => deleteNote(n.id)} className="text-gray-300 hover:text-red-600">
