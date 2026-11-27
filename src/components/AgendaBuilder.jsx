@@ -19,7 +19,7 @@ const iconBtn = 'rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gra
  */
 export default function AgendaBuilder({ label, type, agenda, staff }) {
   const sections = agenda.current;
-  const period = meetingCadence(type) === 'monthly' ? 'month' : 'week';
+  const period = { monthly: 'month', yearly: 'year' }[meetingCadence(type)] || 'week';
   const [editingId, setEditingId] = useState(null);
   const [dragId, setDragId]       = useState(null);
   const [overId, setOverId]       = useState(null);
@@ -168,7 +168,17 @@ function SectionForm({ initial, kinds, staff, submitLabel, onSubmit, onCancel })
         </select>
       )}
       <textarea value={hint} onChange={(e) => setHint(e.target.value)} placeholder="Guidance shown under the title (optional)" aria-label="Hint" rows={2} className={input} />
-      {kind === 'items' && <ListsEditor config={config} onChange={setConfig} />}
+      {(kind === 'items' || kind === 'planning_block') && <ListsEditor config={config} onChange={setConfig} />}
+      {kind === 'planning_block' && (
+        <label className="flex items-center gap-2 text-xs text-gray-700">
+          <input
+            type="checkbox"
+            checked={!!config.todos}
+            onChange={(e) => setConfig({ ...config, todos: e.target.checked ? (config.todos || { label: 'Add task' }) : undefined })}
+          />
+          Tasks list in this block (they land on each assignee's Home checklist)
+        </label>
+      )}
       {kind === 'scorecard_30' && <ScorecardSettings staff={staff} config={config} onChange={setConfig} />}
       <div className="flex gap-2">
         <button type="submit" disabled={saving || !title.trim()} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50">

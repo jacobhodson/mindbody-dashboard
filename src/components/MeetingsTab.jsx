@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Trash2, Plus, ArrowRightLeft, ListPlus, Star, ExternalLink } from 'lucide-react';
 import { format, parseISO, addDays, subDays } from 'date-fns';
 import { periodStartForOffset } from '../utils/periods.js';
-import { MEETING_TYPES, CASCADE_SECTIONS, MEETING_STATUSES, meetingCadence } from '../utils/meetingAgendas.js';
+import { MEETING_TYPES, CASCADE_SECTIONS, MEETING_STATUSES, meetingCadence, planYear } from '../utils/meetingAgendas.js';
+import { useMeetingTables } from '../utils/useMeetingTables.js';
 import { useMeetingSections } from '../utils/useMeetingSections.js';
 import { useMeeting, useLeadershipCascade, useCarriedItems } from '../utils/useMeeting.js';
 import { useIssues } from '../utils/useIssues.js';
@@ -20,10 +21,11 @@ import { rockProgress } from './RocksTab.jsx';
 import BuildModeToggle from './BuildModeToggle.jsx';
 import AgendaBuilder from './AgendaBuilder.jsx';
 import RedsList from './RedsList.jsx';
+import PlanningBlock from './PlanningBlock.jsx';
 
 /**
- * Meetings — the Monday Team Meeting (everyone), the Leadership Huddle and the
- * Monthly Same-Page (managers only), replacing the Notion databases that spun
+ * Meetings — the Monday Team Meeting (everyone), the Leadership Huddle, the
+ * Monthly Same-Page and the annual Planning day (managers only), replacing the Notion databases that spun
  * up a new page each week. Pick a date; that meeting is created on first open.
  * People add their own entries to each agenda section; IDS issues carry over
  * week to week until solved; to-dos are regular tasks (they land in the
@@ -35,7 +37,11 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
   const [building, setBuilding] = useState(false);
   const cadence = meetingCadence(type);
   const monthly = cadence === 'monthly';
-  const meetingDate = periodStartForOffset(cadence, offset);
+  const yearly = cadence === 'yearly';
+  // A planning meeting is keyed by 1 Jan of the year being planned.
+  const meetingDate = yearly ? `${planYear(offset)}-01-01` : periodStartForOffset(cadence, offset);
+  const typeLabel = (key, c) => (c.cadence === 'yearly' ? `${planYear()} ${c.label}` : c.label);
+  const periodWord = yearly ? 'year' : monthly ? 'month' : 'week';
   const config = MEETING_TYPES[type];
   const agenda = useMeetingSections(type);
   const sections = useMemo(() => agenda.sectionsFor(meetingDate), [agenda, meetingDate]);
@@ -52,11 +58,15 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
   const todos = useLinkedTasks('meeting_id', todoMeetingIds, staff, isManager);
 
   // Meeting to-dos (incl. IDS ones) can be linked to a rock as well.
-  const { rocks } = useRocks();
+  const rocksApi = useRocks();
+  const { rocks } = rocksApi;
+  const tables = useMeetingTables(yearly ? meeting?.id : null);
   const defaultDue = monthly
     ? format(addDays(new Date(), 30), 'yyyy-MM-dd')
-    : format(addDays(parseISO(meetingDate), 7), 'yyyy-MM-dd');
-  const ctx = { staff, isManager, staffList, nameById, meeting, meetingDate, mtg, todos, type, reds, rocks, monthly, defaultDue };
+    : yearly
+      ? format(addDays(new Date(), 7), 'yyyy-MM-dd')
+      : format(addDays(parseISO(meetingDate), 7), 'yyyy-MM-dd');
+  const ctx = { staff, isManager, staffList, nameById, meeting, meetingDate, mtg, todos, type, reds, rocks, rocksApi, tables, monthly, defaultDue };
 
   return (
     <div className="space-y-6">
@@ -89,33 +99,33 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
                   type === key ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                {c.label}
+                {typeLabel(key, c)}
               </button>
             ))}
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={() => setOffset((o) => o - 1)} aria-label={monthly ? 'Previous month' : 'Previous week'} className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100">
+          <button onClick={() => setOffset((o) => o - 1)} aria-label={`Previous ${periodWord}`} className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100">
             <ChevronLeft className="h-4 w-4" />
           </button>
           <span className="min-w-[9rem] text-center text-sm font-medium text-gray-900">
-            {monthly ? format(parseISO(meetingDate), 'MMMM yyyy') : `Mon ${format(parseISO(meetingDate), 'd MMM yyyy')}`}
+            {yearly ? `${meetingDate.slice(0, 4)} plan` : monthly ? format(parseISO(meetingDate), 'MMMM yyyy') : `Mon ${format(parseISO(meetingDate), 'd MMM yyyy')}`}
           </span>
           <button
             onClick={() => setOffset((o) => o + 1)}
             disabled={offset >= 1}
-            aria-label={monthly ? 'Next month' : 'Next week'}
+            aria-label={`Next ${periodWord}`}
             className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-40"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
           {offset !== 0 && (
-            <button onClick={() => setOffset(0)} className="text-xs text-emerald-700 hover:underline">{monthly ? 'This month' : 'This week'}</button>
+            <button onClick={() => setOffset(0)} className="text-xs text-emerald-700 hover:underline">{yearly ? 'Current plan' : monthly ? 'This month' : 'This week'}</button>
           )}
         </div>
       </div>
 
-      {(mtg.error || todos.error) && <p className="text-xs text-red-600">{mtg.error || todos.error}</p>}
+      {(mtg.error || todos.error || tables.error) && <p className="text-xs text-red-600">{mtg.error || todos.error || tables.error}</p>}
 
       {building ? (
         <AgendaBuilder key={type} label={config.label} type={type} agenda={agenda} staff={staff} />
@@ -123,13 +133,15 @@ export default function MeetingsTab({ staff, isManager, onOpenRocks, reds }) {
         <p className="text-sm text-gray-500">Loading…</p>
       ) : !meeting ? (
         <p className="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">
-          No {config.label} was recorded for this {monthly ? 'month' : 'week'}.
+          No {config.label} was recorded for this {periodWord}.
         </p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
             <h2 className="flex-1 text-sm font-semibold text-gray-900">
-              {config.label} · {format(parseISO(meetingDate), monthly ? 'MMMM yyyy' : 'EEEE d MMMM')}
+              {yearly
+                ? `${meetingDate.slice(0, 4)} Planning Day`
+                : `${config.label} · ${format(parseISO(meetingDate), monthly ? 'MMMM yyyy' : 'EEEE d MMMM')}`}
             </h2>
             <AverageRating ratings={mtg.ratings} />
             <select
@@ -234,7 +246,8 @@ function SectionBody({ section, ctx, onOpenRocks }) {
     }
 
     case 'todos': {
-      const list = todos.tasks.filter((t) => t.meeting_id === meeting.id);
+      // Block-scoped tasks (planning blocks) belong to their own block.
+      const list = todos.tasks.filter((t) => t.meeting_id === meeting.id && !t.meeting_section);
       return (
         <LinkedTaskList
           tasks={list}
@@ -256,6 +269,17 @@ function SectionBody({ section, ctx, onOpenRocks }) {
 
     case 'carry':
       return <CarrySection section={section} ctx={ctx} />;
+
+    case 'planning_block':
+      return (
+        <PlanningBlock
+          section={section}
+          ctx={ctx}
+          tables={ctx.tables}
+          onOpenRocks={onOpenRocks}
+          renderList={(key) => <ItemList sectionKey={key} ctx={ctx} />}
+        />
+      );
 
     case 'rating':
       return <Ratings ratings={mtg.ratings} staff={staff} nameById={nameById} onSave={mtg.saveRating} />;

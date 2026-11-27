@@ -1,6 +1,6 @@
 import {
-  format, startOfWeek, startOfMonth,
-  addDays, addWeeks, addMonths,
+  format, startOfWeek, startOfMonth, startOfYear,
+  addDays, addWeeks, addMonths, addYears,
   endOfWeek, endOfMonth, setDate, getDaysInMonth,
   eachDayOfInterval,
 } from 'date-fns';
@@ -13,6 +13,7 @@ import {
 export function periodStartFor(cadence, now = new Date()) {
   if (cadence === 'weekly')  return format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
   if (cadence === 'monthly') return format(startOfMonth(now), 'yyyy-MM-dd');
+  if (cadence === 'yearly')  return format(startOfYear(now), 'yyyy-MM-dd');
   return format(now, 'yyyy-MM-dd'); // daily
 }
 
@@ -24,6 +25,7 @@ export function periodStartFor(cadence, now = new Date()) {
 export function periodStartForOffset(cadence, offset, now = new Date()) {
   if (cadence === 'weekly')  return periodStartFor(cadence, addWeeks(now, offset));
   if (cadence === 'monthly') return periodStartFor(cadence, addMonths(now, offset));
+  if (cadence === 'yearly')  return periodStartFor(cadence, addYears(now, offset));
   return periodStartFor(cadence, addDays(now, offset));
 }
 

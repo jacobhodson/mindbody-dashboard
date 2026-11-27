@@ -19,6 +19,8 @@
 //   rating      — 1–10 rating + one improvement
 //   reds        — the live Group Training Red's List, contactable in place
 //   carry       — items to carry over; the previous meeting's show here too
+//   planning_block — one block of the annual planning day: prompts, editable
+//                 tables, lists, scoped tasks and/or rocks (see PlanningBlock.jsx)
 
 export const MEETING_TYPES = {
   team: {
@@ -110,9 +112,26 @@ export const MEETING_TYPES = {
         hint: "These show again on next month's meeting." },
     ],
   },
+  // The annual planning day, keyed by 1 January of the year being planned.
+  // Its agenda (from the 2027 Planning Day template) lives only in
+  // meeting_sections — see 20261127000000_annual_planning.sql.
+  planning: {
+    label: 'Planning',
+    managerOnly: true,
+    cadence: 'yearly',
+    sections: [],
+  },
 };
 
 export const meetingCadence = (type) => MEETING_TYPES[type]?.cadence || 'weekly';
+
+/**
+ * The year a planning meeting is for: planning happens late in the year
+ * before, so from July on "this year's plan" is next year's.
+ */
+export function planYear(offset = 0, now = new Date()) {
+  return now.getFullYear() + (now.getMonth() >= 6 ? 1 : 0) + offset;
+}
 
 // Section types a manager can add in build mode. `once` = only one per
 // agenda (a second copy would just repeat the same content).
@@ -129,6 +148,7 @@ export const SECTION_KINDS = [
   { kind: 'reds',        label: "Red's List (Group Training)", once: true, types: ['team'] },
   { kind: 'cascade_in',  label: 'Cascade from Leadership',   once: true, types: ['team'] },
   { kind: 'cascade_out', label: 'Cascading message',         once: true, types: ['leadership'] },
+  { kind: 'planning_block', label: 'Planning block — lists + tasks', once: false, types: ['planning'] },
 ];
 
 export const CASCADE_SECTIONS = [

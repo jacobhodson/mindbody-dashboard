@@ -65,8 +65,8 @@ export function useLinkedTasks(column, ids, staff, isManager) {
     || (!!task.rock_id && !task.assigned_staff_id && !!staff)
   ), [isManager, staff]);
 
-  // fields: { label, assignee, due_date, rock_id?, meeting_id?, issue_id?, playbook_page_id? }
-  const addTask = useCallback(async ({ label, assignee, due_date, rock_id, meeting_id, issue_id, playbook_page_id }) => {
+  // fields: { label, assignee, due_date, rock_id?, meeting_id?, meeting_section?, issue_id?, playbook_page_id? }
+  const addTask = useCallback(async ({ label, assignee, due_date, rock_id, meeting_id, meeting_section, issue_id, playbook_page_id }) => {
     if (!staff || !label?.trim() || !due_date) return null;
     const row = {
       key:               `${column}-${staff.id}-${Date.now()}`,
@@ -78,6 +78,7 @@ export function useLinkedTasks(column, ids, staff, isManager) {
       assigned_staff_id: assignee || null,
       rock_id:           rock_id || null,
       meeting_id:        meeting_id || null,
+      meeting_section:   meeting_section || null,
       issue_id:          issue_id || null,
       playbook_page_id:  playbook_page_id || null,
     };
