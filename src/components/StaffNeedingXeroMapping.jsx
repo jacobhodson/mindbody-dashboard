@@ -3,6 +3,7 @@ import { Link2 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient.js';
 import { useAllStaff } from '../utils/useAllStaff.js';
 import { useWageOverrides } from '../utils/useWageOverrides.js';
+import HomeCard from './HomeCard.jsx';
 
 const selectClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
@@ -98,14 +99,7 @@ function Panel({ unmapped, takenIds, onMapped }) {
   const available = (employees || []).filter((e) => !takenIds.has(e.id));
 
   return (
-    <div className="rounded-xl border border-amber-300/60 bg-amber-50/40 p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <Link2 className="h-4 w-4 text-amber-600" />
-        <h2 className="font-semibold text-gray-900">Staff to Map to Xero</h2>
-        <span className="rounded-full border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
-          {unmapped.length}
-        </span>
-      </div>
+    <HomeCard id="xero_mapping" tone="amber" icon={Link2} title="Staff to Map to Xero" count={unmapped.length}>
       <p className="text-xs text-gray-500 mb-4">
         Active coaches with no Xero payroll employee (and no wage override). Until they're mapped their wages are blank in LER,
         and the Team LER reads high because their revenue counts without any wages.
@@ -123,7 +117,7 @@ function Panel({ unmapped, takenIds, onMapped }) {
           <Row key={p.id} person={p} available={available} employeesReady={!!employees} onMapped={onMapped} />
         ))}
       </div>
-    </div>
+    </HomeCard>
   );
 }
 

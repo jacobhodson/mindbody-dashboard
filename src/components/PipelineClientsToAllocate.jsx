@@ -6,6 +6,7 @@ import { useMembershipPackages } from '../utils/useMembershipPackages.js';
 import { GROUP_VALUE, caseloadPayloadFor } from '../utils/caseload.js';
 import { daysAgoLabel } from '../utils/dateLabels.js';
 import { useSaleOnAllocate } from '../utils/mindbodySales.js';
+import HomeCard from './HomeCard.jsx';
 
 const ADD_PACKAGE_VALUE = '__add__';
 const selectClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500';
@@ -58,14 +59,7 @@ export default function PipelineClientsToAllocate({ pipelineIds, isManager, onVi
   };
 
   return (
-    <div className="rounded-xl border border-violet-300/60 bg-violet-50/40 p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <UserCog className="h-4 w-4 text-violet-600" />
-        <h2 className="font-semibold text-gray-900">Trial Clients to Allocate</h2>
-        <span className="rounded-full border border-violet-500/30 bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
-          {needsAllocation.length}
-        </span>
-      </div>
+    <HomeCard id="pipeline_clients" tone="violet" icon={UserCog} title="Trial Clients to Allocate" count={needsAllocation.length}>
       <p className="text-xs text-gray-500 mb-4">
         Currently on a front-end offer/trial pass and still missing a coach{isManager ? ' or a package' : ''} — anyone can pick these up. Ticked clients add to Sales when assigned.
       </p>
@@ -137,6 +131,6 @@ export default function PipelineClientsToAllocate({ pipelineIds, isManager, onVi
           );
         })}
       </div>
-    </div>
+    </HomeCard>
   );
 }

@@ -3,6 +3,7 @@ import { ListChecks } from 'lucide-react';
 import { useAllClients } from '../utils/useAllClients.js';
 import { useOnboardingTaskTemplates } from '../utils/useOnboardingTaskTemplates.js';
 import { useOnboardingTasks } from '../utils/useOnboardingTasks.js';
+import HomeCard from './HomeCard.jsx';
 
 // Short-program products get removed from the pipeline on no-rollover —
 // same rule OnboardingTab.jsx applies to the kanban board.
@@ -52,14 +53,7 @@ export default function MyPipelineTasks({ staff, data, decisions, onViewClient }
   if (myClients.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <ListChecks className="h-4 w-4 text-gray-700" />
-        <h2 className="font-semibold text-gray-900">My Pipeline This Week</h2>
-        <span className="rounded-full border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold text-gray-600">
-          {myClients.length}
-        </span>
-      </div>
+    <HomeCard id="my_pipeline" tone="gray" icon={ListChecks} title="My Pipeline This Week" count={myClients.length}>
       <p className="text-xs text-gray-500 mb-4">Your onboarding clients, and what's left for their current week.</p>
 
       <div className="space-y-3">
@@ -109,6 +103,6 @@ export default function MyPipelineTasks({ staff, data, decisions, onViewClient }
           );
         })}
       </div>
-    </div>
+    </HomeCard>
   );
 }

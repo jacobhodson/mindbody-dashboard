@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { BellRing, Check, ExternalLink } from 'lucide-react';
+import HomeCard, { CountPill } from './HomeCard.jsx';
 import { reminderHits, hitIsForMe, completionKey, todayDate } from '../utils/reminders.js';
 
 /**
@@ -26,14 +27,21 @@ export default function HomeReminders({ rem, clients, pipelineIds, staff, isMana
   if (rem.loading || !groups.length) return null;
 
   return (
-    <div className="rounded-xl border border-sky-200 bg-sky-50/40 p-5">
-      <div className="mb-3 flex items-center gap-2">
-        <BellRing className="h-4 w-4 text-sky-600" />
-        <h2 className="font-semibold text-gray-900">Reminders</h2>
-        <span className="rounded-full border border-sky-500/30 bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-bold text-sky-700">
-          {groups.reduce((n, g) => n + g.hits.length, 0)}
+    <HomeCard
+      id="reminders"
+      tone="sky"
+      icon={BellRing}
+      title="Reminders"
+      count={groups.reduce((n, g) => n + g.hits.length, 0)}
+      // Minimised: one pill per reminder, e.g. "Programs due 5".
+      summary={groups.map(({ reminder: r, hits }) => (
+        <span key={r.id} className="flex items-center gap-1 rounded-full border border-sky-200 bg-white py-0.5 pl-2 pr-0.5 text-xs text-gray-700">
+          <span className="max-w-[12rem] truncate">{r.title}</span>
+          <CountPill tone="sky">{hits.length}</CountPill>
         </span>
-      </div>
+      ))}
+    >
+      <div className="mb-2" />
       {rem.error && <p className="mb-2 text-xs text-red-600">{rem.error}</p>}
 
       <div className="space-y-4">
@@ -76,6 +84,6 @@ export default function HomeReminders({ rem, clients, pipelineIds, staff, isMana
           </div>
         ))}
       </div>
-    </div>
+    </HomeCard>
   );
 }

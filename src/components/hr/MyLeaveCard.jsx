@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Plane } from 'lucide-react';
 import { useLeave } from '../../utils/useLeave.js';
 import { typeMeta, formatRange, STATUS_BY_KEY, todayIso } from '../../utils/leave.js';
+import HomeCard from '../HomeCard.jsx';
 
 const RECENT_MS = 7 * 86400000;
 
@@ -22,13 +23,9 @@ export default function MyLeaveCard({ staff, onOpenHR }) {
   if (mine.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-sky-300/60 bg-sky-50/40 p-5">
-      <div className="mb-3 flex items-center gap-2">
-        <Plane className="h-4 w-4 text-sky-600" />
-        <h2 className="font-semibold text-gray-900">My Leave</h2>
-        {onOpenHR && <button onClick={onOpenHR} className="ml-auto text-xs text-emerald-700 hover:underline">Open Leave Planner</button>}
-      </div>
-      <div className="space-y-2">
+    <HomeCard id="my_leave" tone="sky" icon={Plane} title="My Leave" count={mine.length}
+      actions={onOpenHR && <button onClick={onOpenHR} className="shrink-0 text-xs text-emerald-700 hover:underline">Open Leave Planner</button>}>
+      <div className="mt-3 space-y-2">
         {mine.map((r) => {
           const t = typeMeta(r.leave_type);
           const st = STATUS_BY_KEY[r.status];
@@ -48,6 +45,6 @@ export default function MyLeaveCard({ staff, onOpenHR }) {
           );
         })}
       </div>
-    </div>
+    </HomeCard>
   );
 }

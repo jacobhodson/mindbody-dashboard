@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { CalendarClock, Check, Loader2, PlayCircle } from 'lucide-react';
 import { useDebitAdjustments, DEBIT_STATUS, fmtDebitDate } from '../../utils/useDebitAdjustments.js';
+import HomeCard from '../HomeCard.jsx';
 
 /**
  * Home card for whoever holds the Office admin duty (staff.is_office_admin):
@@ -27,13 +28,8 @@ export default function DebitAdjustmentsCard({ enabled, refreshKey, onOpenAdmin 
   const ordered = [...rows].sort((a, b) => a.created_at.localeCompare(b.created_at));
 
   return (
-    <div className="rounded-xl border border-violet-300/60 bg-violet-50/40 p-5">
-      <div className="mb-1 flex items-center gap-2">
-        <CalendarClock className="h-4 w-4 text-violet-600" />
-        <h2 className="font-semibold text-gray-900">Debit Adjustments to Process</h2>
-        <span className="rounded-full border border-violet-500/30 bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">{rows.length}</span>
-        <button onClick={onOpenAdmin} className="ml-auto text-xs font-medium text-violet-700 hover:underline">View all</button>
-      </div>
+    <HomeCard id="debit_adjustments" tone="violet" icon={CalendarClock} title="Debit Adjustments to Process" count={rows.length}
+      actions={<button onClick={onOpenAdmin} className="shrink-0 text-xs font-medium text-violet-700 hover:underline">View all</button>}>
       <p className="mb-4 text-xs text-gray-500">Suspensions and holidays logged by the team. Tick each one once it's done in Mindbody.</p>
       {err && <p className="mb-3 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs text-red-700">{err}</p>}
       <div className="space-y-2">
@@ -68,6 +64,6 @@ export default function DebitAdjustmentsCard({ enabled, refreshKey, onOpenAdmin 
           </div>
         ))}
       </div>
-    </div>
+    </HomeCard>
   );
 }

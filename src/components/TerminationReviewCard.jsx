@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { UserMinus, Check, Repeat } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient.js';
 import { ghlApi } from '../utils/useAcquisition.js';
+import HomeCard from './HomeCard.jsx';
 
 const fmt = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
 
@@ -42,14 +43,7 @@ export default function TerminationReviewCard({ isManager, onViewClient }) {
   if (!isManager || (rows.length === 0 && !message)) return null;
 
   return (
-    <div className="rounded-xl border border-amber-300/60 bg-amber-50/40 p-5">
-      <div className="mb-1 flex items-center gap-2">
-        <UserMinus className="h-4 w-4 text-amber-600" />
-        <h2 className="font-semibold text-gray-900">Terminations to Review</h2>
-        {rows.length > 0 && (
-          <span className="rounded-full border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">{rows.length}</span>
-        )}
-      </div>
+    <HomeCard id="termination_review" tone="amber" icon={UserMinus} title="Terminations to Review" count={rows.length || null}>
       <p className="mb-4 text-xs text-gray-500">
         Terminated in Mindbody with no cancellation form in GHL. Churn counts it on the Scoreboard and tags them in GHL; a contract change isn't churn.
       </p>
@@ -82,6 +76,6 @@ export default function TerminationReviewCard({ isManager, onViewClient }) {
           );
         })}
       </div>
-    </div>
+    </HomeCard>
   );
 }

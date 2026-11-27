@@ -4,6 +4,7 @@ import { useAllStaff } from '../utils/useAllStaff.js';
 import { GROUP_VALUE, caseloadPayloadFor } from '../utils/caseload.js';
 import { daysAgoLabel } from '../utils/dateLabels.js';
 import { useSaleOnAllocate } from '../utils/mindbodySales.js';
+import HomeCard from './HomeCard.jsx';
 
 const selectClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
@@ -21,14 +22,7 @@ export default function NewClientsToAllocate({ onViewClient }) {
   if (loading || clients.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-amber-300/60 bg-amber-50/40 p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <UserPlus2 className="h-4 w-4 text-amber-600" />
-        <h2 className="font-semibold text-gray-900">New Clients to Allocate</h2>
-        <span className="rounded-full border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
-          {clients.length}
-        </span>
-      </div>
+    <HomeCard id="new_clients" tone="amber" icon={UserPlus2} title="New Clients to Allocate" count={clients.length}>
       <p className="text-xs text-gray-500 mb-4">Started in the last 30 days and don't have anyone owning their caseload yet — anyone can pick these up. Ticked clients add to Sales when assigned.</p>
       {sale.error && <p className="mb-3 text-xs text-red-600">{sale.error}</p>}
 
@@ -69,6 +63,6 @@ export default function NewClientsToAllocate({ onViewClient }) {
           </div>
         ))}
       </div>
-    </div>
+    </HomeCard>
   );
 }

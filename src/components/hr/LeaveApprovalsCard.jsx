@@ -3,6 +3,7 @@ import { Plane, Check, Ban } from 'lucide-react';
 import { useLeave } from '../../utils/useLeave.js';
 import { useAllStaff } from '../../utils/useAllStaff.js';
 import { typeMeta, formatRange } from '../../utils/leave.js';
+import HomeCard from '../HomeCard.jsx';
 
 // Home notice (managers): leave requests waiting on a decision. Same
 // "disappears when clear" pattern as MissingRolloverDecisions. Also flags
@@ -31,13 +32,8 @@ export default function LeaveApprovalsCard({ isManager, onOpenHR }) {
   };
 
   return (
-    <div className="rounded-xl border border-amber-300/60 bg-amber-50/40 p-5">
-      <div className="mb-1 flex items-center gap-2">
-        <Plane className="h-4 w-4 text-amber-600" />
-        <h2 className="font-semibold text-gray-900">Leave to Approve</h2>
-        <span className="rounded-full border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">{pending.length}</span>
-        {onOpenHR && <button onClick={onOpenHR} className="ml-auto text-xs text-emerald-700 hover:underline">Open Leave Planner</button>}
-      </div>
+    <HomeCard id="leave_approvals" tone="amber" icon={Plane} title="Leave to Approve" count={pending.length}
+      actions={onOpenHR && <button onClick={onOpenHR} className="shrink-0 text-xs text-emerald-700 hover:underline">Open Leave Planner</button>}>
       <p className="mb-4 text-xs text-gray-500">Team members waiting on a yes or no for their leave.</p>
       <div className="space-y-2">
         {pending.map((r) => {
@@ -65,6 +61,6 @@ export default function LeaveApprovalsCard({ isManager, onOpenHR }) {
           );
         })}
       </div>
-    </div>
+    </HomeCard>
   );
 }

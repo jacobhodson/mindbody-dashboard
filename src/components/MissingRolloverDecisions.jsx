@@ -1,4 +1,5 @@
 import { CalendarClock } from 'lucide-react';
+import HomeCard from './HomeCard.jsx';
 
 // Home-page notice: onboarding clients now in their final week (week 4 —
 // days 21-27 of the program) with no rollover call made yet. Surfaced a
@@ -17,14 +18,7 @@ export default function MissingRolloverDecisions({ week4Clients = [], decisions 
   if (pending.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-amber-300/60 bg-amber-50/40 p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <CalendarClock className="h-4 w-4 text-amber-600" />
-        <h2 className="font-semibold text-gray-900">Rollover Decisions Needed</h2>
-        <span className="rounded-full border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
-          {pending.length}
-        </span>
-      </div>
+    <HomeCard id="missing_rollovers" tone="amber" icon={CalendarClock} title="Rollover Decisions Needed" count={pending.length}>
       <p className="text-xs text-gray-500 mb-4">In their final onboarding week with no rollover call made yet — decide before the program ends.</p>
 
       <div className="space-y-2">
@@ -58,6 +52,6 @@ export default function MissingRolloverDecisions({ week4Clients = [], decisions 
           );
         })}
       </div>
-    </div>
+    </HomeCard>
   );
 }
