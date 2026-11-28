@@ -7,7 +7,8 @@ import { supabase } from '../lib/supabaseClient.js';
  * rock_id or meeting_id. Because they're normal tasks, the assignee also sees
  * them in their Home checklist, and ticking either place is the same row.
  *
- * `column` is 'rock_id' or 'meeting_id'; `ids` the rocks/meetings to load.
+ * `column` is 'rock_id', 'meeting_id' or 'one_on_one_id'; `ids` the
+ * rocks/meetings/1-1s to load.
  *
  * Who can do what (mirrors RLS in 20261014000000_rocks_and_meetings.sql):
  * anyone can add a task to a rock/team meeting; owner (creator), assignee or
@@ -66,7 +67,7 @@ export function useLinkedTasks(column, ids, staff, isManager) {
   ), [isManager, staff]);
 
   // fields: { label, assignee, due_date, rock_id?, meeting_id?, meeting_section?, issue_id?, playbook_page_id? }
-  const addTask = useCallback(async ({ label, assignee, due_date, rock_id, meeting_id, meeting_section, issue_id, playbook_page_id }) => {
+  const addTask = useCallback(async ({ label, assignee, due_date, rock_id, meeting_id, meeting_section, issue_id, playbook_page_id, one_on_one_id }) => {
     if (!staff || !label?.trim() || !due_date) return null;
     const row = {
       key:               `${column}-${staff.id}-${Date.now()}`,
@@ -81,6 +82,7 @@ export function useLinkedTasks(column, ids, staff, isManager) {
       meeting_section:   meeting_section || null,
       issue_id:          issue_id || null,
       playbook_page_id:  playbook_page_id || null,
+      one_on_one_id:     one_on_one_id || null,
     };
     const { data, error: err } = await supabase.from('task_templates').insert(row).select().single();
     if (err) { setError(err.message); return null; }

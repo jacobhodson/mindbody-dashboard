@@ -15,10 +15,11 @@ import { useTaskNotes } from '../utils/useTaskNotes.js';
 import { TaskNotesToggle, TaskNotesPanel } from './TaskNotes.jsx';
 import { PlaybookChip, PlaybookPicker } from '../utils/playbookLink.jsx';
 
-// Rock tasks and meeting to-dos (see useLinkedTasks.js) are edited where
-// they live — the Rocks / Meetings tabs — not with this page's TaskForm,
-// whose personal/team/assigned model would strip their assignment.
-const isLinkedTask = (t) => Boolean(t.rock_id || t.meeting_id);
+// Rock tasks, meeting to-dos and 1-1 to-dos (see useLinkedTasks.js) are
+// edited where they live — the Rocks / Meetings / Team tabs — not with this
+// page's TaskForm, whose personal/team/assigned model would strip their
+// assignment.
+const isLinkedTask = (t) => Boolean(t.rock_id || t.meeting_id || t.one_on_one_id);
 
 const CADENCE_TAG = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
 const VIEW_KEY = 'home-task-view';
@@ -549,6 +550,7 @@ export default function TaskChecklist({ user, staff, isManager }) {
   const sourceTagFor = (t) => {
     if (t.rock_id) return `Rock: ${rockTitleById[t.rock_id] || '…'}`;
     if (t.meeting_id) return t.issue_id ? 'Meeting to-do (IDS)' : 'Meeting to-do';
+    if (t.one_on_one_id) return '1-1 to-do';
     return null;
   };
 

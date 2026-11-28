@@ -90,6 +90,9 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
   const [openRockId, setOpenRockId] = useState(null);
   const openRock = useCallback((id) => { setOpenRockId(id || null); setTab('rocks'); }, []);
 
+  // Team tab: null = gallery, 'team' = whole-team page, or a staff id (their profile).
+  const [openTeamId, setOpenTeamId] = useState(null);
+
   // All onboarding clients (from each week column)
   const allOnboardingClients = useMemo(() => [
     ...(data.onboarding?.week1 || []),
@@ -191,7 +194,7 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         <Sidebar
           tabs={visibleTabs}
           activeTab={tab}
-          onSelect={(key) => { if (key === 'rocks') setOpenRockId(null); setTab(key); }}
+          onSelect={(key) => { if (key === 'rocks') setOpenRockId(null); if (key === 'team') setOpenTeamId(null); setTab(key); }}
           atRiskCount={atRiskCount}
           mobileOpen={mobileNavOpen}
           onCloseMobile={() => setMobileNavOpen(false)}
@@ -322,7 +325,10 @@ export default function Dashboard({ data, loading, errors, lastRefresh, onRefres
         {tab === 'team' && isManager && (
           <TeamTab
             isManager={isManager}
+            staff={staff}
             currentStaffId={staff?.id}
+            openId={openTeamId}
+            onOpenChange={setOpenTeamId}
             ptData={data.pt}
             ptLoading={loading.pt}
             ptError={errors.pt}

@@ -17,7 +17,7 @@ const inputClass = 'rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 t
  */
 export default function LinkedTaskList({
   tasks, linked, staff, staffList, isManager, extraFields = {}, defaultDue,
-  emptyText = 'No tasks yet.', addLabel = 'Add task', sourceLabel, canAdd = true, rocks,
+  emptyText = 'No tasks yet.', addLabel = 'Add task', sourceLabel, canAdd = true, rocks, defaultAssignee,
 }) {
   const [adding, setAdding] = useState(false);
   const nameById = Object.fromEntries(staffList.map((s) => [s.id, s.full_name]));
@@ -51,7 +51,7 @@ export default function LinkedTaskList({
           staff={staff}
           staffList={staffList}
           rocks={rocks}
-          initial={{ label: '', assignee: staff?.id || '', due_date: defaultDue }}
+          initial={{ label: '', assignee: defaultAssignee || staff?.id || '', due_date: defaultDue }}
           submitLabel="Add"
           onCancel={() => setAdding(false)}
           onSubmit={async (fields) => {

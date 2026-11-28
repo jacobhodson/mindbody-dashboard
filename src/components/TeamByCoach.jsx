@@ -20,11 +20,15 @@ const sourceMark = (src) => (src === 'override' ? ' ·override' : src === 'mixed
 // through, with wages still posting — and are the plain mean of the months
 // the coach has data for (a month with no data isn't counted as zero). Same
 // rules as the By Metric table.
-export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, year, loading }) {
+//
+// `fixedStaffId` (a person's profile page on the Team tab) pins it to one
+// coach and hides the coach picker.
+export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, year, loading, fixedStaffId }) {
   // is_coach excludes non-revenue-generating staff (e.g. a generic admin
   // login) from the coach picker and everything below it.
   const activeStaff = staffList.filter((s) => s.active !== false && s.is_coach !== false);
-  const [staffId, setStaffId] = useState(null);
+  const [pickedId, setStaffId] = useState(null);
+  const staffId = fixedStaffId || pickedId;
   const selected = activeStaff.find((s) => s.id === staffId) || activeStaff[0] || null;
 
   // A month before the coach started (all zeros, no wage) is treated as no
@@ -79,13 +83,15 @@ export default function TeamByCoach({ staffList, monthlyRows, statsFor, period, 
       <div className="rounded-xl border border-gray-200 bg-white p-5">
         <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
           <h2 className="font-semibold text-gray-900">{selected?.full_name || 'Coach'} — {year}</h2>
-          <select
-            value={selected?.id || ''}
-            onChange={(e) => setStaffId(e.target.value)}
-            className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            {activeStaff.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
-          </select>
+          {!fixedStaffId && (
+            <select
+              value={selected?.id || ''}
+              onChange={(e) => setStaffId(e.target.value)}
+              className="rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              {activeStaff.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+            </select>
+          )}
         </div>
 
         {loading ? (
